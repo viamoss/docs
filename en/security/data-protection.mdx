@@ -214,12 +214,24 @@ Moss follows data minimization principles:
 
 Users can control data collection via SDK configuration:
 
-```javascript
-window.Moss.init({
-    applicationId: 'YOUR_APP_ID',
+```html
+<script>
+  window.mossSettings = {
+    apiUrl: 'https://moss-api.viamoss.ai',
     userId: 'USER_ID',
-    enableSessionRecording: false,      // Disable recordings
-    enableScreenHistoryRecording: false // Disable history
+    enableSessionRecording: false,       // Disable recordings
+    enableScreenHistoryRecording: false, // Disable history
+  };
+</script>
+<script src="https://cdn.viamoss.ai/moss-sdk@latest.min.js?applicationId=YOUR_APP_ID"></script>
+```
+
+To apply the same settings after the SDK has loaded, pass them to `window.MossSDK.boot(...)`:
+
+```javascript
+await window.MossSDK.boot({
+    enableSessionRecording: false,
+    enableScreenHistoryRecording: false,
 })
 ```
 

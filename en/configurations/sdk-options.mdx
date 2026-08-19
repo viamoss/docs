@@ -262,20 +262,22 @@ Advanced settings for debugging and customization:
 ### Log Level
 
 ```tsx
+import { AgentProvider, AssistantButton, LogLevel } from '@viamoss/moss-sdk';
+
 <AgentProvider config={{
   apiUrl: 'https://moss-api.viamoss.ai',
   applicationId: 'YOUR_APP_ID',
   userId: currentUser.id,
   getJwt: () => fetchMossToken(),
-  logLevel: 'DEBUG',  // 'ERROR', 'WARN', 'INFO', 'DEBUG'
+  logLevel: LogLevel.DEBUG,  // DEBUG, INFO, WARN, ERROR, SILENT
 }}>
   <AssistantButton />
 </AgentProvider>
 ```
 
-**Default:** `'INFO'`
+**Default:** `LogLevel.INFO`
 
-Higher levels include all lower levels (DEBUG shows everything).
+`logLevel` takes the `LogLevel` enum exported by the SDK, not a string. Each level includes everything more severe than itself (`DEBUG` shows everything, `SILENT` disables logging).
 
 ### Debug Mode
 
@@ -329,6 +331,8 @@ Configure how the SDK waits for the page to stabilize:
       networkIdle: true,
       domMutations: true,
       loadingIndicators: false,
+      frameReadiness: true,
+      resourceQuiet: true,
       layoutShift: false,
       browserIdle: true,
       finalFrame: true,
@@ -378,7 +382,7 @@ interface MossConfig {
   };
 
   // Technical Settings
-  logLevel?: 'ERROR' | 'WARN' | 'INFO' | 'DEBUG';
+  logLevel?: LogLevel;  // enum: DEBUG, INFO, WARN, ERROR, SILENT
   debugMode?: boolean;
   screenshotMode?: 'fullpage' | 'viewport';
   observeTargetSelector?: string;
@@ -390,6 +394,8 @@ interface MossConfig {
       networkIdle?: boolean;
       domMutations?: boolean;
       loadingIndicators?: boolean;
+      frameReadiness?: boolean;
+      resourceQuiet?: boolean;
       layoutShift?: boolean;
       browserIdle?: boolean;
       finalFrame?: boolean;
@@ -411,7 +417,6 @@ The following settings can only be configured through the Dashboard:
 - **API Keys** - Authentication credentials
 - **Domain Access Control** - Allowed domains list
 - **Vector Store Configuration** - RAG system settings
-- **Danger Zone** - Application deletion
 
 <Warning>
     These settings are Dashboard-only for security reasons. They affect

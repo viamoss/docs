@@ -8,13 +8,15 @@ icon: "sliders"
 
 ## 안정성 튜닝
 
-페이지 컨텍스트를 캡처하기 전에 SDK는 페이지가 안정화될 때까지 대기합니다. 이를 통해 불완전하거나 렌더링 중인 스냅샷이 AI에 전송되는 것을 방지합니다. 안정성 시스템은 6개의 감지 레이어를 순차적으로 실행합니다:
+페이지 컨텍스트를 캡처하기 전에 SDK는 페이지가 안정화될 때까지 대기합니다. 이를 통해 불완전하거나 렌더링 중인 스냅샷이 AI에 전송되는 것을 방지합니다. 안정성 시스템은 여러 감지 레이어를 순차적으로 실행하며, 각 레이어는 개별적으로 켜고 끌 수 있습니다:
 
 | 레이어 | 감지 대상 | 기본값 |
 |--------|----------|--------|
 | **Network Idle** | 대기 중인 fetch/XHR 요청 | 활성화 |
 | **DOM Mutations** | DOM 변경 (MutationObserver 사용) | 활성화 |
 | **Loading Indicators** | 스피너, 스켈레톤, `[aria-busy]` | 비활성화 |
+| **Frame Readiness** | 동일 출처 프레임 문서가 `readyState: 'complete'`에 도달 | 활성화 |
+| **Resource Quiet** | 마지막 리소스 완료 이후 Resource Timing 항목이 잠잠해짐 | 활성화 |
 | **Layout Shifts** | 시각적 레이아웃 변경 (PerformanceObserver 사용) | 비활성화 |
 | **Browser Idle** | CPU 유휴 (requestIdleCallback 사용) | 활성화 |
 | **Final Frame** | requestAnimationFrame 1회 | 활성화 |
@@ -95,12 +97,18 @@ stability: {
 ```tsx
 stability: {
   afterReload: {
-    enabled: true,
-    waitMs: 1000,           // 리로드 후 캡처까지 대기 (기본값: 1000ms)
-    pendingTTL: 30000,      // 스토리지에 대기 상태 유지 (기본값: 30초)
+    enabled: true,          // 명시적으로 활성화하지 않으면 꺼져 있음
+    pendingTTL: 30000,      // 대기 상태가 유효한 시간 (기본값: 30000ms)
+    storageKey: 'my-app-moss-pending',  // 대기 상태를 저장하는 키 재정의
   },
 }
 ```
+
+| 필드 | 타입 | 기본값 | 설명 |
+|------|------|--------|------|
+| `enabled` | `boolean` | `false` | 전체 페이지 리로드를 거쳐 대기 중인 가이드 상태를 보존 |
+| `pendingTTL` | `number` | `30000` | 대기 마커가 폐기되기 전까지 유효한 시간(밀리초) |
+| `storageKey` | `string` | SDK 기본값 | 대기 마커를 저장하는 데 사용하는 스토리지 키 |
 
 ---
 
@@ -113,7 +121,7 @@ SDK는 모든 UI를 `document.body`에 첨부된 Shadow DOM 내부에 렌더링�
 - **여러분의 앱에서 DOM 쿼리로 Moss 요소를 찾을 수 없습니다** — `document.querySelector`가 Shadow Root 내부의 요소를 매칭하지 않음
 
 <Tip>
-    자동화된 테스트 도구(Cypress, Playwright 등)를 사용하는 경우 Moss 요소와 상호 작용하려면 Shadow DOM을 관통해야 합니다. `#moss-sdk-shadow-root` 호스트 요소를 찾으세요.
+    자동화된 테스트 도구(Cypress, Playwright 등)를 사용하는 경우 Moss 요소와 상호 작용하려면 Shadow DOM을 관통해야 합니다. `#moss-shadow-host` 호스트 요소를 찾으세요(0.16 이하 SDK 버전에서는 `#clippy-shadow-host`).
 </Tip>
 
 ---
@@ -213,10 +221,12 @@ SDK가 컨텍스트를 캡처하기 전에 DOM에서 민감한 콘텐츠를 제�
 문제 진단을 위해 상세 로깅을 활성화하세요:
 
 ```tsx
+import { LogLevel } from '@viamoss/moss-sdk';
+
 <AgentProvider config={{
   // ...
   debugMode: true,
-  logLevel: 'DEBUG',  // 또는 import { LogLevel } from '@viamoss/moss-sdk'
+  logLevel: LogLevel.DEBUG,
 }}>
 ```
 

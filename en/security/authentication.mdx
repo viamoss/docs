@@ -38,10 +38,31 @@ Moss JWTs include the following claims:
 
 ### Security Features
 
-- **HS256 Signing** - Tokens are signed using HMAC-SHA256 with your application's secret key
+- **HS256 Signing** - By default, tokens are signed using HMAC-SHA256 with your application's secret key
 - **Expiration Enforcement** - Tokens must include valid `exp` claim
 - **Key Rotation Support** - Multiple active signing keys with scheduled revocation
 - **Constant-Time Validation** - Signature verification uses timing-safe comparison
+
+### Signing Schemes
+
+Moss supports two signing schemes per application:
+
+| Scheme | Algorithms | What Moss stores |
+|--------|-----------|------------------|
+| **Shared secret** (default) | HS256 | The shared secret, used to verify your tokens |
+| **Asymmetric** | RS256, ES256 | Your public key only |
+
+With asymmetric signing you generate the keypair yourself and register only the
+public key with Moss. The private key never leaves your infrastructure, so Moss
+holds no material that could be used to mint tokens on your behalf. Each
+registered key is pinned to its algorithm, and rotation requires registering a
+new keypair rather than re-registering a retired one.
+
+<Info>
+    Asymmetric signing is worth choosing when your security policy prohibits
+    sharing symmetric secrets with vendors. Otherwise HS256 remains the simpler
+    default.
+</Info>
 
 ### Key Management
 

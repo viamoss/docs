@@ -179,10 +179,11 @@ type ScreenshotMode = 'fullpage' | 'viewport';
 
 ```typescript
 enum LogLevel {
-  DEBUG = 0,
-  INFO = 1,
-  WARNING = 2,
-  ERROR = 3,
+  DEBUG = 1,
+  INFO = 2,
+  WARN = 3,
+  ERROR = 4,
+  SILENT = 5,  // 모든 로깅 비활성화
 }
 ```
 
@@ -236,8 +237,16 @@ interface StabilityConfig {
   layoutShift?: LayoutShiftLayerConfig;
   /** DOM 변경 레이어 설정 */
   domMutations?: DOMMutationsLayerConfig;
+  /** 프레임 준비 레이어 설정 */
+  frameReadiness?: FrameReadinessLayerConfig;
+  /** 리소스 정적 상태 레이어 설정 */
+  resourceQuiet?: ResourceQuietLayerConfig;
   /** 페이지 리로드 후 처리 */
-  afterReload?: AfterReloadConfig;
+  afterReload?: {
+    enabled?: boolean;
+    pendingTTL?: number;
+    storageKey?: string;
+  };
 }
 ```
 
@@ -255,6 +264,10 @@ interface StabilityLayersConfig {
   domMutations?: boolean;
   /** 로딩 인디케이터 사라짐 대기 (기본값: false) */
   loadingIndicators?: boolean;
+  /** 동일 출처 프레임 문서가 readyState 'complete'에 도달할 때까지 대기 (기본값: true) */
+  frameReadiness?: boolean;
+  /** Resource Timing 완료가 잠잠해질 때까지 대기 (기본값: true) */
+  resourceQuiet?: boolean;
   /** 레이아웃 시프트 중지 대기 (기본값: false) */
   layoutShift?: boolean;
   /** requestIdleCallback을 통한 브라우저 유휴 대기 (기본값: true) */

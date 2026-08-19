@@ -179,10 +179,11 @@ Logging verbosity levels.
 
 ```typescript
 enum LogLevel {
-  DEBUG = 0,
-  INFO = 1,
-  WARNING = 2,
-  ERROR = 3,
+  DEBUG = 1,
+  INFO = 2,
+  WARN = 3,
+  ERROR = 4,
+  SILENT = 5,  // Disables all logging
 }
 ```
 
@@ -236,8 +237,16 @@ interface StabilityConfig {
   layoutShift?: LayoutShiftLayerConfig;
   /** DOM mutations layer configuration */
   domMutations?: DOMMutationsLayerConfig;
+  /** Frame readiness layer configuration */
+  frameReadiness?: FrameReadinessLayerConfig;
+  /** Resource quiet layer configuration */
+  resourceQuiet?: ResourceQuietLayerConfig;
   /** After page reload handling */
-  afterReload?: AfterReloadConfig;
+  afterReload?: {
+    enabled?: boolean;
+    pendingTTL?: number;
+    storageKey?: string;
+  };
 }
 ```
 
@@ -255,6 +264,10 @@ interface StabilityLayersConfig {
   domMutations?: boolean;
   /** Wait for loading indicators to disappear (default: false) */
   loadingIndicators?: boolean;
+  /** Wait for same-origin frame documents to reach readyState 'complete' (default: true) */
+  frameReadiness?: boolean;
+  /** Wait for Resource Timing completions to go quiet (default: true) */
+  resourceQuiet?: boolean;
   /** Wait for layout shifts to stop (default: false) */
   layoutShift?: boolean;
   /** Wait for browser idle via requestIdleCallback (default: true) */

@@ -214,12 +214,24 @@ Moss는 데이터 최소화 원칙을 따릅니다:
 
 사용자는 SDK 설정을 통해 데이터 수집을 제어할 수 있습니다:
 
-```javascript
-window.Moss.init({
-    applicationId: 'YOUR_APP_ID',
+```html
+<script>
+  window.mossSettings = {
+    apiUrl: 'https://moss-api.viamoss.ai',
     userId: 'USER_ID',
-    enableSessionRecording: false,      // 녹화 비활성화
-    enableScreenHistoryRecording: false // 히스토리 비활성화
+    enableSessionRecording: false,       // 녹화 비활성화
+    enableScreenHistoryRecording: false, // 히스토리 비활성화
+  };
+</script>
+<script src="https://cdn.viamoss.ai/moss-sdk@latest.min.js?applicationId=YOUR_APP_ID"></script>
+```
+
+SDK가 로드된 후에 동일한 설정을 적용하려면 `window.MossSDK.boot(...)`에 전달하세요:
+
+```javascript
+await window.MossSDK.boot({
+    enableSessionRecording: false,
+    enableScreenHistoryRecording: false,
 })
 ```
 

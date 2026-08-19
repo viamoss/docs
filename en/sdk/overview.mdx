@@ -43,7 +43,7 @@ When the assistant needs context about the current page, the SDK captures:
 The SDK does **not** access or transmit:
 
 - **Cookies** — the SDK never reads `document.cookie`
-- **localStorage or sessionStorage** — only its own prefixed keys (`moss_*`) are used; your application's storage is not read
+- **localStorage or sessionStorage** — only its own `moss`-prefixed keys are used; your application's storage is not read
 - **Password field values** — `<input type="password">` values are excluded
 - **Hidden elements** — elements with `display: none`, `visibility: hidden`, or the `inert` attribute are filtered out
 - **Non-interactive content** — general page text (paragraphs, headings, divs) is not included in the structured context sent to the backend
@@ -51,8 +51,19 @@ The SDK does **not** access or transmit:
 - **Cross-origin iframe content** — iframes from different origins are opaque per browser same-origin policy
 
 <Info>
-    All data is sent over HTTPS REST endpoints to your configured Moss backend. No WebSocket connections are used. No data is stored in the browser beyond the current session.
+    All data is sent over HTTPS REST endpoints to your configured Moss backend. No WebSocket connections are used.
 </Info>
+
+### What Is Stored in the Browser
+
+The SDK keeps a small amount of its own state in browser storage so a conversation survives navigation and reloads. Everything it writes lives under `moss`-prefixed keys:
+
+| Storage | What it holds | Lifetime |
+|---------|---------------|----------|
+| `sessionStorage` | Chat history for the current tab, chat open/closed and modal position state | Cleared when the tab closes |
+| `localStorage` | Session-continuity state (active session ID, session metadata and recent session list, pending guide-resume markers) and completion markers for onboarding flows | Persists until cleared |
+
+Captured page context and screenshots are never written to browser storage — they are sent to the backend and held only in memory on the client.
 
 ## Element Highlighting and Coach Marks
 

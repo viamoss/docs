@@ -17,11 +17,11 @@ docs/
 ├── en/                     # English content
 │   ├── index.mdx          # Homepage
 │   └── configurations/
-│       └── settings-reference.mdx
+│       └── sdk-options.mdx
 ├── ko/                     # Korean content
 │   ├── index.mdx          # 홈페이지
 │   └── configurations/
-│       └── settings-reference.mdx
+│       └── sdk-options.mdx
 └── docs.json              # Configuration
 ```
 

@@ -79,7 +79,7 @@ Options you'll likely want to configure.
 | `observeTargetSelector` | `string` | `'body'` | CSS selector for DOM observation scope |
 | `pageSanitizationScript` | `(doc: Document) => void` | — | Clean the DOM before context capture |
 | `enableSessionRecording` | `boolean` | `true` | Upload session recordings to dashboard |
-| `enableScreenHistoryRecording` | `boolean` | `true` | Include screen history in AI context |
+| `enableScreenHistoryRecording` | `boolean` | `false` | Include screen history in AI context |
 
 ### Session Management
 
@@ -95,7 +95,7 @@ sessionConfig: {
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `logLevel` | `LogLevel` | `INFO` | Logging verbosity: `DEBUG`, `INFO`, `WARNING`, `ERROR` |
+| `logLevel` | `LogLevel` | `LogLevel.INFO` | Logging verbosity: `DEBUG`, `INFO`, `WARN`, `ERROR`, `SILENT` |
 | `debugMode` | `boolean` | `false` | Enable debug UI and verbose logging |
 
 ### Stability
@@ -108,6 +108,8 @@ stability: {
     networkIdle: true,        // Wait for network requests (default: true)
     domMutations: true,       // Wait for DOM to stop changing (default: true)
     loadingIndicators: false, // Wait for spinners/skeletons (default: false)
+    frameReadiness: true,     // Wait for same-origin frames to finish loading (default: true)
+    resourceQuiet: true,      // Wait for resource loads to go quiet (default: true)
     layoutShift: false,       // Wait for layout shifts (default: false)
     browserIdle: true,        // Wait for browser idle (default: true)
     finalFrame: true,         // Wait for animation frame (default: true)

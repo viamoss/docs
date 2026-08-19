@@ -8,13 +8,15 @@ icon: "sliders"
 
 ## Stability Tuning
 
-Before capturing page context, the SDK waits for the page to stabilize. This avoids sending incomplete or mid-render snapshots to the AI. The stability system runs six detection layers in sequence:
+Before capturing page context, the SDK waits for the page to stabilize. This avoids sending incomplete or mid-render snapshots to the AI. The stability system runs a sequence of detection layers, each of which can be toggled independently:
 
 | Layer | What It Detects | Default |
 |-------|----------------|---------|
 | **Network Idle** | Pending fetch/XHR requests | Enabled |
 | **DOM Mutations** | DOM changes (via MutationObserver) | Enabled |
 | **Loading Indicators** | Spinners, skeletons, `[aria-busy]` | Disabled |
+| **Frame Readiness** | Same-origin frame documents reaching `readyState: 'complete'` | Enabled |
+| **Resource Quiet** | Resource Timing entries settling after the newest completion | Enabled |
 | **Layout Shifts** | Visual layout changes (via PerformanceObserver) | Disabled |
 | **Browser Idle** | CPU idle (via requestIdleCallback) | Enabled |
 | **Final Frame** | One requestAnimationFrame | Enabled |
@@ -95,12 +97,18 @@ If your application triggers full page reloads during guided steps, enable the `
 ```tsx
 stability: {
   afterReload: {
-    enabled: true,
-    waitMs: 1000,           // Wait after reload before capturing (default: 1000ms)
-    pendingTTL: 30000,      // Keep pending state in storage (default: 30s)
+    enabled: true,          // Off unless explicitly enabled
+    pendingTTL: 30000,      // How long pending state stays valid (default: 30000ms)
+    storageKey: 'my-app-moss-pending',  // Override the storage key holding pending state
   },
 }
 ```
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `enabled` | `boolean` | `false` | Preserve pending guide state across a full page reload |
+| `pendingTTL` | `number` | `30000` | Milliseconds a pending marker stays valid before it is discarded |
+| `storageKey` | `string` | SDK default | Storage key used to hold the pending marker |
 
 ---
 
@@ -113,7 +121,7 @@ The SDK renders all UI inside a Shadow DOM attached to `document.body`. This mea
 - **DOM queries from your app won't find Moss elements** — `document.querySelector` won't match elements inside the shadow root
 
 <Tip>
-    If you're using automated testing tools (Cypress, Playwright, etc.), you'll need to pierce the shadow DOM to interact with Moss elements. Look for the `#moss-sdk-shadow-root` host element.
+    If you're using automated testing tools (Cypress, Playwright, etc.), you'll need to pierce the shadow DOM to interact with Moss elements. Look for the `#moss-shadow-host` host element (`#clippy-shadow-host` in SDK versions up to 0.16).
 </Tip>
 
 ---
@@ -242,10 +250,12 @@ This shouldn't happen — the SDK uses Shadow DOM isolation. If you see conflict
 Enable verbose logging to diagnose issues:
 
 ```tsx
+import { LogLevel } from '@viamoss/moss-sdk';
+
 <AgentProvider config={{
   // ...
   debugMode: true,
-  logLevel: 'DEBUG',  // or import { LogLevel } from '@viamoss/moss-sdk'
+  logLevel: LogLevel.DEBUG,
 }}>
 ```
 

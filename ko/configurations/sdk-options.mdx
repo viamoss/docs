@@ -264,20 +264,22 @@ Moss 어시스턴트 UI의 비주얼 테마를 사용자 정의합니다.
 ### 로그 레벨
 
 ```tsx
+import { AgentProvider, AssistantButton, LogLevel } from '@viamoss/moss-sdk';
+
 <AgentProvider config={{
   apiUrl: 'https://moss-api.viamoss.ai',
   applicationId: 'YOUR_APP_ID',
   userId: currentUser.id,
   getJwt: () => fetchMossToken(),
-  logLevel: 'DEBUG',  // 'ERROR', 'WARN', 'INFO', 'DEBUG'
+  logLevel: LogLevel.DEBUG,  // DEBUG, INFO, WARN, ERROR, SILENT
 }}>
   <AssistantButton />
 </AgentProvider>
 ```
 
-**기본값:** `'INFO'`
+**기본값:** `LogLevel.INFO`
 
-높은 레벨은 모든 낮은 레벨을 포함합니다 (DEBUG는 모든 것을 표시).
+`logLevel`은 문자열이 아니라 SDK가 내보내는 `LogLevel` 열거형 값을 받습니다. 각 레벨은 자신보다 심각한 레벨을 모두 포함합니다 (`DEBUG`는 모든 것을 표시하고, `SILENT`은 로깅을 비활성화합니다).
 
 ### 디버그 모드
 
@@ -331,6 +333,8 @@ SDK가 페이지가 안정화되기를 기다리는 방식을 구성합니다:
       networkIdle: true,
       domMutations: true,
       loadingIndicators: false,
+      frameReadiness: true,
+      resourceQuiet: true,
       layoutShift: false,
       browserIdle: true,
       finalFrame: true,
@@ -380,7 +384,7 @@ interface MossConfig {
   };
 
   // 기술 설정
-  logLevel?: 'ERROR' | 'WARN' | 'INFO' | 'DEBUG';
+  logLevel?: LogLevel;  // 열거형: DEBUG, INFO, WARN, ERROR, SILENT
   debugMode?: boolean;
   screenshotMode?: 'fullpage' | 'viewport';
   observeTargetSelector?: string;
@@ -392,6 +396,8 @@ interface MossConfig {
       networkIdle?: boolean;
       domMutations?: boolean;
       loadingIndicators?: boolean;
+      frameReadiness?: boolean;
+      resourceQuiet?: boolean;
       layoutShift?: boolean;
       browserIdle?: boolean;
       finalFrame?: boolean;
@@ -413,7 +419,6 @@ interface MossConfig {
 - **API 키** - 인증 자격 증명
 - **도메인 접근 제어** - 허용 도메인 목록
 - **벡터 저장소 설정** - RAG 시스템 설정
-- **위험 영역** - 애플리케이션 삭제
 
 <Warning>
     이러한 설정은 보안상의 이유로 대시보드 전용입니다. 애플리케이션 전체
