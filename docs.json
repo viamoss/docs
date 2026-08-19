@@ -40,9 +40,9 @@
               "en/sdk/installation",
               "en/sdk/authentication",
               "en/sdk/configuration",
-              "en/sdk/forced-workflow",
               {
                 "group": "API Reference",
+                "icon": "code",
                 "pages": [
                   "en/sdk/api/session",
                   "en/sdk/api/hooks",
@@ -102,9 +102,9 @@
               "ko/sdk/installation",
               "ko/sdk/authentication",
               "ko/sdk/configuration",
-              "ko/sdk/forced-workflow",
               {
                 "group": "API Reference",
+                "icon": "code",
                 "pages": [
                   "ko/sdk/api/session",
                   "ko/sdk/api/hooks",
