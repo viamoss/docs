@@ -9,13 +9,12 @@ Moss uses multiple authentication mechanisms depending on the context:
 
 | Context | Method | Description |
 |---------|--------|-------------|
-| **SDK (Recommended)** | JWT Tokens | Short-lived tokens signed with application-specific keys |
-| **SDK (Legacy)** | API Keys | Long-lived keys for simpler integrations |
+| **SDK** | JWT Tokens | Short-lived tokens signed with application-specific keys |
 | **Dashboard** | Clerk SSO | OAuth-based single sign-on with organization support |
 
 ---
 
-## JWT Authentication (Recommended)
+## JWT Authentication
 
 JWT (JSON Web Token) authentication provides the highest security for SDK integrations.
 
@@ -60,37 +59,6 @@ Each application can have multiple JWT signing keys:
 
 ---
 
-## API Key Authentication (Legacy)
-
-API keys provide a simpler authentication method for basic integrations.
-
-### How It Works
-
-1. Generate an API key in the Dashboard
-2. Include the key in SDK initialization or request headers
-3. Moss validates the key against stored hashes
-
-### Security Measures
-
-- **SHA-256 Hashing** - Keys are stored as cryptographic hashes, never plaintext
-- **Constant-Time Comparison** - Prevents timing attacks during validation
-- **Single Active Key** - Only one API key per application at a time
-- **Regeneration Support** - Invalidate compromised keys immediately
-
-<Warning>
-    API keys are long-lived and provide full access to your application. Use JWT
-    authentication for production deployments where possible.
-</Warning>
-
-### Best Practices
-
-1. **Never expose API keys** in client-side code or version control
-2. **Rotate keys regularly** - Regenerate keys periodically
-3. **Use environment variables** - Store keys securely in your deployment environment
-4. **Monitor usage** - Review API access patterns in the Dashboard
-
----
-
 ## Dashboard Authentication (Clerk)
 
 The Moss Dashboard uses Clerk for authentication, providing enterprise-grade SSO capabilities.
@@ -119,11 +87,7 @@ Moss enforces strict tenant isolation at every layer:
 
 ### Database Level
 
-```sql
--- Every query includes organization filter
-SELECT * FROM applications
-WHERE clerk_organization_id = :org_id
-```
+Every query is scoped to the requesting organization, so records belonging to other organizations are never returned.
 
 ### API Level
 

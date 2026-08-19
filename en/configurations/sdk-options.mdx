@@ -24,7 +24,7 @@ These options must be provided in the `AgentProvider` config:
 import { AgentProvider, AssistantButton } from '@viamoss/moss-sdk';
 
 <AgentProvider config={{
-  apiUrl: 'https://clippy-api.viamoss.ai',
+  apiUrl: 'https://moss-api.viamoss.ai',
   applicationId: 'YOUR_APP_ID',
   userId: currentUser.id,
   getJwt: () => fetchMossToken(),
@@ -57,7 +57,7 @@ Set the UI language for the SDK interface.
 
 ```tsx
 <AgentProvider config={{
-  apiUrl: 'https://clippy-api.viamoss.ai',
+  apiUrl: 'https://moss-api.viamoss.ai',
   applicationId: 'YOUR_APP_ID',
   userId: currentUser.id,
   getJwt: () => fetchMossToken(),
@@ -79,7 +79,7 @@ Enable or disable screenshot analysis capabilities.
 
 ```tsx
 <AgentProvider config={{
-  apiUrl: 'https://clippy-api.viamoss.ai',
+  apiUrl: 'https://moss-api.viamoss.ai',
   applicationId: 'YOUR_APP_ID',
   userId: currentUser.id,
   getJwt: () => fetchMossToken(),
@@ -97,7 +97,7 @@ Control whether user sessions are recorded for replay.
 
 ```tsx
 <AgentProvider config={{
-  apiUrl: 'https://clippy-api.viamoss.ai',
+  apiUrl: 'https://moss-api.viamoss.ai',
   applicationId: 'YOUR_APP_ID',
   userId: currentUser.id,
   getJwt: () => fetchMossToken(),
@@ -115,7 +115,7 @@ Include user action history in AI context.
 
 ```tsx
 <AgentProvider config={{
-  apiUrl: 'https://clippy-api.viamoss.ai',
+  apiUrl: 'https://moss-api.viamoss.ai',
   applicationId: 'YOUR_APP_ID',
   userId: currentUser.id,
   getJwt: () => fetchMossToken(),
@@ -137,7 +137,7 @@ Customize the visual theme of the Moss assistant UI.
 
 ```tsx
 <AgentProvider config={{
-  apiUrl: 'https://clippy-api.viamoss.ai',
+  apiUrl: 'https://moss-api.viamoss.ai',
   applicationId: 'YOUR_APP_ID',
   userId: currentUser.id,
   getJwt: () => fetchMossToken(),
@@ -160,7 +160,7 @@ Override specific properties by passing a partial object:
 
 ```tsx
 <AgentProvider config={{
-  apiUrl: 'https://clippy-api.viamoss.ai',
+  apiUrl: 'https://moss-api.viamoss.ai',
   applicationId: 'YOUR_APP_ID',
   userId: currentUser.id,
   getJwt: () => fetchMossToken(),
@@ -202,43 +202,13 @@ Override specific properties by passing a partial object:
 
 ---
 
-## Planning Options
-
-Configure multi-step planning features:
-
-```tsx
-<AgentProvider config={{
-  apiUrl: 'https://clippy-api.viamoss.ai',
-  applicationId: 'YOUR_APP_ID',
-  userId: currentUser.id,
-  getJwt: () => fetchMossToken(),
-  planning: {
-    enabled: true,
-    maxSteps: 15,
-    allowUserSkip: true,
-    showPlanOverview: true,
-  },
-}}>
-  <AssistantButton />
-</AgentProvider>
-```
-
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `enabled` | `boolean` | `false` | Enable planning feature |
-| `maxSteps` | `number` | `10` | Maximum steps in a plan (1-20) |
-| `allowUserSkip` | `boolean` | `true` | Allow users to skip steps |
-| `showPlanOverview` | `boolean` | `true` | Show plan overview before execution |
-
----
-
 ## Session Options
 
 Configure session management behavior:
 
 ```tsx
 <AgentProvider config={{
-  apiUrl: 'https://clippy-api.viamoss.ai',
+  apiUrl: 'https://moss-api.viamoss.ai',
   applicationId: 'YOUR_APP_ID',
   userId: currentUser.id,
   getJwt: () => fetchMossToken(),
@@ -268,7 +238,7 @@ Advanced settings for debugging and customization:
 
 ```tsx
 <AgentProvider config={{
-  apiUrl: 'https://clippy-api.viamoss.ai',
+  apiUrl: 'https://moss-api.viamoss.ai',
   applicationId: 'YOUR_APP_ID',
   userId: currentUser.id,
   getJwt: () => fetchMossToken(),
@@ -293,7 +263,7 @@ Advanced settings for debugging and customization:
 
 ```tsx
 <AgentProvider config={{
-  apiUrl: 'https://clippy-api.viamoss.ai',
+  apiUrl: 'https://moss-api.viamoss.ai',
   applicationId: 'YOUR_APP_ID',
   userId: currentUser.id,
   getJwt: () => fetchMossToken(),
@@ -311,7 +281,7 @@ Higher levels include all lower levels (DEBUG shows everything).
 
 ```tsx
 <AgentProvider config={{
-  apiUrl: 'https://clippy-api.viamoss.ai',
+  apiUrl: 'https://moss-api.viamoss.ai',
   applicationId: 'YOUR_APP_ID',
   userId: currentUser.id,
   getJwt: () => fetchMossToken(),
@@ -329,7 +299,7 @@ Enables verbose logging and debug features for troubleshooting.
 
 ```tsx
 <AgentProvider config={{
-  apiUrl: 'https://clippy-api.viamoss.ai',
+  apiUrl: 'https://moss-api.viamoss.ai',
   applicationId: 'YOUR_APP_ID',
   userId: currentUser.id,
   getJwt: () => fetchMossToken(),
@@ -349,7 +319,7 @@ Configure how the SDK waits for the page to stabilize:
 
 ```tsx
 <AgentProvider config={{
-  apiUrl: 'https://clippy-api.viamoss.ai',
+  apiUrl: 'https://moss-api.viamoss.ai',
   applicationId: 'YOUR_APP_ID',
   userId: currentUser.id,
   getJwt: () => fetchMossToken(),
@@ -399,14 +369,6 @@ interface MossConfig {
   // Recording & History
   enableSessionRecording?: boolean;
   enableScreenHistoryRecording?: boolean;
-
-  // Planning Configuration
-  planning?: {
-    enabled?: boolean;
-    maxSteps?: number;
-    allowUserSkip?: boolean;
-    showPlanOverview?: boolean;
-  };
 
   // Session Management
   sessionConfig?: {

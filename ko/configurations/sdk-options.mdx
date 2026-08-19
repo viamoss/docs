@@ -24,7 +24,7 @@ SDK 설정 옵션을 사용하면 애플리케이션 코드에서 직접 Moss �
 import { AgentProvider, AssistantButton } from '@viamoss/moss-sdk';
 
 <AgentProvider config={{
-  apiUrl: 'https://clippy-api.viamoss.ai',
+  apiUrl: 'https://moss-api.viamoss.ai',
   applicationId: 'YOUR_APP_ID',
   userId: currentUser.id,
   getJwt: () => fetchMossToken(),
@@ -57,7 +57,7 @@ SDK 인터페이스의 UI 언어를 설정합니다.
 
 ```tsx
 <AgentProvider config={{
-  apiUrl: 'https://clippy-api.viamoss.ai',
+  apiUrl: 'https://moss-api.viamoss.ai',
   applicationId: 'YOUR_APP_ID',
   userId: currentUser.id,
   getJwt: () => fetchMossToken(),
@@ -80,7 +80,7 @@ SDK 인터페이스의 UI 언어를 설정합니다.
 
 ```tsx
 <AgentProvider config={{
-  apiUrl: 'https://clippy-api.viamoss.ai',
+  apiUrl: 'https://moss-api.viamoss.ai',
   applicationId: 'YOUR_APP_ID',
   userId: currentUser.id,
   getJwt: () => fetchMossToken(),
@@ -98,7 +98,7 @@ SDK 인터페이스의 UI 언어를 설정합니다.
 
 ```tsx
 <AgentProvider config={{
-  apiUrl: 'https://clippy-api.viamoss.ai',
+  apiUrl: 'https://moss-api.viamoss.ai',
   applicationId: 'YOUR_APP_ID',
   userId: currentUser.id,
   getJwt: () => fetchMossToken(),
@@ -116,7 +116,7 @@ AI 컨텍스트에 사용자 액션 히스토리를 포함합니다.
 
 ```tsx
 <AgentProvider config={{
-  apiUrl: 'https://clippy-api.viamoss.ai',
+  apiUrl: 'https://moss-api.viamoss.ai',
   applicationId: 'YOUR_APP_ID',
   userId: currentUser.id,
   getJwt: () => fetchMossToken(),
@@ -138,7 +138,7 @@ Moss 어시스턴트 UI의 비주얼 테마를 사용자 정의합니다.
 
 ```tsx
 <AgentProvider config={{
-  apiUrl: 'https://clippy-api.viamoss.ai',
+  apiUrl: 'https://moss-api.viamoss.ai',
   applicationId: 'YOUR_APP_ID',
   userId: currentUser.id,
   getJwt: () => fetchMossToken(),
@@ -161,7 +161,7 @@ Moss 어시스턴트 UI의 비주얼 테마를 사용자 정의합니다.
 
 ```tsx
 <AgentProvider config={{
-  apiUrl: 'https://clippy-api.viamoss.ai',
+  apiUrl: 'https://moss-api.viamoss.ai',
   applicationId: 'YOUR_APP_ID',
   userId: currentUser.id,
   getJwt: () => fetchMossToken(),
@@ -203,43 +203,13 @@ Moss 어시스턴트 UI의 비주얼 테마를 사용자 정의합니다.
 
 ---
 
-## 플래닝 옵션
-
-다단계 플래닝 기능을 구성합니다:
-
-```tsx
-<AgentProvider config={{
-  apiUrl: 'https://clippy-api.viamoss.ai',
-  applicationId: 'YOUR_APP_ID',
-  userId: currentUser.id,
-  getJwt: () => fetchMossToken(),
-  planning: {
-    enabled: true,
-    maxSteps: 15,
-    allowUserSkip: true,
-    showPlanOverview: true,
-  },
-}}>
-  <AssistantButton />
-</AgentProvider>
-```
-
-| 옵션 | 타입 | 기본값 | 설명 |
-|------|------|--------|------|
-| `enabled` | `boolean` | `false` | 플래닝 기능 활성화 |
-| `maxSteps` | `number` | `10` | 플랜의 최대 단계 (1-20) |
-| `allowUserSkip` | `boolean` | `true` | 사용자가 단계 건너뛰기 허용 |
-| `showPlanOverview` | `boolean` | `true` | 실행 전 플랜 개요 표시 |
-
----
-
 ## 세션 옵션
 
 세션 관리 동작을 구성합니다:
 
 ```tsx
 <AgentProvider config={{
-  apiUrl: 'https://clippy-api.viamoss.ai',
+  apiUrl: 'https://moss-api.viamoss.ai',
   applicationId: 'YOUR_APP_ID',
   userId: currentUser.id,
   getJwt: () => fetchMossToken(),
@@ -269,7 +239,7 @@ Moss 어시스턴트 UI의 비주얼 테마를 사용자 정의합니다.
 
 ```tsx
 <AgentProvider config={{
-  apiUrl: 'https://clippy-api.viamoss.ai',
+  apiUrl: 'https://moss-api.viamoss.ai',
   applicationId: 'YOUR_APP_ID',
   userId: currentUser.id,
   getJwt: () => fetchMossToken(),
@@ -295,7 +265,7 @@ Moss 어시스턴트 UI의 비주얼 테마를 사용자 정의합니다.
 
 ```tsx
 <AgentProvider config={{
-  apiUrl: 'https://clippy-api.viamoss.ai',
+  apiUrl: 'https://moss-api.viamoss.ai',
   applicationId: 'YOUR_APP_ID',
   userId: currentUser.id,
   getJwt: () => fetchMossToken(),
@@ -313,7 +283,7 @@ Moss 어시스턴트 UI의 비주얼 테마를 사용자 정의합니다.
 
 ```tsx
 <AgentProvider config={{
-  apiUrl: 'https://clippy-api.viamoss.ai',
+  apiUrl: 'https://moss-api.viamoss.ai',
   applicationId: 'YOUR_APP_ID',
   userId: currentUser.id,
   getJwt: () => fetchMossToken(),
@@ -331,7 +301,7 @@ Moss 어시스턴트 UI의 비주얼 테마를 사용자 정의합니다.
 
 ```tsx
 <AgentProvider config={{
-  apiUrl: 'https://clippy-api.viamoss.ai',
+  apiUrl: 'https://moss-api.viamoss.ai',
   applicationId: 'YOUR_APP_ID',
   userId: currentUser.id,
   getJwt: () => fetchMossToken(),
@@ -351,7 +321,7 @@ SDK가 페이지가 안정화되기를 기다리는 방식을 구성합니다:
 
 ```tsx
 <AgentProvider config={{
-  apiUrl: 'https://clippy-api.viamoss.ai',
+  apiUrl: 'https://moss-api.viamoss.ai',
   applicationId: 'YOUR_APP_ID',
   userId: currentUser.id,
   getJwt: () => fetchMossToken(),
@@ -401,14 +371,6 @@ interface MossConfig {
   // 녹화 및 히스토리
   enableSessionRecording?: boolean;
   enableScreenHistoryRecording?: boolean;
-
-  // 플래닝 설정
-  planning?: {
-    enabled?: boolean;
-    maxSteps?: number;
-    allowUserSkip?: boolean;
-    showPlanOverview?: boolean;
-  };
 
   // 세션 관리
   sessionConfig?: {

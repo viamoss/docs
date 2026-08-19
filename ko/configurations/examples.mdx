@@ -17,7 +17,7 @@ description: "일반적인 사용 사례를 위한 전체 설정 예시"
 import { AgentProvider, AssistantButton } from '@viamoss/moss-sdk';
 
 <AgentProvider config={{
-  apiUrl: 'https://clippy-api.viamoss.ai',
+  apiUrl: 'https://moss-api.viamoss.ai',
   applicationId: 'YOUR_APP_ID',
   userId: currentUser.id,
   getJwt: () => fetchMossToken(),
@@ -36,7 +36,7 @@ import { AgentProvider, AssistantButton } from '@viamoss/moss-sdk';
 
 ```tsx
 <AgentProvider config={{
-  apiUrl: 'https://clippy-api.viamoss.ai',
+  apiUrl: 'https://moss-api.viamoss.ai',
   applicationId: 'YOUR_APP_ID',
   userId: 'premium-user-123',
   getJwt: () => fetchMossToken(),
@@ -46,14 +46,6 @@ import { AgentProvider, AssistantButton } from '@viamoss/moss-sdk';
   enableSessionRecording: true,
   enableScreenHistoryRecording: true,
   language: 'ko',
-
-  // 고급 플래닝
-  planning: {
-    enabled: true,
-    maxSteps: 15,
-    allowUserSkip: true,
-    showPlanOverview: true,
-  },
 
   // 프리미엄 사용자를 위한 확장된 세션
   sessionConfig: {
@@ -74,7 +66,7 @@ import { AgentProvider, AssistantButton } from '@viamoss/moss-sdk';
 
 ```tsx
 <AgentProvider config={{
-  apiUrl: 'https://clippy-api.viamoss.ai',
+  apiUrl: 'https://moss-api.viamoss.ai',
   applicationId: 'YOUR_APP_ID',
   userId: 'dev-user',
   getJwt: () => fetchMossToken(),
@@ -111,7 +103,7 @@ import { AgentProvider, AssistantButton } from '@viamoss/moss-sdk';
 
 ```tsx
 <AgentProvider config={{
-  apiUrl: 'https://clippy-api.viamoss.ai',
+  apiUrl: 'https://moss-api.viamoss.ai',
   applicationId: 'YOUR_APP_ID',
   userId: 'privacy-user-456',
   getJwt: () => fetchMossToken(),
@@ -142,31 +134,18 @@ import { AgentProvider, AssistantButton } from '@viamoss/moss-sdk';
 
 const subscriptionConfigs = {
   free: {
-    planning: { enabled: false },
     sessionConfig: {
       inactivityTimeout: 15,
       maxSessionAge: 1,
     },
   },
   pro: {
-    planning: {
-      enabled: true,
-      maxSteps: 10,
-      allowUserSkip: true,
-      showPlanOverview: true,
-    },
     sessionConfig: {
       inactivityTimeout: 30,
       maxSessionAge: 2,
     },
   },
   enterprise: {
-    planning: {
-      enabled: true,
-      maxSteps: 20,
-      allowUserSkip: true,
-      showPlanOverview: true,
-    },
     sessionConfig: {
       inactivityTimeout: 60,
       maxSessionAge: 8,
@@ -179,7 +158,7 @@ function MossAssistant({ user }) {
 
   return (
     <AgentProvider config={{
-      apiUrl: 'https://clippy-api.viamoss.ai',
+      apiUrl: 'https://moss-api.viamoss.ai',
       applicationId: 'YOUR_APP_ID',
       userId: user.id,
       getJwt: () => fetchMossToken(),
@@ -223,7 +202,7 @@ import { AgentProvider, AssistantButton } from '@viamoss/moss-sdk';
 export function MossAssistant({ userId }: { userId: string }) {
   return (
     <AgentProvider config={{
-      apiUrl: 'https://clippy-api.viamoss.ai',
+      apiUrl: 'https://moss-api.viamoss.ai',
       applicationId: process.env.NEXT_PUBLIC_MOSS_APP_ID!,
       userId,
       getJwt: async () => {
@@ -251,7 +230,7 @@ export async function GET() {
   const token = jwt.sign(
     { sub: session.user.id, app: process.env.MOSS_APP_ID },
     process.env.MOSS_JWT_SECRET!,
-    { expiresIn: '1h' }
+    { expiresIn: '1h', header: { kid: process.env.MOSS_KEY_ID! } }
   );
 
   return Response.json({ token });
@@ -266,7 +245,7 @@ export async function GET() {
 
 ```tsx
 <AgentProvider config={{
-  apiUrl: 'https://clippy-api.viamoss.ai',
+  apiUrl: 'https://moss-api.viamoss.ai',
   applicationId: 'YOUR_APP_ID',
   userId: currentUser.id,
   getJwt: () => fetchMossToken(),
@@ -300,7 +279,7 @@ export async function GET() {
 
 ```tsx
 <AgentProvider config={{
-  apiUrl: 'https://clippy-api.viamoss.ai',
+  apiUrl: 'https://moss-api.viamoss.ai',
   applicationId: 'YOUR_APP_ID',
   userId: currentUser.id,
   getJwt: () => fetchMossToken(),
@@ -322,7 +301,7 @@ export async function GET() {
 
 ```tsx
 <AgentProvider config={{
-  apiUrl: 'https://clippy-api.viamoss.ai',
+  apiUrl: 'https://moss-api.viamoss.ai',
   applicationId: 'YOUR_APP_ID',
   userId: currentUser.id,
   getJwt: () => fetchMossToken(),

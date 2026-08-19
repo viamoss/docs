@@ -32,7 +32,7 @@ When the same setting is configured in multiple places, Moss uses this priority 
 // Dashboard setting: language = 'en'
 // SDK configuration overrides it:
 <AgentProvider config={{
-  apiUrl: 'https://clippy-api.viamoss.ai',
+  apiUrl: 'https://moss-api.viamoss.ai',
   applicationId: 'YOUR_APP_ID',
   userId: currentUser.id,
   getJwt: () => fetchMossToken(),
@@ -52,6 +52,7 @@ These settings can only be configured through the Dashboard:
 - API Keys
 - Domain Access Control
 - Vector Store Configuration
+- Planning
 - Application deletion
 
 ### SDK-Configurable Settings
@@ -64,7 +65,6 @@ These settings can be set in Dashboard and overridden via SDK:
 | Enable Vision | Yes | Yes |
 | Session Recording | Yes | Yes |
 | Screen History | Yes | Yes |
-| Planning | Yes | Yes |
 | Session Timeouts | Yes | Yes |
 | Screenshot Mode | Yes | Yes |
 | Log Level | Yes | Yes |

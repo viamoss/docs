@@ -101,7 +101,7 @@ Moss 대시보드에서 **API 키**로 이동하여 JWT 서명 키를 생성하�
   <Tab title="React (NPM)">
     ```tsx
     <AgentProvider config={{
-      apiUrl: 'https://clippy-api.viamoss.ai',
+      apiUrl: 'https://moss-api.viamoss.ai',
       applicationId: 'YOUR_APP_ID',
       userId: currentUser.id,
       getJwt: async () => {
@@ -119,7 +119,7 @@ Moss 대시보드에서 **API 키**로 이동하여 JWT 서명 키를 생성하�
     ```html
     <script>
       window.mossSettings = {
-        apiUrl: 'https://clippy-api.viamoss.ai',
+        apiUrl: 'https://moss-api.viamoss.ai',
         userId: 'USER_ID',
         getJwt: async function() {
           const res = await fetch('/api/moss-token');
@@ -165,25 +165,6 @@ Moss 대시보드에서 **API 키**로 이동하여 JWT 서명 키를 생성하�
 <Tip>
     프로덕션 애플리케이션에서는 `jwt`보다 `getJwt`를 권장합니다. 토큰이 항상 유효한 상태를 보장합니다.
 </Tip>
-
-## API 키 인증 (레거시)
-
-<Warning>
-    API 키 인증은 더 이상 사용되지 않으며 v2.0에서 제거됩니다. JWT로 마이그레이션하세요.
-</Warning>
-
-API 키는 개발 또는 마이그레이션 중에 여전히 사용할 수 있습니다:
-
-```tsx
-<AgentProvider config={{
-  apiUrl: 'https://clippy-api.viamoss.ai',
-  applicationId: 'YOUR_APP_ID',
-  userId: 'user-123',
-  apiKey: 'YOUR_API_KEY',  // 더 이상 사용되지 않음
-}}>
-```
-
-API 키는 사용자별 신원 검증과 토큰 만료 기능이 없습니다. 모든 프로덕션 배포에는 JWT를 권장합니다.
 
 ## 다음 단계
 

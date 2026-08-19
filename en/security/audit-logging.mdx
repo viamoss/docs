@@ -111,7 +111,7 @@ Navigate to **Settings > Developer Options > Audit Logging** to enable or disabl
 
 ### Dashboard Access
 
-View audit logs in the Dashboard under **Analytics > Audit Logs**.
+View audit logs in the Dashboard under **Configure > Audit Log**.
 
 Features:
 - Filter by date range
@@ -124,12 +124,16 @@ Features:
 Query audit logs programmatically using the Audit API:
 
 ```bash
-curl -X GET "https://api.viamoss.ai/v1/audit-logs" \
-  -H "Authorization: Bearer YOUR_AUDIT_API_KEY" \
-  -H "X-Application-Id: YOUR_APP_ID" \
-  -d "start_date=2024-01-01" \
-  -d "end_date=2024-01-31"
+# List audit events for an application
+curl -X GET "https://moss-api.viamoss.ai/api/v1/applications/YOUR_APP_ID/audit-events?start_date=2024-01-01&end_date=2024-01-31" \
+  -H "X-Audit-API-Key: YOUR_AUDIT_API_KEY"
+
+# Export the same events as JSON or CSV
+curl -X GET "https://moss-api.viamoss.ai/api/v1/applications/YOUR_APP_ID/audit-events/export?format=csv" \
+  -H "X-Audit-API-Key: YOUR_AUDIT_API_KEY"
 ```
+
+Results are paginated with `page` and `page_size`, and can be narrowed with `actor_id`, `action`, `target_type`, `outcome`, `start_date`, and `end_date`.
 
 ### Audit API Key
 
@@ -143,17 +147,7 @@ A separate API key is used for audit log access:
 
 ## Log Retention
 
-### Default Retention
-
-| Log Type | Retention Period |
-|----------|------------------|
-| API request logs | 90 days |
-| LLM call logs | 90 days |
-| Security events | 1 year |
-
-### Custom Retention
-
-Contact support for custom retention periods based on your compliance requirements.
+Retention is configurable per plan. Contact us for the retention period that applies to your account, or to arrange a custom period based on your compliance requirements.
 
 ---
 
