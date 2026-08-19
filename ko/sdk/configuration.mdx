@@ -14,7 +14,7 @@ icon: "gear"
 
 ```tsx
 <AgentProvider config={{
-  apiUrl: 'https://clippy-api.viamoss.ai',   // Moss 백엔드 URL
+  apiUrl: 'https://moss-api.viamoss.ai',   // Moss 백엔드 URL
   applicationId: 'YOUR_APP_ID',               // 대시보드에서 확인
   userId: 'user-123',                          // 현재 사용자의 식별자
   getJwt: () => fetchMossToken(),              // JWT 토큰 제공 함수
@@ -44,7 +44,7 @@ icon: "gear"
 
 ```tsx
 <AgentProvider config={{
-  apiUrl: 'https://clippy-api.viamoss.ai',
+  apiUrl: 'https://moss-api.viamoss.ai',
   applicationId: 'YOUR_APP_ID',
   userId: 'user-123',
   getJwt: () => fetchMossToken(),
@@ -62,7 +62,6 @@ icon: "gear"
 |------|------|--------|------|
 | `getJwt` | `() => Promise<string>` | — | 새 JWT를 가져오는 함수 (권장) |
 | `jwt` | `string` | — | 고정 JWT 토큰 (자동 갱신 없음) |
-| `apiKey` | `string` | — | **더 이상 사용되지 않음.** JWT를 사용하세요 |
 
 ### 표시
 
@@ -131,8 +130,6 @@ interface MossSDKConfig {
   // 인증
   getJwt?: () => Promise<string>;   // 권장
   jwt?: string;
-  /** @deprecated getJwt를 대신 사용하세요 */
-  apiKey?: string;
 
   // 표시
   language?: 'en' | 'ko';
@@ -190,7 +187,7 @@ interface MossSDKConfig {
     <Card title="고급" icon="sliders" href="/ko/sdk/advanced">
         안정성 튜닝, Shadow DOM, CSP 헤더
     </Card>
-    <Card title="설정 참조" icon="list" href="/ko/configurations/settings-reference">
-        대시보드 설정 옵션
+    <Card title="SDK 옵션" icon="list" href="/ko/configurations/sdk-options">
+        전체 SDK 설정 옵션
     </Card>
 </CardGroup>

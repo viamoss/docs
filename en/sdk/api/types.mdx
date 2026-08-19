@@ -127,8 +127,6 @@ type MossSDKConfig = {
   // Authentication
   getJwt?: () => Promise<string>;
   jwt?: string;
-  /** @deprecated Use getJwt instead */
-  apiKey?: string;
 
   // Display
   language?: 'en' | 'ko';

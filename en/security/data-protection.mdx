@@ -148,7 +148,7 @@ JWT secrets receive enhanced protection:
 | Stage | Protection |
 |-------|------------|
 | Generation | 256-bit entropy (`secrets.token_urlsafe(32)`) |
-| Storage | Argon2id hash (recommended) |
+| Storage | Encrypted at rest |
 | Rotation | Support for multiple active keys |
 | Revocation | Scheduled revocation with grace period |
 
@@ -164,28 +164,7 @@ All password-equivalent credentials use:
 
 ## Secure Defaults
 
-Moss uses secure defaults that require explicit opt-out:
-
-### Production Safeguards
-
-| Setting | Production Behavior |
-|---------|---------------------|
-| `SKIP_SDK_AUTH` | Ignored (always requires auth) |
-| `SKIP_CLERK_VERIFICATION` | Ignored (always verifies) |
-| Debug endpoints | Disabled |
-| Verbose logging | Disabled |
-
-### Fail-Closed Design
-
-```python
-def should_skip_sdk_auth(self) -> bool:
-    # Production ALWAYS requires authentication
-    if self.app_env == AppEnvironment.PRODUCTION:
-        return False  # Cannot be overridden
-
-    # Development requires explicit opt-in
-    return self.skip_sdk_auth is True
-```
+Authentication is enforced on every SDK request in production; it cannot be disabled outside isolated development environments.
 
 ---
 

@@ -14,7 +14,7 @@ Every SDK initialization requires these fields:
 
 ```tsx
 <AgentProvider config={{
-  apiUrl: 'https://clippy-api.viamoss.ai',   // Moss backend URL
+  apiUrl: 'https://moss-api.viamoss.ai',   // Moss backend URL
   applicationId: 'YOUR_APP_ID',               // From the Dashboard
   userId: 'user-123',                          // Your user's identifier
   getJwt: () => fetchMossToken(),              // JWT token provider
@@ -44,7 +44,7 @@ Options you'll likely want to configure.
 
 ```tsx
 <AgentProvider config={{
-  apiUrl: 'https://clippy-api.viamoss.ai',
+  apiUrl: 'https://moss-api.viamoss.ai',
   applicationId: 'YOUR_APP_ID',
   userId: 'user-123',
   getJwt: () => fetchMossToken(),
@@ -62,7 +62,6 @@ Options you'll likely want to configure.
 |--------|------|---------|-------------|
 | `getJwt` | `() => Promise<string>` | — | Function to fetch fresh JWT (recommended) |
 | `jwt` | `string` | — | Static JWT token (no auto-refresh) |
-| `apiKey` | `string` | — | **Deprecated.** Use JWT instead |
 
 ### Display
 
@@ -131,8 +130,6 @@ interface MossSDKConfig {
   // Authentication
   getJwt?: () => Promise<string>;   // Recommended
   jwt?: string;
-  /** @deprecated Use getJwt instead */
-  apiKey?: string;
 
   // Display
   language?: 'en' | 'ko';
@@ -190,7 +187,7 @@ The `AssistantButton` component accepts optional props for customization:
     <Card title="Advanced" icon="sliders" href="/en/sdk/advanced">
         Stability tuning, Shadow DOM, CSP headers
     </Card>
-    <Card title="Settings Reference" icon="list" href="/en/configurations/settings-reference">
-        Dashboard configuration options
+    <Card title="SDK Options" icon="list" href="/en/configurations/sdk-options">
+        Full SDK configuration options
     </Card>
 </CardGroup>

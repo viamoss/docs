@@ -278,25 +278,9 @@ Create a new API key and invalidate the old one.
 
 ### Vector Store Configuration
 
-Choose which documentation system to use for RAG (Retrieval-Augmented Generation).
+Your documentation is indexed into an isolated per-application vector store, which the assistant searches for RAG (Retrieval-Augmented Generation).
 
 <Note>This setting is **Dashboard only**.</Note>
-
-**Default:** V1 System (for new applications)
-
-**Options:**
-- **Legacy System:** Uses documentation_records table
-- **V1 System (New):** Uses three-tier documentation system (sources, pages, chunks)
-
-<Info>
-    V1 provides better organization with sources, pages, and chunks. It also
-    preserves full page content.
-</Info>
-
-**Before switching:**
-- Ensure your documentation is ingested into the new system
-- Test RAG search results after switching
-- You can switch back anytime if needed
 
 ### Danger Zone
 
@@ -328,10 +312,10 @@ Permanently delete your application and all associated data.
         Override Dashboard settings in your application code
     </Card>
     <Card
-        title="Runtime API"
+        title="Configuration Overview"
         icon="bolt"
-        href="/en/configurations/runtime-api"
+        href="/en/configurations/overview"
     >
-        Make dynamic configuration changes
+        How Dashboard and SDK settings fit together
     </Card>
 </CardGroup>

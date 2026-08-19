@@ -31,7 +31,7 @@ function App() {
     <>
       <YourApp />
       <AgentProvider config={{
-        apiUrl: 'https://clippy-api.viamoss.ai',
+        apiUrl: 'https://moss-api.viamoss.ai',
         applicationId: 'YOUR_APP_ID',
         userId: currentUser.id,
         getJwt: () => fetchMossToken(),
@@ -61,7 +61,7 @@ export async function GET(request: Request) {
   const token = jwt.sign(
     { sub: user.id, app: 'YOUR_APP_ID' },
     process.env.MOSS_JWT_SECRET,
-    { expiresIn: '1h' }
+    { expiresIn: '1h', header: { kid: process.env.MOSS_KEY_ID } }
   );
 
   return Response.json({ token });

@@ -34,7 +34,7 @@ function App() {
     <>
       <YourApp />
       <AgentProvider config={{
-        apiUrl: 'https://clippy-api.viamoss.ai',
+        apiUrl: 'https://moss-api.viamoss.ai',
         applicationId: 'YOUR_APP_ID',
         userId: currentUser.id,
         getJwt: () => fetchMossToken(),
@@ -76,7 +76,7 @@ HTML에 스크립트 태그를 추가하세요. SDK가 자동으로 초기화되
 ```html
 <script
   src="https://cdn.viamoss.ai/moss-sdk@latest.min.js?applicationId=YOUR_APP_ID&userId=USER_ID"
-  data-api-base="https://clippy-api.viamoss.ai"
+  data-api-base="https://moss-api.viamoss.ai"
 ></script>
 ```
 
@@ -87,7 +87,7 @@ HTML에 스크립트 태그를 추가하세요. SDK가 자동으로 초기화되
 ```html
 <script>
   window.mossSettings = {
-    apiUrl: 'https://clippy-api.viamoss.ai',
+    apiUrl: 'https://moss-api.viamoss.ai',
     userId: 'user-123',
     jwt: 'YOUR_JWT_TOKEN',
     language: 'ko',
@@ -212,7 +212,7 @@ import { MOSS_TRIGGER_ATTR } from '@viamoss/moss-sdk';
     function MossAssistant({ userId }: { userId: string }) {
       return (
         <AgentProvider config={{
-          apiUrl: 'https://clippy-api.viamoss.ai',
+          apiUrl: 'https://moss-api.viamoss.ai',
           applicationId: 'YOUR_APP_ID',
           userId,
           getJwt: () => fetch('/api/moss-token').then(r => r.json()).then(d => d.token),
@@ -235,7 +235,7 @@ import { MOSS_TRIGGER_ATTR } from '@viamoss/moss-sdk';
             {children}
             <Script
               src="https://cdn.viamoss.ai/moss-sdk@latest.min.js?applicationId=YOUR_APP_ID&userId=USER_ID"
-              data-api-base="https://clippy-api.viamoss.ai"
+              data-api-base="https://moss-api.viamoss.ai"
               strategy="lazyOnload"
             />
           </body>
@@ -254,7 +254,7 @@ import { MOSS_TRIGGER_ATTR } from '@viamoss/moss-sdk';
 
     onMounted(() => {
       window.mossSettings = {
-        apiUrl: 'https://clippy-api.viamoss.ai',
+        apiUrl: 'https://moss-api.viamoss.ai',
         userId: 'USER_ID',
         jwt: 'YOUR_JWT_TOKEN',
       };
@@ -287,7 +287,7 @@ import { MOSS_TRIGGER_ATTR } from '@viamoss/moss-sdk';
 
       ngOnInit() {
         (window as any).mossSettings = {
-          apiUrl: 'https://clippy-api.viamoss.ai',
+          apiUrl: 'https://moss-api.viamoss.ai',
           userId: 'USER_ID',
           jwt: 'YOUR_JWT_TOKEN',
         };

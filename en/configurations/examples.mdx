@@ -17,7 +17,7 @@ The simplest configuration to get started:
 import { AgentProvider, AssistantButton } from '@viamoss/moss-sdk';
 
 <AgentProvider config={{
-  apiUrl: 'https://clippy-api.viamoss.ai',
+  apiUrl: 'https://moss-api.viamoss.ai',
   applicationId: 'YOUR_APP_ID',
   userId: currentUser.id,
   getJwt: () => fetchMossToken(),
@@ -36,7 +36,7 @@ Full-featured configuration for users who need comprehensive assistance:
 
 ```tsx
 <AgentProvider config={{
-  apiUrl: 'https://clippy-api.viamoss.ai',
+  apiUrl: 'https://moss-api.viamoss.ai',
   applicationId: 'YOUR_APP_ID',
   userId: 'premium-user-123',
   getJwt: () => fetchMossToken(),
@@ -46,14 +46,6 @@ Full-featured configuration for users who need comprehensive assistance:
   enableSessionRecording: true,
   enableScreenHistoryRecording: true,
   language: 'en',
-
-  // Advanced planning
-  planning: {
-    enabled: true,
-    maxSteps: 15,
-    allowUserSkip: true,
-    showPlanOverview: true,
-  },
 
   // Extended sessions for premium users
   sessionConfig: {
@@ -74,7 +66,7 @@ Configuration optimized for development and debugging:
 
 ```tsx
 <AgentProvider config={{
-  apiUrl: 'https://clippy-api.viamoss.ai',
+  apiUrl: 'https://moss-api.viamoss.ai',
   applicationId: 'YOUR_APP_ID',
   userId: 'dev-user',
   getJwt: () => fetchMossToken(),
@@ -110,7 +102,7 @@ Minimal data collection for privacy-conscious users:
 
 ```tsx
 <AgentProvider config={{
-  apiUrl: 'https://clippy-api.viamoss.ai',
+  apiUrl: 'https://moss-api.viamoss.ai',
   applicationId: 'YOUR_APP_ID',
   userId: 'privacy-user-456',
   getJwt: () => fetchMossToken(),
@@ -141,31 +133,18 @@ import { AgentProvider, AssistantButton } from '@viamoss/moss-sdk';
 
 const subscriptionConfigs = {
   free: {
-    planning: { enabled: false },
     sessionConfig: {
       inactivityTimeout: 15,
       maxSessionAge: 1,
     },
   },
   pro: {
-    planning: {
-      enabled: true,
-      maxSteps: 10,
-      allowUserSkip: true,
-      showPlanOverview: true,
-    },
     sessionConfig: {
       inactivityTimeout: 30,
       maxSessionAge: 2,
     },
   },
   enterprise: {
-    planning: {
-      enabled: true,
-      maxSteps: 20,
-      allowUserSkip: true,
-      showPlanOverview: true,
-    },
     sessionConfig: {
       inactivityTimeout: 60,
       maxSessionAge: 8,
@@ -178,7 +157,7 @@ function MossAssistant({ user }) {
 
   return (
     <AgentProvider config={{
-      apiUrl: 'https://clippy-api.viamoss.ai',
+      apiUrl: 'https://moss-api.viamoss.ai',
       applicationId: 'YOUR_APP_ID',
       userId: user.id,
       getJwt: () => fetchMossToken(),
@@ -222,7 +201,7 @@ import { AgentProvider, AssistantButton } from '@viamoss/moss-sdk';
 export function MossAssistant({ userId }: { userId: string }) {
   return (
     <AgentProvider config={{
-      apiUrl: 'https://clippy-api.viamoss.ai',
+      apiUrl: 'https://moss-api.viamoss.ai',
       applicationId: process.env.NEXT_PUBLIC_MOSS_APP_ID!,
       userId,
       getJwt: async () => {
@@ -250,7 +229,7 @@ export async function GET() {
   const token = jwt.sign(
     { sub: session.user.id, app: process.env.MOSS_APP_ID },
     process.env.MOSS_JWT_SECRET!,
-    { expiresIn: '1h' }
+    { expiresIn: '1h', header: { kid: process.env.MOSS_KEY_ID! } }
   );
 
   return Response.json({ token });
@@ -265,7 +244,7 @@ Customize the assistant's visual appearance to match your brand:
 
 ```tsx
 <AgentProvider config={{
-  apiUrl: 'https://clippy-api.viamoss.ai',
+  apiUrl: 'https://moss-api.viamoss.ai',
   applicationId: 'YOUR_APP_ID',
   userId: currentUser.id,
   getJwt: () => fetchMossToken(),
@@ -299,7 +278,7 @@ Or use a preset theme:
 
 ```tsx
 <AgentProvider config={{
-  apiUrl: 'https://clippy-api.viamoss.ai',
+  apiUrl: 'https://moss-api.viamoss.ai',
   applicationId: 'YOUR_APP_ID',
   userId: currentUser.id,
   getJwt: () => fetchMossToken(),
@@ -321,7 +300,7 @@ Optimized for minimal overhead:
 
 ```tsx
 <AgentProvider config={{
-  apiUrl: 'https://clippy-api.viamoss.ai',
+  apiUrl: 'https://moss-api.viamoss.ai',
   applicationId: 'YOUR_APP_ID',
   userId: currentUser.id,
   getJwt: () => fetchMossToken(),
