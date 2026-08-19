@@ -1,0 +1,83 @@
+---
+title: "Changelog"
+description: "Notable changes to the Moss SDK and dashboard"
+icon: "clock-rotate-left"
+---
+
+# Changelog
+
+Notable customer-visible changes to the Moss SDK (`@viamoss/moss-sdk`) and the
+Moss dashboard. From v0.13.0, the SDK version tracks the Moss platform version.
+
+## 0.16.0 — 2026-08-17
+
+### Added
+
+- **Support Ticket Handoff** — the assistant can collect a support request,
+  show the user a review card, and hand the confirmed ticket to your
+  application to file through your own backend. See
+  [Support Ticket Handoff](/en/sdk/support-ticket-handoff). Ticket filing is
+  offered only on applications where it is configured and only to sessions
+  whose host registered the `onSupportTicket` callback.
+- **Session detail** — the dashboard session page groups the transcript more
+  clearly and closes several display gaps.
+
+### Fixed
+
+- Multiline input (Shift+Enter) now also works in the compact guide bubble.
+- Dashboard deep links that cross organizations now recover to the
+  application's owning organization instead of failing.
+
+## 0.15.4 — 2026-08-10
+
+### Security
+
+- Dependency security updates.
+
+## 0.15.3 — 2026-08-10
+
+### Added
+
+- **Knowledge base progress** — documentation sources show a segmented
+  progress bar with separate scrape and process phases.
+
+### Fixed
+
+- Continuing a guide no longer records a duplicate user turn in the session
+  transcript.
+- On-prem OIDC sign-in hardening, including support for multiple accepted
+  audiences.
+
+## 0.15.0–0.15.2 — 2026-08-06
+
+### Added
+
+- **Session transcripts redesigned** — the dashboard renders sessions as a
+  chat stream with paired stimulus/response cards, user role labels, and date
+  dividers.
+
+### Fixed
+
+- Soft line breaks in assistant responses now render correctly in chat,
+  streaming, and guide instructions.
+
+## 0.14.0 — 2026-08-06
+
+### Added
+
+- **Multiline chat input** — Enter sends, Shift+Enter adds a line.
+- Assistant responses in dashboard session transcripts render as markdown.
+- Citations from Document360 sources now link to the public portal URL.
+
+## 0.13.0 — 2026-08-05
+
+### Changed
+
+- The SDK version now tracks the Moss platform version.
+- Session resume card redesigned: centered rating prompt and a compact
+  choice between continuing and starting a new session.
+
+### Fixed
+
+- Prevented stale responses from appearing after starting a new chat.
+- Prevented resuming onto a stale pending interaction.

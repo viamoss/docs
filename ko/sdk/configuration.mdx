@@ -70,6 +70,8 @@ icon: "gear"
 | `language` | `'en' \| 'ko'` | 자동 감지 | UI 언어 |
 | `screenshotMode` | `'fullpage' \| 'viewport'` | `'fullpage'` | 스크린샷 캡처 방식 |
 | `appearance` | `AppearanceInput` | `'blue'` | 비주얼 테마 (프리셋 이름 또는 커스텀 객체) |
+| `displayMode` | `'chat' \| 'headless'` | `'chat'` | 가이드 표시 방식: 전체 채팅 모달 또는 하이라이트된 요소 옆의 툴팁 버블 |
+| `headless` | `HeadlessConfig` | — | 헤드리스 모드에 적용되는 옵션: 스포트라이트 딤 오버레이, 애니메이션 커서, 완료 토스트 |
 
 ### 동작
 
@@ -80,6 +82,22 @@ icon: "gear"
 | `pageSanitizationScript` | `(doc: Document) => void` | — | 컨텍스트 캡처 전 DOM 정리 |
 | `enableSessionRecording` | `boolean` | `true` | 대시보드에 세션 기록 업로드 |
 | `enableScreenHistoryRecording` | `boolean` | `false` | AI 컨텍스트에 화면 히스토리 포함 |
+
+### 개인정보 및 편집
+
+| 옵션 | 타입 | 기본값 | 설명 |
+|------|------|--------|------|
+| `redactAllInputs` | `boolean` | `true` | 모든 입력 요소의 값을 편집. 필드별 제외는 `data-moss-unredact` 사용 |
+| `redactionSelectors` | `string[]` | — | `data-moss-redact`와 동일하게 편집할 추가 CSS 선택자 |
+| `userMetadata` | `Record<string, string \| number \| boolean \| string[]>` | — | 맞춤 가이드를 위한 사용자 속성(역할, 등급). 원본 PII는 전달하지 마세요 |
+
+자세한 내용은 [고급 > 민감 콘텐츠 편집](/ko/sdk/advanced#민감-콘텐츠-편집)을 참조하세요.
+
+### 연동
+
+| 옵션 | 타입 | 기본값 | 설명 |
+|------|------|--------|------|
+| `onSupportTicket` | `(handoff) => Promise<SupportTicketOutcome>` | — | 중개된 지원 티켓 등록을 위한 호스트 콜백. [지원 티켓 핸드오프](/ko/sdk/support-ticket-handoff) 참조 |
 
 ### 세션 관리
 
@@ -137,6 +155,8 @@ interface MossSDKConfig {
   language?: 'en' | 'ko';
   screenshotMode?: 'fullpage' | 'viewport';
   appearance?: AppearanceInput;  // 'blue' | 'purple' | 커스텀 객체
+  displayMode?: 'chat' | 'headless';
+  headless?: HeadlessConfig;
 
   // 동작
   useVision?: boolean;
@@ -144,6 +164,14 @@ interface MossSDKConfig {
   pageSanitizationScript?: (document: Document) => void;
   enableSessionRecording?: boolean;
   enableScreenHistoryRecording?: boolean;
+
+  // 개인정보 및 편집
+  redactAllInputs?: boolean;
+  redactionSelectors?: string[];
+  userMetadata?: Record<string, string | number | boolean | string[]>;
+
+  // 연동
+  onSupportTicket?: (handoff: SupportTicketHandoff) => Promise<SupportTicketOutcome>;
 
   // 세션
   sessionConfig?: {

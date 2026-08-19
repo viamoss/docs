@@ -1,0 +1,147 @@
+---
+title: "Support Ticket Handoff"
+description: "Let the assistant draft support tickets that your application files"
+icon: "ticket"
+---
+
+# Support Ticket Handoff
+
+<Info>
+    Available from SDK 0.16.0.
+</Info>
+
+The Moss assistant can collect a support request in conversation, draft a
+ticket, and show it to the user for review. When the user confirms, the SDK
+hands the approved ticket to **your application**, which files it through your
+own backend. Moss never holds a credential for your ticketing system, and the
+requester's identity is attached by your backend from your own session — it
+never transits Moss.
+
+<Info>
+    Ticket filing is configured per application in the Moss dashboard,
+    including the intake form the assistant collects against. Contact Moss to
+    enable it for your application.
+</Info>
+
+## How it works
+
+1. **Collect** — the assistant gathers the ticket fields in conversation,
+   validated against your configured intake form.
+2. **Review** — the widget renders the drafted ticket as a preview card in the
+   chat. The user can edit the description and confirm or cancel.
+3. **Hand off** — on confirm, the SDK calls the `onSupportTicket` callback you
+   registered at initialization, passing the confirmed ticket and a handoff id.
+4. **File** — your page forwards both to your backend over your own
+   session-authenticated channel. Your backend attaches the requester and
+   files the ticket.
+5. **Confirm** — your callback resolves with the outcome. The assistant shows
+   the user the result, including the ticket id when you provide one.
+
+## Registering the callback
+
+Registering `onSupportTicket` is also the capability signal: the SDK reports
+it at session init, and the backend offers ticket filing only to sessions that
+registered it. A page that doesn't register the callback is never offered a
+flow it cannot finish.
+
+```tsx
+<AgentProvider config={{
+  apiUrl: 'https://moss-api.viamoss.ai',
+  applicationId: 'YOUR_APP_ID',
+  userId: currentUser.id,
+  getJwt: () => fetchMossToken(),
+
+  onSupportTicket: async ({ handoffId, ticket }) => {
+    const res = await fetch('/api/support/moss-handoff', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ handoffId, ticket }),
+    });
+    if (!res.ok) {
+      return { ok: false, errorCode: `HTTP_${res.status}` };
+    }
+    const filed = await res.json();
+    return { ok: true, ticketId: filed.ticketId, ticketUrl: filed.ticketUrl };
+  },
+}}>
+```
+
+The callback owns the transport: use your application's normal session and
+CSRF semantics. The SDK never touches your cookies.
+
+## The handoff
+
+Your callback receives a `SupportTicketHandoff`:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `handoffId` | `string` | Identifies this filing decision. Report the outcome against it, and deduplicate on it so one confirmation cannot become two tickets. |
+| `ticket` | `SupportTicketPayload` | The ticket to file, exactly as the user confirmed it. |
+
+`SupportTicketPayload` uses the Zendesk ticket-create shape, in Zendesk's own
+casing, so your backend can attach the requester and post it without
+translation:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `subject` | `string` | Ticket subject |
+| `comment` | `{ html_body: string }` | Ticket description as HTML |
+| `tags` | `string[]` | Optional tags |
+| `ticket_form_id` | `number` | Optional form id |
+| `custom_fields` | `Array<{ id: number; value: ... }>` | Optional custom field values |
+
+Fields the user left unset are absent rather than empty — Moss omits what it
+cannot determine instead of guessing.
+
+## The outcome
+
+Resolve your callback with a `SupportTicketOutcome`:
+
+```ts
+type SupportTicketOutcome =
+  | { ok: true; ticketId?: string; ticketUrl?: string }
+  | { ok: false; errorCode?: string; errorDetail?: string };
+```
+
+**The resolution is the ticket's outcome, not an acknowledgement.**
+
+- Resolve `{ ok: true }` only once the ticket really exists, with `ticketId`
+  when your backend can name it. The user is shown "Submitted on your behalf"
+  on the strength of that value alone.
+- Resolve `{ ok: false }` when filing failed or was refused. `errorCode` and
+  `errorDetail` land in the handoff's audit trail; they are never shown to the
+  user.
+- Do not resolve early to release the SDK. A callback still pending after
+  15 seconds, or one that rejects, is treated as **unknown** rather than
+  failed: the card tells the user the request was handed over without a
+  confirmation, because your backend may well have filed it. Late resolutions
+  are ignored.
+
+<Warning>
+    Treat `handoffId` as an idempotency key on your backend. If the same
+    handoff reaches you twice, return the original result — never file a
+    second ticket for one confirmation.
+</Warning>
+
+## Responsibilities
+
+| | Moss | Your application |
+|---|------|------------------|
+| Collect and validate fields | ✓ | |
+| User review and confirmation | ✓ | |
+| Transport to your backend | | ✓ |
+| Requester identity | | ✓ (from your session) |
+| Ticketing-system credentials | | ✓ (server-side, yours) |
+| Filing and deduplication | | ✓ |
+| Showing the user the result | ✓ | |
+
+## Next Steps
+
+<CardGroup cols={2}>
+    <Card title="Configuration" icon="gear" href="/en/sdk/configuration">
+        Full SDK configuration reference
+    </Card>
+    <Card title="Authentication" icon="lock" href="/en/sdk/authentication">
+        JWT setup for SDK sessions
+    </Card>
+</CardGroup>

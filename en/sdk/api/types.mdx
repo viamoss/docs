@@ -132,6 +132,8 @@ type MossSDKConfig = {
   language?: 'en' | 'ko';
   screenshotMode?: ScreenshotMode;
   appearance?: AppearanceInput;
+  displayMode?: 'chat' | 'headless';
+  headless?: HeadlessConfig;
 
   // Behavior
   useVision?: boolean;
@@ -139,6 +141,14 @@ type MossSDKConfig = {
   pageSanitizationScript?: (document: Document) => void;
   enableSessionRecording?: boolean;
   enableScreenHistoryRecording?: boolean;
+
+  // Privacy & redaction
+  redactAllInputs?: boolean;
+  redactionSelectors?: string[];
+  userMetadata?: Record<string, string | number | boolean | string[]>;
+
+  // Integrations
+  onSupportTicket?: (handoff: SupportTicketHandoff) => Promise<SupportTicketOutcome>;
 
   // Session
   sessionConfig?: SessionConfig;

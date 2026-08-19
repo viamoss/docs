@@ -70,6 +70,8 @@ Options you'll likely want to configure.
 | `language` | `'en' \| 'ko'` | Auto-detect | UI language |
 | `screenshotMode` | `'fullpage' \| 'viewport'` | `'fullpage'` | How screenshots are captured |
 | `appearance` | `AppearanceInput` | `'blue'` | Visual theme (preset name or custom object) |
+| `displayMode` | `'chat' \| 'headless'` | `'chat'` | Guide display: full chat modal, or a positioned tooltip bubble near highlighted elements |
+| `headless` | `HeadlessConfig` | — | Options that apply in headless mode: spotlight dim overlay, animated cursor, completion toast |
 
 ### Behavior
 
@@ -80,6 +82,22 @@ Options you'll likely want to configure.
 | `pageSanitizationScript` | `(doc: Document) => void` | — | Clean the DOM before context capture |
 | `enableSessionRecording` | `boolean` | `true` | Upload session recordings to dashboard |
 | `enableScreenHistoryRecording` | `boolean` | `false` | Include screen history in AI context |
+
+### Privacy & Redaction
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `redactAllInputs` | `boolean` | `true` | Redact values of all input-type elements; opt out per field with `data-moss-unredact` |
+| `redactionSelectors` | `string[]` | — | Additional CSS selectors redacted identically to `data-moss-redact` |
+| `userMetadata` | `Record<string, string \| number \| boolean \| string[]>` | — | User attributes (role, tier) for personalized guidance; avoid raw PII |
+
+See [Advanced > Redacting Sensitive Content](/en/sdk/advanced#redacting-sensitive-content).
+
+### Integrations
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `onSupportTicket` | `(handoff) => Promise<SupportTicketOutcome>` | — | Host callback for brokered support-ticket filing; see [Support Ticket Handoff](/en/sdk/support-ticket-handoff) |
 
 ### Session Management
 
@@ -137,6 +155,8 @@ interface MossSDKConfig {
   language?: 'en' | 'ko';
   screenshotMode?: 'fullpage' | 'viewport';
   appearance?: AppearanceInput;  // 'blue' | 'purple' | custom object
+  displayMode?: 'chat' | 'headless';
+  headless?: HeadlessConfig;
 
   // Behavior
   useVision?: boolean;
@@ -144,6 +164,14 @@ interface MossSDKConfig {
   pageSanitizationScript?: (document: Document) => void;
   enableSessionRecording?: boolean;
   enableScreenHistoryRecording?: boolean;
+
+  // Privacy & redaction
+  redactAllInputs?: boolean;
+  redactionSelectors?: string[];
+  userMetadata?: Record<string, string | number | boolean | string[]>;
+
+  // Integrations
+  onSupportTicket?: (handoff: SupportTicketHandoff) => Promise<SupportTicketOutcome>;
 
   // Session
   sessionConfig?: {

@@ -166,6 +166,45 @@ This is useful when:
 
 ---
 
+## Native Modal Dialogs
+
+When your application opens a native `<dialog>` with `showModal()`, the
+browser makes everything outside the dialog inert — including the Moss widget.
+The user can't click the assistant, and an in-progress guide can't continue.
+
+If your application uses `showModal()`, install the modal dialog escape with
+the element your integration mounts the widget into:
+
+```tsx
+import { installModalDialogEscape } from '@viamoss/moss-sdk';
+
+const uninstall = installModalDialogEscape(widgetMountElement);
+
+// Later, if you tear the widget down:
+uninstall();
+```
+
+While a modal dialog is open, the SDK host is temporarily moved into the
+dialog's tree (and promoted above it) so the widget stays interactive and
+keeps its viewport position. When the dialog closes, the host is restored to
+its original place in the DOM. The returned function uninstalls the listeners
+and restores the host.
+
+<Warning>
+    Pass an element your integration owns outright — the container you mounted
+    the Moss widget into. Never pass a node managed by your application's
+    framework: the escape re-parents the element, which would fight the
+    framework's own rendering.
+</Warning>
+
+**Limitations:**
+
+- Dialogs rendered inside shadow roots are not tracked.
+- In browsers without the Popover API, the widget stays interactive but may
+  render clipped inside dialogs that have `overflow: hidden` or a transform.
+
+---
+
 ## Redacting Sensitive Content
 
 ### Declarative Redaction with `data-moss-redact`
@@ -194,6 +233,60 @@ Redaction applies to the marked element and any of its ancestors up to 10 levels
   <input type="text" placeholder="CVV" />
 </section>
 ```
+
+### Input Redaction (default on)
+
+All input-type elements — `input`, `textarea`, `select`, and
+`contenteditable` regions — have their values redacted by default. What a
+user has typed into a form never leaves the browser as page context.
+
+To opt a specific field out when its content is known to be safe and useful
+to the assistant (for example, a search box), mark it with
+`data-moss-unredact`:
+
+```html
+<input type="search" data-moss-unredact placeholder="Search products…" />
+```
+
+To disable input redaction entirely, set `redactAllInputs: false`:
+
+```tsx
+<AgentProvider config={{
+  // ...
+  redactAllInputs: false,  // default: true
+}}>
+```
+
+<Warning>
+    Keep `redactAllInputs` enabled unless you have reviewed every form in your
+    application. With it disabled, typed form values are included in the page
+    context sent to Moss.
+</Warning>
+
+### Redaction by CSS Selector
+
+If your application already marks sensitive elements for another tool (for
+example FullStory's `.fs-exclude` / `.fs-mask` classes), reuse those markers
+instead of adding `data-moss-redact` everywhere. Elements matching
+`redactionSelectors` are redacted identically to `data-moss-redact`:
+
+```tsx
+<AgentProvider config={{
+  // ...
+  redactionSelectors: ['.fs-exclude', '.fs-mask', '[data-private]'],
+}}>
+```
+
+`data-moss-redact` is always recognized regardless of this setting. If an
+element matches both an allow rule and a redact rule, the redact rule wins.
+
+### What redaction covers
+
+Redaction applies to the page text and structure sent as context and to the
+interaction reports recorded during step-by-step guidance. It does not alter
+chat messages the user types, screenshots, session recordings, or screen
+history — disable those features individually if their output is not
+permitted in your environment.
 
 ### Programmatic Sanitization
 

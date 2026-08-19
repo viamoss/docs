@@ -1,0 +1,59 @@
+---
+title: "Versioning & Compatibility"
+description: "How SDK versions relate to the Moss platform, and which release the docs describe"
+icon: "code-branch"
+---
+
+# Versioning & Compatibility
+
+## One version number
+
+`@viamoss/moss-sdk` is released in lockstep with the Moss platform: an SDK
+release carries the same version number as the backend and dashboard release
+it ships with. SDK 0.16.0 is the client for Moss platform 0.16.0. This has
+been the scheme since 0.13.0.
+
+A matching pair is the combination we build and test together. Running an
+older SDK against the current platform generally keeps working — the backend
+does not drop a client the moment a new version ships — but features
+introduced in a later release are simply absent from an earlier SDK, and
+fixes land only in the version that carries them.
+
+## What these docs describe
+
+The documentation describes the **latest release**. Where a capability arrived
+recently, the page says so with a note like "Available from SDK 0.16.0." If
+you are pinned to an older version, treat anything without such a note as
+present, and check the [changelog](/en/changelog) for what arrived after your
+version.
+
+## Staying current
+
+Upgrade with your package manager:
+
+```bash
+npm install @viamoss/moss-sdk@latest
+```
+
+Stay within a recent version rather than pinning indefinitely: the platform
+moves forward, and a long-stale client accumulates missing fixes. Notable
+customer-visible changes in each release are listed in the
+[changelog](/en/changelog).
+
+<Info>
+    Releases that need action on your side — a configuration change, a
+    breaking API change — are raised with you directly. Contact support
+    through the Dashboard if you need to know whether a specific version
+    affects your integration.
+</Info>
+
+## Next Steps
+
+<CardGroup cols={2}>
+    <Card title="Changelog" icon="clock-rotate-left" href="/en/changelog">
+        Notable changes in each release
+    </Card>
+    <Card title="Installation" icon="download" href="/en/sdk/installation">
+        Install or upgrade the SDK
+    </Card>
+</CardGroup>

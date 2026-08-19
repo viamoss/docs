@@ -166,9 +166,132 @@ Content-Security-Policy:
 
 ---
 
-## 페이지 정리
+## 네이티브 모달 다이얼로그
 
-SDK가 컨텍스트를 캡처하기 전에 DOM에서 민감한 콘텐츠를 제거하세요:
+애플리케이션이 네이티브 `<dialog>`를 `showModal()`로 열면, 브라우저는 다이얼로그
+바깥의 모든 요소를 비활성(inert) 상태로 만듭니다. Moss 위젯도 예외가 아닙니다.
+사용자는 어시스턴트를 클릭할 수 없고, 진행 중이던 가이드도 이어갈 수 없습니다.
+
+애플리케이션에서 `showModal()`을 사용한다면, 위젯을 마운트한 요소를 넘겨 모달
+다이얼로그 이스케이프를 설치하세요:
+
+```tsx
+import { installModalDialogEscape } from '@viamoss/moss-sdk';
+
+const uninstall = installModalDialogEscape(widgetMountElement);
+
+// 나중에 위젯을 해제할 때:
+uninstall();
+```
+
+모달 다이얼로그가 열려 있는 동안 SDK 호스트는 다이얼로그의 트리 안으로 임시
+이동되며(그 위로 올라갑니다), 덕분에 위젯은 계속 조작 가능한 상태로 뷰포트 위치를
+유지합니다. 다이얼로그가 닫히면 호스트는 원래 DOM 위치로 복원됩니다. 반환된 함수는
+리스너를 제거하고 호스트를 복원합니다.
+
+<Warning>
+    통합에서 온전히 소유한 요소, 즉 Moss 위젯을 마운트한 컨테이너를 넘기세요.
+    애플리케이션 프레임워크가 관리하는 노드는 절대 넘기지 마세요. 이스케이프는
+    요소를 다른 위치로 옮기므로 프레임워크의 렌더링과 충돌합니다.
+</Warning>
+
+**제한 사항:**
+
+- Shadow root 내부에 렌더링된 다이얼로그는 추적되지 않습니다.
+- Popover API를 지원하지 않는 브라우저에서는 위젯이 조작 가능한 상태로 유지되지만,
+  `overflow: hidden`이나 transform이 적용된 다이얼로그 안에서는 잘려 보일 수
+  있습니다.
+
+---
+
+## 민감 콘텐츠 편집
+
+### `data-moss-redact`를 이용한 선언적 편집
+
+HTML 요소에 `data-moss-redact` 속성을 지정하면 Moss 백엔드로 전송되는 모든
+데이터에서 해당 요소가 편집됩니다. 민감한 콘텐츠를 보호하는 가장 간단한 방법입니다.
+
+```html
+<div data-moss-redact>
+  <p>계좌 잔액: $12,340.56</p>
+  <p>주민등록번호: 123-45-6789</p>
+</div>
+```
+
+**편집되는 대상:**
+
+- **텍스트 콘텐츠** — 백엔드로 전송되는 구조화된 컨텍스트에서 `[REDACTED]`로 대체
+- **민감한 속성** — `value`, `placeholder`, `title`, `alt`, `aria-label`, `href`,
+  `src`, `name`이 모두 편집됨
+- **하위 요소** — 편집 대상 요소의 모든 하위 요소가 제외됨
+
+편집은 표시된 요소와 그 상위 10단계까지의 조상에 적용되므로, 컨테이너 하나만
+표시해 내부 전체를 편집할 수 있습니다.
+
+```html
+<!-- 이 섹션 안의 모든 폼 필드가 편집됩니다 -->
+<section data-moss-redact>
+  <input type="text" placeholder="카드 번호" />
+  <input type="text" placeholder="CVV" />
+</section>
+```
+
+### 입력값 편집 (기본 활성화)
+
+`input`, `textarea`, `select`, `contenteditable` 영역을 포함한 모든 입력 요소의
+값은 기본적으로 편집됩니다. 사용자가 폼에 입력한 내용은 페이지 컨텍스트로 브라우저를
+벗어나지 않습니다.
+
+내용이 안전하고 어시스턴트에게 유용하다고 확인된 특정 필드(예: 검색창)를 대상에서
+제외하려면 `data-moss-unredact`를 지정하세요:
+
+```html
+<input type="search" data-moss-unredact placeholder="상품 검색…" />
+```
+
+입력값 편집을 완전히 비활성화하려면 `redactAllInputs: false`로 설정하세요:
+
+```tsx
+<AgentProvider config={{
+  // ...
+  redactAllInputs: false,  // 기본값: true
+}}>
+```
+
+<Warning>
+    애플리케이션의 모든 폼을 검토하지 않았다면 `redactAllInputs`를 켜 둔 채로
+    두세요. 비활성화하면 사용자가 입력한 폼 값이 Moss로 전송되는 페이지 컨텍스트에
+    포함됩니다.
+</Warning>
+
+### CSS 선택자를 이용한 편집
+
+애플리케이션이 이미 다른 도구를 위해 민감한 요소를 표시하고 있다면(예: FullStory의
+`.fs-exclude` / `.fs-mask` 클래스), 모든 곳에 `data-moss-redact`를 추가하는 대신
+기존 표시를 그대로 재사용하세요. `redactionSelectors`에 일치하는 요소는
+`data-moss-redact`와 동일하게 편집됩니다:
+
+```tsx
+<AgentProvider config={{
+  // ...
+  redactionSelectors: ['.fs-exclude', '.fs-mask', '[data-private]'],
+}}>
+```
+
+`data-moss-redact`는 이 설정과 관계없이 항상 인식됩니다. 한 요소가 허용 규칙과 편집
+규칙에 모두 해당하면 편집 규칙이 우선합니다.
+
+### 편집이 적용되는 범위
+
+편집은 컨텍스트로 전송되는 페이지 텍스트와 구조, 그리고 단계별 가이드 진행 중
+기록되는 상호작용 리포트에 적용됩니다. 사용자가 입력하는 채팅 메시지, 스크린샷, 세션
+기록, 화면 히스토리는 편집되지 않습니다. 해당 결과물이 여러분의 환경에서 허용되지
+않는다면 각 기능을 개별적으로 비활성화하세요.
+
+### 프로그래매틱 정리
+
+더 복잡한 정리 로직이 필요하다면 `pageSanitizationScript`로 캡처 전에 복제된 DOM을
+수정하세요:
 
 ```tsx
 <AgentProvider config={{
@@ -185,7 +308,8 @@ SDK가 컨텍스트를 캡처하기 전에 DOM에서 민감한 콘텐츠를 제�
 ```
 
 <Warning>
-    정리 함수는 복제된 문서에서 실행됩니다. 사용자에게는 아무런 변경이 보이지 않습니다 — AI가 보는 내용에만 영향을 줍니다.
+    두 방식 모두 AI가 보는 내용에만 영향을 줍니다. 실제 DOM은 변경되지 않으므로
+    사용자에게는 아무런 변화가 보이지 않습니다.
 </Warning>
 
 ---

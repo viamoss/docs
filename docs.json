@@ -40,6 +40,7 @@
               "en/sdk/installation",
               "en/sdk/authentication",
               "en/sdk/configuration",
+              "en/sdk/support-ticket-handoff",
               {
                 "group": "API Reference",
                 "icon": "code",
@@ -82,6 +83,13 @@
             "pages": [
               "en/guides/accessible-elements"
             ]
+          },
+          {
+            "group": "Resources",
+            "pages": [
+              "en/changelog",
+              "en/versioning"
+            ]
           }
         ]
       },
@@ -102,6 +110,7 @@
               "ko/sdk/installation",
               "ko/sdk/authentication",
               "ko/sdk/configuration",
+              "ko/sdk/support-ticket-handoff",
               {
                 "group": "API Reference",
                 "icon": "code",
@@ -143,6 +152,13 @@
             "group": "가이드",
             "pages": [
               "ko/guides/accessible-elements"
+            ]
+          },
+          {
+            "group": "리소스",
+            "pages": [
+              "ko/changelog",
+              "ko/versioning"
             ]
           }
         ]
