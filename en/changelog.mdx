@@ -9,6 +9,77 @@ icon: "clock-rotate-left"
 Notable customer-visible changes to the Moss SDK (`@viamoss/moss-sdk`) and the
 Moss dashboard. From v0.13.0, the SDK version tracks the Moss platform version.
 
+## 0.16.5 — 2026-09-02
+
+### Security
+
+- Worker dependency security update (`nltk`).
+
+### Changed
+
+- First complete on-prem image set that carries the 0.16.4 fixes. On-prem
+  deployments that skipped 0.16.4 should upgrade directly to 0.16.5.
+- For split deployments, upgrade the backend before the dashboard.
+
+## 0.16.4 — 2026-09-02
+
+<Warning>
+  The worker image for 0.16.4 was not published because it was held by the
+  vulnerability gate. On-prem deployments should use 0.16.5, which carries
+  every 0.16.4 fix.
+</Warning>
+
+### Fixed
+
+- The dashboard pages for Procedures, Custom API Actions, Integrations,
+  Monitors, and Proposals now work on deployments that sign in with OIDC.
+- Per-prompt zero-state icons configured in the dashboard now render in the
+  SDK exactly as configured, and turning them on takes a single save.
+- The public SDK configuration endpoint now tolerates unknown zero-state keys
+  instead of failing.
+
+### Changed
+
+- Base image refresh.
+
+## 0.16.3 — 2026-08-27
+
+### Fixed
+
+- SDK tokens that carry an audience (`aud`) claim are no longer rejected when
+  the deployment does not require one.
+- Reasoning levels that the configured model does not support are now
+  coerced to the nearest supported level instead of failing the request.
+- Saving the dashboard Appearance or Security form no longer overwrites SDK
+  appearance presets, and each form saves only its own fields.
+
+## 0.16.2 — 2026-08-23
+
+### Security
+
+- Base image security refresh. This is the first published on-prem image set
+  of the 0.16 line.
+
+## 0.16.1 — 2026-08-23
+
+<Warning>
+  The images for 0.16.1 were not published because they were held by the
+  vulnerability gate. On-prem deployments should use 0.16.2 or later, which
+  carries every 0.16.1 fix.
+</Warning>
+
+### Fixed
+
+- The public SDK configuration endpoint is now served in every backend
+  service mode, so split deployments that expose only the SDK backend can
+  bootstrap the SDK.
+- The public key field on the dashboard Security page no longer overflows
+  its container.
+
+### Security
+
+- Dashboard dependency security update (`nanoid`).
+
 ## 0.16.0 — 2026-08-17
 
 ### Added
