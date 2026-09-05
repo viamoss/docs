@@ -9,6 +9,126 @@ icon: "clock-rotate-left"
 Notable customer-visible changes to the Moss SDK (`@viamoss/moss-sdk`) and the
 Moss dashboard. From v0.13.0, the SDK version tracks the Moss platform version.
 
+## 0.16.6 — 2026-09-05
+
+### Added
+
+- **Application export and import.** Admins can export a versioned bundle
+  from Configure > General and import one from the application list through
+  an Import dialog. The bundle covers the authored application alongside its
+  configuration: procedures, API connections and actions, integration
+  connections, monitors, intent tags, and the self-healing schedule.
+  Credentials are never included and are re-entered on the target.
+  Integration connections in direct-filing mode are reported for completion
+  rather than created. Import runs in one transaction, and the dry-run report
+  lists what would be created, remapped identifiers, every value written
+  differently from the bundle, and a re-entry checklist. The dashboard export
+  produces the full bundle by default, and the configuration-only bundle
+  remains available. Guidance flows are not part of the bundle. The endpoints
+  are `GET /api/v1/applications/{id}/export` and
+  `POST /api/v1/applications/import?dry_run=true`.
+- **Dashboard-managed appearance controls (first pass).** A new theme slice
+  and a footer background tint can be edited from the dashboard. The SDK
+  applies dashboard-saved values over the host prop per leaf, so precedence
+  is preset, then host prop, then dashboard value. Hosts must upgrade the SDK
+  to 0.16.6 to see dashboard theme values.
+- The SDK chat window can now be dragged from the full header and from the
+  window edges.
+- Dashboard toasts have a dismiss button, and error toasts stay until
+  dismissed.
+
+### Changed
+
+- Clearing the last leaf of a configuration slice now removes the slice
+  instead of storing an empty object.
+- The SDK package no longer ships sourcemaps in the tarball and now carries a
+  public README and package metadata.
+- Upgrade order for split deployments: backend, then dashboard, then SDK.
+- The application prune script now covers every application-owned table,
+  removes stored DOM snapshot objects, resolves tables through the configured
+  database schema, and refuses to run when it detects cross-application
+  references or cannot count a table.
+- No database migrations in this release.
+
+### Known issues
+
+- For a stored footer that contains only links, the public configuration
+  endpoint reports `enabled: false`.
+- Importing into an organization whose install already holds an application
+  with the same name is refused. Application names are currently unique per
+  install.
+
+## 0.16.5 — 2026-09-02
+
+### Security
+
+- Worker dependency security update (`nltk`).
+
+### Changed
+
+- First complete on-prem image set that carries the 0.16.4 fixes. On-prem
+  deployments that skipped 0.16.4 should upgrade directly to 0.16.5.
+- For split deployments, upgrade the backend before the dashboard.
+
+## 0.16.4 — 2026-09-02
+
+<Warning>
+  The worker image for 0.16.4 was not published because it was held by the
+  vulnerability gate. On-prem deployments should use 0.16.5, which carries
+  every 0.16.4 fix.
+</Warning>
+
+### Fixed
+
+- The dashboard pages for Procedures, Custom API Actions, Integrations,
+  Monitors, and Proposals now work on deployments that sign in with OIDC.
+- Per-prompt zero-state icons configured in the dashboard now render in the
+  SDK exactly as configured, and turning them on takes a single save.
+- The public SDK configuration endpoint now tolerates unknown zero-state keys
+  instead of failing.
+
+### Changed
+
+- Base image refresh.
+
+## 0.16.3 — 2026-08-27
+
+### Fixed
+
+- SDK tokens that carry an audience (`aud`) claim are no longer rejected when
+  the deployment does not require one.
+- Reasoning levels that the configured model does not support are now
+  coerced to the nearest supported level instead of failing the request.
+- Saving the dashboard Appearance or Security form no longer overwrites SDK
+  appearance presets, and each form saves only its own fields.
+
+## 0.16.2 — 2026-08-23
+
+### Security
+
+- Base image security refresh. This is the first published on-prem image set
+  of the 0.16 line.
+
+## 0.16.1 — 2026-08-23
+
+<Warning>
+  The images for 0.16.1 were not published because they were held by the
+  vulnerability gate. On-prem deployments should use 0.16.2 or later, which
+  carries every 0.16.1 fix.
+</Warning>
+
+### Fixed
+
+- The public SDK configuration endpoint is now served in every backend
+  service mode, so split deployments that expose only the SDK backend can
+  bootstrap the SDK.
+- The public key field on the dashboard Security page no longer overflows
+  its container.
+
+### Security
+
+- Dashboard dependency security update (`nanoid`).
+
 ## 0.16.0 — 2026-08-17
 
 ### Added
