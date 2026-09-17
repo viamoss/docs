@@ -9,6 +9,32 @@ icon: "clock-rotate-left"
 Notable customer-visible changes to the Moss SDK (`@viamoss/moss-sdk`) and the
 Moss dashboard. From v0.13.0, the SDK version tracks the Moss platform version.
 
+## 0.16.7 — 2026-09-17
+
+### Added
+
+- **Multi-architecture on-prem images.** Every on-prem image tag
+  (`moss-backend`, `moss-worker`, `moss-dashboard`, `moss-dashboard-oidc`) now
+  resolves to a manifest list with `linux/amd64` and `linux/arm64` variants.
+  Cosign signatures and CycloneDX SBOM attestations cover the index digest and
+  each per-architecture digest. Mirrors should copy the full index rather than
+  a single-architecture image.
+- **Moss Studio.** In-app guide authoring, available behind a deployment
+  switch that is off by default.
+
+### Changed
+
+- Dashboard image dependency update for Next.js and `sharp` (security fix).
+- The worker image drops an unused NLP dependency and moves to a refreshed
+  base image.
+- The SDK package is prepared for public npm publishing: an exports map, a
+  CommonJS entry, and packaging checks. Access remains private for now.
+- No database migrations in this release.
+- Upgrade all components through the chart at 0.16.7. For staged upgrades,
+  upgrade the backend before the dashboard.
+- On-prem mirrors now see an index digest instead of a single-image digest
+  for each tag.
+
 ## 0.16.6 — 2026-09-05
 
 ### Added
