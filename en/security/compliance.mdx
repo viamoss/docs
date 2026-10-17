@@ -1,209 +1,61 @@
 ---
 title: "Compliance"
-description: "GDPR, SOC 2, ISO 27001, EU AI Act, and data subject rights"
+description: "Assurance work, privacy requests, and deployment responsibilities"
 ---
 
-## Overview
+## Current assurance work
 
-Moss is committed to meeting global compliance standards and protecting user privacy. This page outlines our compliance posture and the features that support your regulatory requirements.
+Moss is working toward a SOC 2 Type II examination and ISO/IEC 27001 certification. These are in progress; this page does not claim an issued SOC 2 report or ISO certificate. Contact Moss for the confirmed audit scope, period and current status.
 
----
+Our information security work covers access, controlled changes, incident response, monitoring, recovery and risk management. The operation and evidence for each control are assessed separately.
 
-## GDPR Compliance
+## Privacy requests
 
-Moss provides features to support your GDPR compliance obligations.
+Where GDPR or other privacy law applies, the relevant controller determines the lawful basis, notices and handling of data-subject requests. For customer-operated deployments, the customer manages its environment; Moss handles any separate support copy it receives according to the applicable agreement.
 
-### Data Subject Rights
+### Access and portability
 
-#### Right to Access (Article 15)
+Contact Moss or the relevant customer administrator to request access or an export. Available records and export formats depend on the service and deployment. Verify the requester's authority before disclosing personal data or another user's logs.
 
-Users can request access to their data:
+### Deletion
 
-- Export chat history via Dashboard
-- Download session recordings
-- Access audit logs for their activity
+The user-deletion flow covers primary user records and related session, message, plan and instruction metadata. Knowledge content, uploaded objects, vectors, recordings, audit records, backups and copies held by other services have separate storage and deletion paths. A successful user deletion is not proof that all of those copies have been removed.
 
-#### Right to Erasure (Article 17)
+For a deletion request, establish its scope, check the relevant stores and any legal preservation duty, then confirm the outcome and any retained records. Apply the applicable contract and privacy notice; do not infer a complete purge from a single API result.
 
-Moss provides comprehensive data deletion:
+### Lawful basis and agreements
 
-**What Gets Deleted:**
-
-- Chat sessions and messages
-- AI-generated instructions and plans
-- Screenshots and recordings
-- User records
-- Associated audit logs
-
-**Deletion Process:**
-
-1. Submit deletion request via Dashboard or API
-2. Moss validates the request
-3. All user data is permanently deleted
-4. Verification confirms deletion completeness
-
-**Deletion Verification:**
-
-```json
-{
-  "status": "completed",
-  "deleted_items": {
-    "sessions": 12,
-    "messages": 147,
-    "screenshots": 89,
-    "recordings": 12
-  },
-  "remaining_records": 0,
-  "verified_at": "2024-01-15T10:30:00Z"
-}
-```
-
-#### Right to Portability (Article 20)
-
-Export user data in standard formats:
-
-- Chat history (JSON)
-- Session metadata (JSON)
-- Audit logs (CSV)
-
-### Lawful Basis
-
-Moss supports multiple lawful bases for processing:
-
-| Basis                   | Implementation                                    |
-| ----------------------- | ------------------------------------------------- |
-| **Consent**             | SDK can prompt for user consent before activation |
-| **Legitimate Interest** | Analytics and product improvement                 |
-| **Contract**            | Providing the AI assistant service                |
-
-### Data Processing Agreement
-
-Contact sales for a Data Processing Agreement (DPA) that meets your requirements.
-
----
-
-## SOC 2 Type II
-
-Moss is pursuing SOC 2 Type II certification.
-
-### Trust Service Criteria
-
-| Criteria            | Status      | Description                            |
-| ------------------- | ----------- | -------------------------------------- |
-| **Security**        | In Progress | Protection against unauthorized access |
-| **Availability**    | In Progress | System availability for operation      |
-| **Confidentiality** | In Progress | Protection of confidential information |
-
-### Controls
-
-Moss implements controls across:
-
-- **Access Control** - Role-based access, MFA, session management
-- **Change Management** - Code review, deployment approval, rollback capability
-- **Incident Response** - Detection, escalation, resolution procedures
-- **Monitoring** - Real-time alerting, audit logging, anomaly detection
-
-### Timeline
-
-SOC 2 Type II certification is in progress. Contact sales for the current status and audit reports.
-
----
-
-## ISO 27001
-
-Moss is planning ISO 27001 certification.
-
-### Information Security Management
-
-Key areas covered:
-
-- **Risk Assessment** - Regular security risk evaluations
-- **Asset Management** - Inventory and classification of information assets
-- **Access Control** - Need-to-know and least privilege principles
-- **Cryptography** - Encryption standards for data protection
-- **Operations Security** - Secure development and deployment practices
-
-### Timeline
-
-ISO 27001 certification is planned. Contact sales for updates.
-
----
+Consent, contractual necessity or legitimate interests may be relevant, depending on the activity and applicable law. An SDK option alone does not establish a lawful basis or valid consent. Contact Moss about the applicable DPA, processing scope, recipients and transfer terms.
 
 ## EU AI Act
 
-Moss is preparing for EU AI Act compliance as it applies to AI-powered assistant systems.
+Applicable duties and risk classification depend on the intended use, deployment and the parties' roles. Moss does not classify every deployment as limited risk or claim universal EU AI Act compliance.
 
-### Transparency Requirements
+Application owners should make AI use and its limitations clear, provide appropriate human oversight and confirm the event records available for their use case. Available audit events do not establish that every AI interaction is logged.
 
-Moss supports transparency through:
+## Domain restrictions
 
-- **Clear AI Identification** - Users know they're interacting with AI
-- **Capability Disclosure** - Documentation of AI capabilities and limitations
-- **Decision Explanation** - AI responses include reasoning when applicable
+Where configured, allowed domains restrict SDK initialization. An empty allowlist permits all domains; domain restrictions are an additional control and do not replace authentication.
 
-### Human Oversight
+Configure the deployment's allowed domains in the Dashboard security settings, including the required production and development environments. For example:
 
-- **User Control** - Users can dismiss or override AI suggestions
-- **Admin Control** - Application owners can customize AI behavior
-- **Audit Trail** - All AI interactions are logged for review
-
-### Risk Classification
-
-Moss is designed to comply with requirements for limited-risk AI systems:
-
-- Transparency obligations
-- User notification
-- Human oversight capabilities
-
----
-
-## Domain Whitelisting
-
-Restrict where your SDK can operate:
-
-### Purpose
-
-- Prevent unauthorized use of your application ID
-- Control which environments can access Moss
-- Reduce risk of API key exposure
-
-### Configuration
-
-Add allowed domains in Dashboard under **Settings \> Security**:
-
-```
+```text
 app.example.com
 staging.example.com
 localhost:3000
 ```
 
-### Enforcement
+## Resources
 
-Requests from unlisted domains are rejected during SDK initialization.
-
----
-
-## Compliance Resources
-
-### Documentation
-
-- **Privacy Policy** - Available on viamoss.ai
-- **Terms of Service** - Available on viamoss.ai
-- **Security Whitepaper** - Contact sales
-
-### Agreements
-
-- **Data Processing Agreement (DPA)** - Available for enterprise customers
-
----
-
-## Next Steps
+- [Privacy policy](https://viamoss.ai/legal-terms/privacy-policy)
+- [Terms of service](https://www.viamoss.ai/legal-terms/terms-and-conditions/)
+- Contact Moss for the applicable DPA or current assurance information.
 
 <CardGroup cols={2}>
   <Card title="Security Overview" icon="shield-check" href="/en/security/overview">
-    Complete security architecture
+    Security scope and deployment responsibilities
   </Card>
   <Card title="Audit Logging" icon="clipboard-list" href="/en/security/audit-logging">
-    Detailed audit trail documentation
+    Available events, access and retention
   </Card>
 </CardGroup>

@@ -1,15 +1,17 @@
 ---
 title: "Audit Logging"
-description: "Comprehensive audit trails for compliance and security monitoring"
+description: "Audit events, optional request logging, and their scope"
 ---
 
 ## Overview
 
-Moss provides comprehensive audit logging to help you meet compliance requirements and investigate security incidents. Every API request can be tracked, reviewed, and analyzed.
+Moss records selected audit events and supports optional detailed request logging. These records can help investigate activity, but they do not establish that every API request or AI interaction is captured. Runtime infrastructure logs are managed separately.
 
 ---
 
-## What Gets Logged
+## Optional Detailed Request Logs
+
+The fields below describe supported request-log records where that logging path is enabled. Availability varies by integration and deployment. Audit events use their own event schema.
 
 ### Inbound Requests (SDK to Backend)
 
@@ -40,11 +42,11 @@ Moss provides comprehensive audit logging to help you meet compliance requiremen
 
 ## Sensitive Data Redaction
 
-All audit logs are automatically sanitized before storage:
+Supported logging paths redact known credential field names. This does not remove every kind of personal or confidential content:
 
 ### Redacted Fields
 
-The following fields are automatically redacted:
+Known credential names include:
 
 - `api_key`, `apiKey`
 - `authorization`
@@ -80,14 +82,14 @@ The following fields are automatically redacted:
 ```
 
 <Info>
-    Redaction is recursive - nested objects and arrays are also sanitized.
+    The example illustrates known-key filtering. Recursive handling depends on the logger; free text, images, DOM content and recordings require separate collection and masking checks.
 </Info>
 
 ---
 
 ## Per-Application Control
 
-Audit logging can be enabled or disabled per application:
+Detailed request logging can be enabled or disabled per application. That setting does not describe every security audit event or runtime infrastructure log:
 
 ### Dashboard Configuration
 
@@ -97,12 +99,11 @@ Navigate to **Settings > Developer Options > Audit Logging** to enable or disabl
 
 | Audit Logging | Use Case |
 |---------------|----------|
-| **Enabled** | Compliance requirements, security-sensitive applications |
-| **Disabled** | High-volume applications where storage costs are a concern |
+| **Enabled** | Authorized investigation or diagnostic need, with minimized content and defined access/retention |
+| **Disabled** | Detailed traffic is not retained by that logging path; assess investigation needs before disabling it |
 
 <Tip>
-    We recommend enabling audit logging for all production applications,
-    especially those handling sensitive data.
+    Establish the audit events needed for security and accountability. Enable detailed payload or traffic logging only for an authorized purpose, with data minimization, restricted access and an appropriate retention period.
 </Tip>
 
 ---
@@ -147,7 +148,7 @@ A separate API key is used for audit log access:
 
 ## Log Retention
 
-Retention is configurable per plan. Contact us for the retention period that applies to your account, or to arrange a custom period based on your compliance requirements.
+Retention depends on the record type, store and deployment. Audit events, detailed request records and infrastructure logs can have different lifecycles. Confirm the applicable period and deletion behavior for your deployment with Moss; this page does not promise a plan-wide configurable retention period.
 
 ---
 
@@ -166,7 +167,7 @@ Generate reports for auditors:
 Investigate suspicious activity:
 
 1. Identify the user or session
-2. Review all related requests
+2. Review the available related events and request records
 3. Check for anomalous patterns
 4. Export evidence for incident response
 
@@ -191,21 +192,13 @@ Track LLM usage costs:
 
 ## Log Integrity
 
-### Immutability
+### Access and deletion
 
-Audit logs are immutable once created:
-
-- Logs cannot be modified after creation
-- Logs cannot be deleted by application owners
-- Deletion only through data retention policies
+The Audit API key provides read-only access. That access restriction is not a guarantee of immutable storage: administrative access, database operations and applicable retention or deletion jobs must be considered separately.
 
 ### Timestamps
 
-All timestamps are:
-
-- UTC normalized
-- Server-side generated
-- Cannot be client-specified
+Server-recorded event times support chronological investigation. Payloads may also contain client-provided times; distinguish those from the server's recorded time when comparing events.
 
 ---
 
@@ -213,7 +206,7 @@ All timestamps are:
 
 ### Enable for Production
 
-Always enable audit logging for production applications to:
+Choose the necessary production event and request-log coverage to:
 
 - Meet compliance requirements
 - Enable incident investigation
