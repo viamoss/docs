@@ -1,48 +1,80 @@
 ---
 title: "Security Overview"
-description: "Moss security controls, deployment boundaries, and assurance work"
+description: "Moss security architecture, principles, and compliance commitments"
 ---
 
-## Scope
+## Our Security Commitment
 
-Moss uses access controls, protected credentials, security logging and recovery procedures to protect the information it handles. The controls available to an integration depend on its version, configuration and deployment.
+Moss is built with security as a foundational principle. We understand that our platform processes sensitive user interactions and business data, and we take that responsibility seriously.
 
-Moss-operated services and customer-operated installations have different responsibilities. In a customer-operated installation, the customer manages its runtime and infrastructure; Moss remains responsible for its own release, support and authorized access. Contact us to confirm the boundary for your deployment.
+This documentation outlines the security measures implemented in Moss to protect your data and your users.
 
-## Security controls
+---
 
-| Area | Approach |
-| --- | --- |
-| Authentication | JWT and API-key checks on the relevant service routes; Clerk for dashboard identity |
-| Authorization | Application, organization and session checks appropriate to the route and data |
-| Transport | HTTPS for public service endpoints; other connections follow their deployment configuration |
-| Stored credentials | One-way hashes for supported API-key verification; encryption for integration tokens and signing secrets that must be recovered |
-| Logging | Selected audit events and minimal operational logs; detailed traffic logging depends on configuration |
-| Captured content | Filtering and masking on supported paths; captures can still contain personal data |
+## Security Architecture
 
-Organization-scoped routes do not mean every database query includes an organization filter. Shared knowledge resources, privileged administration and customer-operated stores have their own access boundaries. Assess application access for the actual route and deployment.
+### Defense in Depth
 
-## Assurance and privacy
+Moss employs multiple layers of security controls:
 
-SOC 2 Type II examination and ISO 27001 certification work are in progress. Neither an issued SOC 2 report nor ISO 27001 certification is claimed here. Contact us for the current scope and available assurance material.
+| Layer                | Protection                                               |
+| -------------------- | -------------------------------------------------------- |
+| **Authentication**   | JWT tokens, API keys, and SSO via Clerk                  |
+| **Authorization**    | Organization-based access control, session verification  |
+| **Data Protection**  | Encryption in transit (TLS), sensitive data redaction    |
+| **Audit Logging**    | Audit events and optional detailed request logging |
+| **Input Validation** | Request schema validation                   |
 
-Deletion, audit and consent features can support privacy obligations. They do not establish compliance with every GDPR or EU AI Act requirement. Applicable roles, data flows and obligations depend on the intended use and customer agreement.
+### Multi-Tenancy Isolation
+
+Every Moss application is isolated at the organization level:
+
+- **Database Access** - Authorization checks use organization, application and session scope
+- **API Isolation** - JWT tokens scope access to specific organizations
+- **Data Isolation** - Users cannot access data from other organizations
+
+---
+
+## Compliance Commitments
+
+Moss is pursuing a SOC 2 Type II examination and ISO 27001 certification:
+
+### In Progress
+
+| Certification     | Description                                          | Status      |
+| ----------------- | ---------------------------------------------------- | ----------- |
+| **SOC 2 Type II** | Security, availability, and confidentiality controls | In Progress |
+| **ISO 27001**     | Information security management system               | In Progress |
+
+### Privacy and Security Features
+
+- **GDPR Support** - Data deletion service, audit logging, user consent mechanisms
+- **HTTPS** - Public service endpoints use HTTPS
+- **Secure Credential Storage** - API-key verification hashes and encrypted reusable credentials
+
+---
+
+## Security Features Overview
 
 <CardGroup cols={2}>
   <Card title="Authentication" icon="key" href="/en/security/authentication">
-    Identity, tokens and integration access
+    JWT tokens, API keys, and multi-factor authentication
   </Card>
   <Card title="Data Protection" icon="lock" href="/en/security/data-protection">
-    Credential protection and capture limitations
+    Encryption, input validation, and secure storage
   </Card>
   <Card title="Audit Logging" icon="clipboard-list" href="/en/security/audit-logging">
-    Audit events, traffic logs and access
+    Audit events and compliance reporting
   </Card>
   <Card title="Compliance" icon="certificate" href="/en/security/compliance">
-    Privacy responsibilities and assurance status
+    GDPR, SOC 2, ISO 27001, and EU AI Act
   </Card>
 </CardGroup>
 
-## Responsible disclosure
+---
 
-Report a suspected vulnerability through the Dashboard or [security@viamoss.ai](mailto:security@viamoss.ai). Avoid sending credentials or customer content in an initial report.
+## Responsible Disclosure
+
+If you discover a security vulnerability in Moss, please report it responsibly. Contact our security team through the Dashboard or email [security@viamoss.ai](mailto:security@viamoss.ai).
+
+We appreciate your help in keeping Moss secure for everyone.

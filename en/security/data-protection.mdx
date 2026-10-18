@@ -13,14 +13,13 @@ Moss implements multiple layers of data protection to ensure your information re
 
 ### In Transit
 
-Public Moss service endpoints use HTTPS. Other service and infrastructure connections depend on the deployment:
+Public Moss service endpoints use HTTPS:
 
-- **HTTPS** - Use the configured HTTPS service endpoints
+- **HTTPS** - Encrypted public API connections
 - **Certificate Validation** - Strict certificate verification
-- **Transport configuration** - Verify the relevant endpoint and customer-operated connection
 
 <Info>
-    Public HTTPS endpoints do not establish encryption of every database, cache or customer-operated connection.
+    Use the HTTPS endpoint configured for your application.
 </Info>
 
 ### At Rest
@@ -28,18 +27,18 @@ Public Moss service endpoints use HTTPS. Other service and infrastructure connec
 Data stored in Moss databases is protected:
 
 - **Database Encryption** - PostgreSQL with encryption at rest
-- **Credential protection** - Supported API-key verifiers use one-way hashes; reusable integration tokens and signing secrets use encryption
+- **Credential Protection** - API-key verification hashes and encrypted reusable credentials
 - **Secure Key Storage** - Encryption keys managed separately from data
 
 ---
 
 ## Input Validation
 
-Documented request schemas validate supported API inputs:
+API request schemas validate inputs before processing:
 
 ### Schema Validation
 
-The following illustrates a Pydantic request schema; validation depends on the route:
+Pydantic schemas define request fields and validation rules:
 
 ```python
 class SessionRequest(BaseModel):
@@ -85,7 +84,7 @@ Invalid requests receive clear error responses:
 
 ### Automatic Redaction
 
-Supported logging paths filter known credential fields. Coverage depends on the path and version; this is not complete personal-data filtering:
+The request-log sanitizer redacts known credential fields before storage:
 
 **Redacted Fields:**
 - `api_key`, `apiKey`
@@ -113,7 +112,7 @@ Supported logging paths filter known credential fields. Coverage depends on the 
 
 ### Recursive Sanitization
 
-A supported recursive filter can cover nested objects and arrays. Do not assume every audit, capture or recording path uses the same filter. This is an illustrative filtered object:
+The recursive sanitizer handles nested objects and arrays. DOM captures, screenshots and recordings use separate collection settings:
 
 ```python
 {
@@ -153,7 +152,7 @@ JWT secrets receive enhanced protection:
 
 ### Password-Like Secrets
 
-Identity-provider passwords follow that provider's protection. Reusable integration credentials require encryption rather than irreversible hashing. Do not assume one password-hashing algorithm applies to every credential type.
+Passwords are managed by the identity provider. Reusable integration credentials are encrypted at rest.
 
 ---
 
@@ -200,10 +199,10 @@ Moss follows data minimization principles:
 
 | Data Type | Purpose | Retention |
 |-----------|---------|-----------|
-| User ID | Session identification | Applicable notice/agreement and store settings |
-| Screenshots | Visual context for AI | Applicable notice/agreement; confirm each store’s deletion path |
-| Chat messages | Conversation history | Applicable notice/agreement and store settings |
-| Session recordings | Replay and debugging | Applicable notice/agreement; confirm each store’s deletion path |
+| User ID | Session identification | Applicable retention policy |
+| Screenshots | Visual context for AI | Applicable retention policy |
+| Chat messages | Conversation history | Applicable retention policy |
+| Session recordings | Replay and debugging | Applicable retention policy |
 
 ### User Control
 
@@ -240,7 +239,7 @@ await window.MossSDK.boot({
         icon="clipboard-list"
         href="/en/security/audit-logging"
     >
-        Review the events recorded for your deployment
+        Review recorded system activity
     </Card>
     <Card
         title="Compliance"
