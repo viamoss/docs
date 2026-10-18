@@ -25,38 +25,22 @@ Users can request access to their data:
 
 #### Right to Erasure (Article 17)
 
-Moss provides comprehensive data deletion:
+Moss supports deletion of user-linked data:
 
 **What Gets Deleted:**
 
 - Chat sessions and messages
 - AI-generated instructions and plans
-- Screenshots and recordings
+- Screenshots and recordings in configured storage
 - User records
-- Associated audit logs
+- Associated request logs
 
 **Deletion Process:**
 
 1. Submit deletion request via Dashboard or API
 2. Moss validates the request
-3. All user data is permanently deleted
-4. Verification confirms deletion completeness
-
-**Deletion Verification:**
-
-```json
-{
-  "status": "completed",
-  "deleted_items": {
-    "sessions": 12,
-    "messages": 147,
-    "screenshots": 89,
-    "recordings": 12
-  },
-  "remaining_records": 0,
-  "verified_at": "2024-01-15T10:30:00Z"
-}
-```
+3. User records and linked application data are deleted
+4. Deletion results are returned for review
 
 #### Right to Portability (Article 20)
 
@@ -84,7 +68,7 @@ Contact sales for a Data Processing Agreement (DPA) that meets your requirements
 
 ## SOC 2 Type II
 
-Moss is pursuing SOC 2 Type II certification.
+Moss is pursuing a SOC 2 Type II examination.
 
 ### Trust Service Criteria
 
@@ -105,13 +89,13 @@ Moss implements controls across:
 
 ### Timeline
 
-SOC 2 Type II certification is in progress. Contact sales for the current status and audit reports.
+SOC 2 Type II examination work is in progress. Contact sales for the current status and audit reports.
 
 ---
 
 ## ISO 27001
 
-Moss is planning ISO 27001 certification.
+Moss is pursuing ISO 27001 certification.
 
 ### Information Security Management
 
@@ -125,7 +109,7 @@ Key areas covered:
 
 ### Timeline
 
-ISO 27001 certification is planned. Contact sales for updates.
+ISO 27001 certification is in progress. Contact sales for updates.
 
 ---
 
@@ -145,11 +129,11 @@ Moss supports transparency through:
 
 - **User Control** - Users can dismiss or override AI suggestions
 - **Admin Control** - Application owners can customize AI behavior
-- **Audit Trail** - All AI interactions are logged for review
+- **Audit Trail** - Selected audit events and optional detailed request logs support review
 
 ### Risk Classification
 
-Moss is designed to comply with requirements for limited-risk AI systems:
+Applicable requirements depend on the use case and the organization’s role:
 
 - Transparency obligations
 - User notification
@@ -179,7 +163,7 @@ localhost:3000
 
 ### Enforcement
 
-Requests from unlisted domains are rejected during SDK initialization.
+When an allowlist is configured, requests from unlisted domains are rejected during SDK initialization. An empty allowlist permits any domain.
 
 ---
 

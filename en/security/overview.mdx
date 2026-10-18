@@ -22,14 +22,14 @@ Moss employs multiple layers of security controls:
 | **Authentication**   | JWT tokens, API keys, and SSO via Clerk                  |
 | **Authorization**    | Organization-based access control, session verification  |
 | **Data Protection**  | Encryption in transit (TLS), sensitive data redaction    |
-| **Audit Logging**    | Comprehensive request/response logging with sanitization |
-| **Input Validation** | Schema validation on all API endpoints                   |
+| **Audit Logging**    | Audit events and optional detailed request logging |
+| **Input Validation** | Request schema validation                   |
 
 ### Multi-Tenancy Isolation
 
 Every Moss application is isolated at the organization level:
 
-- **Database Isolation** - All queries filter by organization ID
+- **Database Access** - Authorization checks use organization, application and session scope
 - **API Isolation** - JWT tokens scope access to specific organizations
 - **Data Isolation** - Users cannot access data from other organizations
 
@@ -37,7 +37,7 @@ Every Moss application is isolated at the organization level:
 
 ## Compliance Commitments
 
-Moss is actively pursuing industry-standard security certifications:
+Moss is pursuing a SOC 2 Type II examination and ISO 27001 certification:
 
 ### In Progress
 
@@ -45,13 +45,12 @@ Moss is actively pursuing industry-standard security certifications:
 | ----------------- | ---------------------------------------------------- | ----------- |
 | **SOC 2 Type II** | Security, availability, and confidentiality controls | In Progress |
 | **ISO 27001**     | Information security management system               | In Progress |
-| **EU AI Act**     | AI system transparency and accountability            | In Progress |
 
-### Current Compliance
+### Privacy and Security Features
 
-- **GDPR** - Data deletion service, audit logging, user consent mechanisms
-- **HTTPS Everywhere** - All data transmitted over TLS 1.2+
-- **Secure Credential Storage** - Cryptographic hashing for all secrets
+- **GDPR Support** - Data deletion service, audit logging, user consent mechanisms
+- **HTTPS** - Public service endpoints use HTTPS
+- **Secure Credential Storage** - API-key verification hashes and encrypted reusable credentials
 
 ---
 
