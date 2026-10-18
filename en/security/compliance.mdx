@@ -25,14 +25,22 @@ Users can request access to their data:
 
 #### Right to Erasure (Article 17)
 
-Moss supports deletion of user records and associated application data.
+Moss supports deletion of user-linked data:
+
+**What Gets Deleted:**
+
+- Chat sessions and messages
+- AI-generated instructions and plans
+- Screenshots and recordings in configured storage
+- User records
+- Associated request logs
 
 **Deletion Process:**
 
-1. Submit a deletion request via Dashboard or API.
-2. Moss validates the request and its scope.
-3. Delete the user record and linked application-database records.
-4. Check uploaded files, recordings, search indexes, audit logs and backups separately against the applicable retention and deletion requirements.
+1. Submit deletion request via Dashboard or API
+2. Moss validates the request
+3. User records and linked application data are deleted
+4. Deletion results are returned for review
 
 #### Right to Portability (Article 20)
 
@@ -125,7 +133,7 @@ Moss supports transparency through:
 
 ### Risk Classification
 
-Applicable requirements depend on the use case and the organization’s role. Relevant topics include:
+Applicable requirements depend on the use case and the organization’s role:
 
 - Transparency obligations
 - User notification

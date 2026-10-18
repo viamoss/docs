@@ -18,10 +18,6 @@ Public Moss service endpoints use HTTPS:
 - **HTTPS** - Encrypted public API connections
 - **Certificate Validation** - Strict certificate verification
 
-<Info>
-    Use the HTTPS endpoint configured for your application.
-</Info>
-
 ### At Rest
 
 Data stored in Moss databases is protected:
@@ -112,7 +108,7 @@ The request-log sanitizer redacts known credential fields before storage:
 
 ### Recursive Sanitization
 
-The recursive sanitizer handles nested objects and arrays. DOM captures, screenshots and recordings use separate collection settings:
+Redaction applies to nested objects and arrays:
 
 ```python
 {
