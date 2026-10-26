@@ -82,7 +82,11 @@ The following fields are automatically redacted:
 ```
 
 <Info>
-    Redaction is recursive - nested objects and arrays are also sanitized.
+    Credential redaction is recursive. It does not anonymize personal data or
+    remove arbitrary sensitive content from free text. Keep such content out of
+    logs where your agreement prohibits it; enable payload logging only for an
+    appropriate, documented scope. Detailed logging covers instrumented paths,
+    rather than a guaranteed record of every network call.
 </Info>
 
 ---
@@ -150,7 +154,19 @@ A separate API key is used for audit log access:
 
 ## Log Retention
 
-Retention depends on the record type. Contact us for the retention periods that apply to your account.
+| Record type | Default in the backend | Application of the period |
+|-------------|------------------------|---------------------------|
+| Optional detailed API request logs | 90 days | Per-application window; disabling collection does not erase existing records |
+| Administrative/security audit events | 365 days | Operator-managed; customer-controlled records follow their documented instructions |
+
+Applicable agreements, documented customer instructions, and lawful preservation
+requirements determine the deployed schedule. A required minimum must be
+reconciled with an expiry period before deletion. Confirm the active schedule
+for your deployment with Moss. These defaults do not establish that a particular
+deployment has run its cleanup successfully.
+
+Billing records and deletion evidence are separate record classes; there is no
+general seven-year rule for every audit or customer log.
 
 ---
 

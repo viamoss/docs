@@ -42,6 +42,19 @@ Moss supports deletion of user-linked data:
 3. User records and linked application data are deleted
 4. Deletion results are returned for review
 
+The response reports the selected current application/user records and configured
+session-object prefixes. It does not by itself certify deletion of backups,
+historical object versions, external processor copies, administrative audit
+events, or retained deletion evidence. Moss reconciles those copies with the
+applicable agreement and customer instructions. A failed storage sweep leaves
+the request incomplete and preserves references for retry.
+
+Where queued deletion is enabled, the API first returns a durable request ID and
+status. Poll that request for completion; acceptance is not proof of deletion.
+Customer-managed infrastructure and copies held by Moss have separate operating
+responsibilities. Contractual return, deletion and certification deadlines apply
+independently of routine retention periods.
+
 #### Right to Portability (Article 20)
 
 Export user data in standard formats:
