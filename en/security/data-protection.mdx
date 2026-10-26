@@ -15,14 +15,14 @@ Moss implements multiple layers of data protection to ensure your information re
 
 Public Moss service endpoints use HTTPS:
 
-- **HTTPS** - Encrypted public API connections
+- **TLS 1.2+** - Encrypted public API connections
 - **Certificate Validation** - Strict certificate verification
 
 ### At Rest
 
 Data stored in Moss databases is protected:
 
-- **Database Encryption** - PostgreSQL with encryption at rest
+- **Database Encryption** - AES-256 encryption at rest for Moss-hosted databases
 - **Credential Protection** - API-key verification hashes and encrypted reusable credentials
 - **Secure Key Storage** - Encryption keys managed separately from data
 

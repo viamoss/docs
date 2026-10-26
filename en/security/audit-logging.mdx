@@ -91,6 +91,8 @@ The following fields are automatically redacted:
 
 Detailed request logging can be enabled or disabled per application:
 
+This setting controls detailed request logs, separately from administrative audit events.
+
 ### Dashboard Configuration
 
 Navigate to **Settings > Developer Options > Audit Logging** to enable or disable logging for your application.
@@ -192,9 +194,10 @@ Track LLM usage costs:
 
 ## Log Integrity
 
-### Read-Only API Access
+### Append-Only Audit Events
 
-Audit logs are read-only through the Audit API.
+- Application users cannot edit or delete existing audit events through the dashboard or Audit API.
+- The retention process removes expired audit events.
 
 ### Timestamps
 
@@ -217,7 +220,7 @@ Configure production audit and request logging to:
 Periodically review audit logs for:
 
 - Unusual access patterns
-- Failed authentication attempts
+- Access changes and recorded security events
 - Unexpected API usage
 
 ### Secure API Keys
