@@ -7,6 +7,11 @@ description: "How Moss protects your data through encryption, validation, and se
 
 Moss implements multiple layers of data protection to ensure your information remains secure throughout its lifecycle.
 
+The hosting and operator boundaries in the [Security Overview](/en/security/overview#deployment-scope)
+apply here. Customer-managed infrastructure, identity and storage follow the
+agreed deployment; the hosted examples below do not authorize data transfers or
+support access outside that agreement.
+
 ---
 
 ## Encryption
@@ -148,7 +153,10 @@ JWT secrets receive enhanced protection:
 
 ### Password-Like Secrets
 
-Passwords are managed by the identity provider. Reusable integration credentials are encrypted at rest.
+End-user authentication credentials (passwords or other secret material) remain
+with the deployment's identity provider; Moss does not collect or store them. This is
+separate from service API keys, JWT signing keys and reusable integration
+credentials described above. Reusable integration credentials are encrypted at rest.
 
 ---
 
@@ -207,6 +215,11 @@ expiry controls access and does not delete an object. Confirm that the deletion
 schedule is active for the intended application and storage destination before
 relying on an automatic retention period. Recordings and support copies require
 their own scope and deletion treatment.
+
+These SDK capture options do not establish that screenshot pixels are redacted.
+Page-text redaction and screenshot capture are separate controls. Session or
+history-recording settings alone do not establish that all screenshot capture is
+disabled; verify the separate capture settings for the agreed deployment.
 
 ### User Control
 

@@ -1,6 +1,6 @@
 ---
 title: "Audit Logging"
-description: "Comprehensive audit trails for compliance and security monitoring"
+description: "Audit events and request logs for compliance and security monitoring"
 ---
 
 ## Overview
@@ -11,7 +11,11 @@ Moss records audit events and supports optional detailed request logging for com
 
 ## What Gets Logged
 
-The tables below describe detailed request logs when enabled.
+The tables below describe fields that detailed request logs can contain when
+enabled. User/session identifiers and free-text payloads may contain personal
+data. Where an agreement prohibits personal data, sensitive content or secrets in
+logs, exclude those fields and content before storage. Credential redaction alone
+does not meet that requirement; do not enable a logging path that cannot meet it.
 
 ### Inbound Requests (SDK to Backend)
 
@@ -22,7 +26,7 @@ The tables below describe detailed request logs when enabled.
 | User ID | The authenticated user |
 | Session ID | Associated chat session |
 | Endpoint | API endpoint called |
-| Request payload | Sanitized request body |
+| Request payload | Credential-redacted body, only where its content is permitted |
 | Response status | HTTP status code |
 | Duration | Request processing time |
 
@@ -34,7 +38,7 @@ The tables below describe detailed request logs when enabled.
 | Target service | LLM provider, embedding API, storage |
 | Provider | Specific provider (OpenAI, Google, etc.) |
 | Model | Model used for the request |
-| Request summary | Sanitized request details |
+| Request summary | Credential-redacted details, only where their content is permitted |
 | Response status | Success/failure |
 | Token counts | For LLM requests |
 
@@ -105,11 +109,12 @@ Navigate to **Settings > Developer Options > Audit Logging** to enable or disabl
 
 | Detailed Request Logging | Use Case |
 |---------------|----------|
-| **Enabled** | Compliance requirements, security-sensitive applications |
-| **Disabled** | High-volume applications where storage costs are a concern |
+| **Enabled** | A documented purpose with permitted content, access and retention settings |
+| **Disabled** | Payload collection is unnecessary or cannot meet the applicable content restrictions |
 
 <Tip>
-    Enable detailed request logging when needed.
+    Detailed request logging is separate from required administrative, network
+    and security logs. Disabling it does not waive those requirements.
 </Tip>
 
 ---
@@ -160,13 +165,22 @@ A separate API key is used for audit log access:
 | Administrative/security audit events | 365 days | Operator-managed; customer-controlled records follow their documented instructions |
 
 Applicable agreements, documented customer instructions, and lawful preservation
-requirements determine the deployed schedule. A required minimum must be
-reconciled with an expiry period before deletion. Confirm the active schedule
+requirements permitted by the agreement determine the deployed schedule. Where
+the contract requires at least 90 days for applicable logs, retain those logs for
+that minimum; a 365-day default is not permission to retain prohibited content or
+override a contractual deletion deadline. Reconcile any conflicting requirements
+through the applicable agreement before configuring deletion. Confirm the active schedule
 for your deployment with Moss. These defaults do not establish that a particular
 deployment has run its cleanup successfully.
 
 Billing records and deletion evidence are separate record classes; there is no
 general seven-year rule for every audit or customer log.
+
+Required ingress/egress and administrative-account logging must be covered by
+the responsible operator's network and system logs where the security schedule
+requires it. Optional request logging on instrumented paths does not establish
+that coverage. Contractual log-access restrictions and encryption-at-rest
+requirements apply independently of retention.
 
 ---
 
