@@ -45,12 +45,10 @@ Moss supports deletion of user-linked data:
 3. User records and linked application data are deleted
 4. Deletion results are returned for review
 
-The response reports the selected current application/user records and configured
-session-object prefixes. It does not by itself certify deletion of backups,
-historical object versions, external processor copies, administrative audit
-events, or retained deletion evidence. Moss reconciles those copies with the
-applicable agreement and customer instructions. A failed storage sweep leaves
-the request incomplete and preserves references for retry.
+The response covers the selected current application/user records and files in
+configured session storage. Backups and external processor copies are handled
+through separate deletion procedures. A failed storage sweep leaves the request
+incomplete and preserves references for retry.
 
 Where queued deletion is enabled, the API first returns a durable request ID and
 status. Poll that request for completion; acceptance is not proof of deletion.
@@ -179,7 +177,7 @@ localhost:3000
 
 ### Enforcement
 
-When an allowlist is configured, requests from unlisted domains are rejected during SDK initialization. An empty allowlist permits any domain.
+When an allowlist is configured, requests from unlisted domains are rejected during SDK initialization.
 
 ---
 

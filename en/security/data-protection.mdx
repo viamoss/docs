@@ -178,11 +178,7 @@ localhost:3000
 
 ### Enforcement
 
-| Scenario | Behavior |
-|----------|----------|
-| Empty whitelist | SDK works on any domain |
-| Whitelist configured | SDK only works on listed domains |
-| Unlisted domain | SDK initialization fails |
+When an allowlist is configured, requests from unlisted domains are rejected during SDK initialization.
 
 <Warning>
     Remember to include all environments (production, staging, development) in
