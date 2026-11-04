@@ -9,6 +9,529 @@ icon: "clock-rotate-left"
 Notable customer-visible changes to the Moss SDK (`@viamoss/moss-sdk`) and the
 Moss dashboard. From v0.13.0, the SDK version tracks the Moss platform version.
 
+## 0.16.20 — 2026-11-04
+
+### Added
+
+- **Pinecone private endpoint (AWS PrivateLink).** With
+  `PINECONE_USE_PRIVATE_ENDPOINT=true` (off by default), sdk-backend,
+  dashboard-backend and the worker still look the index up on
+  `api.pinecone.io`, then send all data-plane traffic (search, fetch, upsert
+  and delete) to the index's private host,
+  `<index>.svc.private.<...>.pinecone.io`, which Moss reads from the index
+  description; there is no host to configure. `api.pinecone.io` must stay
+  reachable from all three workloads.
+  - There is no fallback to the public host. If the index's Pinecone project
+    has no private endpoint, Moss doesn't connect to the index: chats answer
+    without the application's knowledge base, deleting a source fails, and
+    chunking jobs fail before they touch a source's pages or vectors. Each
+    logs an error that names the index and the setting.
+  - Set it on all three workloads, with the upper-case name and the same
+    value. `true`, `t`, `yes`, `y`, `on` and `1` turn it on, in any case;
+    `false`, `f`, `no`, `n`, `off` and `0` leave it off. Any other value,
+    including an empty one or one with surrounding spaces or quotes, stops the
+    backends from starting and fails every chunking job.
+  - Each process logs `Pinecone data-plane host: private` (or `public`) the
+    first time it opens the index. The line shows the host Moss picked, not
+    that it is reachable.
+  - Before turning on Pinecone's private-endpoint-only restriction for the
+    project, check that Pinecone answers through the private host, since a
+    wrong DNS record or security group still logs `private`. On sdk-backend,
+    one chat turn that uses the knowledge base logs the `private` line, then
+    `Pinecone multi-namespace search completed` with `results=N/M` and N above
+    0, and no `search failed`. On the worker, one knowledge-source refresh logs
+    the `private` line and the source ends Ready with more than 0 chunks. On
+    dashboard-backend, which may not log the line for a while, confirm the
+    variable is set on its deployment. With the restriction on, Pinecone
+    rejects data-plane requests that don't come through the endpoint, so a
+    workload still on the public host loses retrieval or indexing.
+  - The setting was tested against a mocked Pinecone API, not a live
+    PrivateLink endpoint, so the check above is the test on your install.
+
+### Changed
+
+- New optional setting: `PINECONE_USE_PRIVATE_ENDPOINT`. In the Helm chart's
+  `values.yaml`, only commented examples for it are added, on sdk-backend,
+  dashboard-backend and the worker; the chart README documents it. With the
+  setting off, Moss sends the same Pinecone requests to the same hosts as
+  0.16.19.
+- No database migrations in this release.
+
+### Fixed
+
+- With Moss open in more than one tab, a guide runs only in the tab where the
+  user started it. Another tab can show it, and takes it over only when the
+  user continues it there. Plan events (`Moss Plan Started`,
+  `Moss Plan Step Completed`, `Moss Plan Finished`) come only from the tab the
+  guide runs in, so each guide counts once; in 0.16.19 a second tab could
+  report them again. A guide exited from another tab is reported as
+  `Moss Plan Finished` with `outcome: 'abandoned'` by the tab that ran it. The
+  fix needs both the 0.16.20 backend and SDK 0.16.20.
+
+### Security
+
+- Backend dependency security updates (`h2`, `hpack`, `langgraph`,
+  `langgraph-sdk`, `soupsieve`) and worker dependency security updates
+  (`multidict`, `soupsieve`), each to its first patched version, for Medium
+  advisories.
+- The `moss-dashboard` and `moss-dashboard-oidc` builds install one exact,
+  hash-checked pnpm, 10.34.7, instead of a floating pnpm at build time.
+- There is no other Dockerfile change. The images are rebuilt on current
+  base-image packages.
+
+### Known issues
+
+- If the answer that starts a guide doesn't reach the tab, for example after
+  a retried 503, that tab only shows the guide. It reports no
+  `Moss Plan Started`, and doesn't continue the guide after a reload until the
+  user continues it there, with Next or a step.
+- When another tab takes a guide over, with Next or a step there, the original
+  tab still reports `Moss Plan Step Completed` for the other tab's steps if its
+  user asks something later. A New chat in the original tab still ends the
+  guide on the device and reports it finished there.
+- If the tab running a guide is mid page load when a tab that only shows the
+  guide exits it, no tab reports that `Moss Plan Finished`.
+
+## 0.16.19 — 2026-11-03
+
+### Added
+
+- **SDK analytics events.** Pass `onEvent` in the provider config to forward
+  Moss usage to your analytics, for example
+  `onEvent: (e) => window.analytics?.track(e.name, e.properties)`. Each event
+  is `{ name, properties }`, named in Segment's "Object Action" form. Twelve
+  events cover the chat, questions and answers, errors, guided plans, feedback
+  and support tickets. `MOSS_EVENT_NAMES` lists them, and the SDK README
+  documents each event's properties. `Moss Question Asked` carries
+  `source: 'user' | 'host'`, where `'host'` marks a question sent with
+  `askMoss()`, counted once as its request leaves. Question text is left out
+  unless you set `eventQueryText` to `'include'` or a function. A handler that
+  throws is logged and ignored, and leaving `onEvent` unset changes nothing.
+- **Starting Moss on demand.** For hosts that mount Moss only when the user
+  asks for it, `shouldStartMoss()` from `@viamoss/moss-sdk/start` (no React)
+  tells the page, as it loads, whether to mount Moss. It returns true when the
+  chat was open in this tab before the page changed, while a guide is running
+  in this tab, while an `askMoss()` question waits in this tab, or when a guide
+  step the user took is waiting to continue on this page (30 seconds by
+  default). Mount Moss when it returns true, and don't open or toggle the chat
+  yourself. It needs `stability.afterReload.enabled: true`; if you set
+  `stability.afterReload.pendingTTL`, pass the same value. It only reads
+  browser storage and never throws.
+- **Opening Moss with a question.** `askMoss(question)`, also exported from
+  `@viamoss/moss-sdk/start`, hands a question from your own assistant or help
+  widget to Moss: Moss starts a new chat, opens it and sends the question as
+  the user's first message. It returns `{ accepted: true, id, queued }` or
+  `{ accepted: false, reason: 'empty' | 'unavailable' }`, and never throws.
+  With `queued: true`, mount Moss without opening the chat within 30 seconds
+  (`ttlMs` changes that). Call it in the same window and on the same origin as
+  Moss, and open the chat with `openChat()`, not a toggle or a
+  `[data-moss-trigger]` click: a toggle while a question waits closes the chat
+  and drops the question. A chat or guide in progress ends as New chat ends it.
+- **Vertex AI `eu` and `us` multi-regions.** With `GOOGLE_AUTH_MODE=vertex`
+  and `GOOGLE_CLOUD_LOCATION=eu`, chat, `gemini-embedding-2` embeddings and
+  image annotation all go to `aiplatform.eu.rep.googleapis.com`; `us` works the
+  same way on `aiplatform.us.rep.googleapis.com`. Set the location on both
+  backends and the worker, and allow egress to that host from all three.
+  Vertex on `global` or a single region sends the same requests to the same
+  hosts as before.
+- **OIDC session renewal.** With `OIDC_REFRESH_TOKENS=true` (off by default) on
+  the `moss-dashboard-oidc` container, the dashboard renews the user's ID token
+  with a refresh token, so sessions outlast the IdP's ID-token lifetime (60
+  minutes on Okta). Allow the Refresh Token grant for the Moss application in
+  the IdP first and, for an Okta custom authorization server, `offline_access`
+  in its access policy. Without the access-policy change, every sign-in fails
+  once the setting is on.
+- **`security.txt`.** The backend serves an RFC 9116 file at
+  `/.well-known/security.txt`, without sign-in and in every service mode, and
+  `/security.txt` redirects there. The contact defaults to
+  `mailto:security@viamoss.ai`; set `SECURITY_TXT_CONTACT` to a `mailto:` or
+  `https:` URI to list your own.
+
+### Changed
+
+- **Image annotator default model.** With `ANNOTATOR_LLM_MODEL` unset, the
+  worker uses `gemini-3.8-flash` at low thinking, replacing `gemini-2.5-flash`,
+  which Google retired on 2026-10-20. An explicit `gemini-3.8-flash` also moves
+  to low thinking, with a 4,096-token output limit. Other models are
+  unchanged.
+- **OIDC sign-in.** Users in neither `OIDC_ADMIN_GROUPS` nor
+  `OIDC_MEMBER_GROUPS` see an Access Denied page at sign-in. If the
+  dashboard-serving backend's `OIDC_AUDIENCE` lacks the OIDC client ID, users
+  return to sign-in after each sign-in; add the client ID. Users signed in
+  before the upgrade sign in once more.
+- Dashboard toasts appear at the bottom right, in both dashboard images. They
+  move up when they would cover the Copilot or Playground message box, or the
+  Save and Discard bar on Suggested Content.
+- In the SDK, each tab keeps its own chat and guide. A tab opened with
+  `window.open()` starts with the chat closed and no guide, and a guide
+  continues after a reload only in the tab it runs in. When a guide step opens
+  a new tab, the chat opens there if it was open in the first tab.
+- New optional settings: `OIDC_REFRESH_TOKENS` on the dashboard and
+  `SECURITY_TXT_CONTACT` on the backend. `GOOGLE_CLOUD_LOCATION` also accepts
+  `eu` and `us`. In the Helm chart's `values.yaml`, only the commented
+  `ANNOTATOR_LLM_MODEL` example changes.
+- No database migrations in this release.
+
+### Fixed
+
+- OIDC dashboard sessions no longer outlive their ID token. Before, about an
+  hour after sign-in on Okta, every API call failed with 401 while the
+  dashboard still showed the user as signed in. Now the next page load goes to
+  sign-in ("Your session has expired") and then back to the same page; with an
+  active IdP session, usually without asking for credentials.
+- The dashboard's retry after a 401 asks for a fresh token, and a sign-in the
+  IdP refuses says so on the sign-in page.
+- `LLM_THINKING=minimal` on `gemini-3.8-flash` is sent as `low`. Every chat
+  request with it failed with a 400 before.
+- In the SDK, a chat start that fails after New chat has replaced it no longer
+  leaves the new chat's message box disabled with no Retry.
+
+### Security
+
+- **API action identity.** Configured API actions take the user's company and
+  user ID from the signed SDK token, never from the conversation. The company
+  comes from `company_id` (or `companyId`) in the JWT `metadata` claim.
+  Company-type fields (`company_id`, `tenant_id`, `organization_id`, `org_id`
+  and their `X-` header forms) are filled by the server, and an action with one
+  is refused when the token carries no company. `user_id` is filled with the
+  signed-in user, and a call that names another user is refused. Applications
+  without API actions see no change.
+- **Role-limited procedures.** A procedure with `allowed_roles` runs only for
+  users whose token signs one of those roles in `metadata.role`. Until the host
+  signs `role`, such a procedure is hidden from every user. A malformed
+  `allowed_roles` value admits nobody.
+- A missing or blank `APP_ENV` now means production. Workers that don't set it
+  report `production` in telemetry, so dashboards that filter on `local` may
+  shift.
+- The images are rebuilt on current base-image packages, with no dependency
+  changes.
+
+### Known issues
+
+- With Moss open in two tabs during one guide, the tab that isn't running the
+  guide also emits `Moss Plan Started`, `Moss Plan Step Completed` and
+  `Moss Plan Finished` for it, so those can be counted twice. With one tab the
+  counts are right. Fixed in 0.16.20.
+- `gemini-embedding-001` isn't supported on `eu` or `us`: ingestion with it
+  fails, and chats answer without the application's knowledge base. An
+  application's embedding model can't be changed, so moving to
+  `gemini-embedding-2` means a new application whose sources are ingested
+  again.
+- The chart's chat default, `gemini-3-flash-preview`, is served on `global`
+  only. On `eu` or `us`, set `LLM_MODEL_NAME` on both backends to a model
+  Google serves there, such as `gemini-3.8-flash`.
+- Analytics chat, the daily insight sweep, monitor scoring, procedure
+  authoring, self-healing and session evaluations call the Gemini Developer
+  API with `LLM_API_KEY`, whatever `GOOGLE_AUTH_MODE` says. On `eu` or `us`,
+  leave `LLM_API_KEY` unset on both backends so these calls fail instead of
+  leaving the region, and set `INSIGHT_SWEEP_ENABLED=false` on the dashboard
+  backend.
+- Okta has been reported to leave the groups claim out of refreshed ID tokens.
+  The dashboard then doesn't use them, and sessions still end every hour. Try
+  `OIDC_REFRESH_TOKENS` on a staging install first.
+
+## 0.16.18 — 2026-11-03
+
+### Security
+
+- Backend and worker image security update: libexpat 2.10.0
+  (CVE-2026-113351, CVE-2026-115506), replacing the patched library shipped in
+  0.16.16. The worker keeps refusing sitemaps that declare a DTD.
+- Dashboard dependency security update (`prismjs` 1.30.0, `fflate` 0.4.9).
+
+### Changed
+
+- The Guidance Flows empty state now says only that there are no flows.
+- No database migrations in this release.
+
+## 0.16.17 — 2026-11-02
+
+### Changed
+
+- Build fix only. The images run the same software as 0.16.16, and
+  deployments already on 0.16.16 don't need to upgrade.
+- No database migrations in this release.
+
+## 0.16.16 — 2026-11-02
+
+### Changed
+
+- **Support tickets: the card comes first.** With host-brokered filing, once a
+  ticket is called for, Moss shows the editable ticket card as soon as it has a
+  subject and a description. It no longer writes the ticket out in chat, asks
+  for a confirmation there, or asks for an email address or other contact
+  details. Nothing is filed until the user submits the card, and Moss says a
+  ticket was filed only once the filing is confirmed. Remove procedure text
+  that asks for a confirmation in chat.
+- **Ticket fields are pre-filled only from what the user said,** in both
+  filing modes, and values for anything outside the ticket's fields are
+  dropped. The user can still change every field the card shows. The impact
+  level follows the user's own words in the subject, the description and their
+  messages, so the request type no longer raises it. Critical is pre-filled
+  when the user reports an outage, or says work has stopped or everyone is
+  affected. Without such a signal, a host-brokered card leaves the impact empty
+  and a direct ticket defaults to Medium.
+- **The Filing switch is the single on/off for tickets.** Off, in the Filing
+  row of Configure > Integrations > Zendesk, applies in every procedure, in the
+  default reply, to a ticket request under way and at Submit, and direct
+  connections no longer dry-run. Procedures also offer no tickets while a
+  connection is Paused or otherwise can't file. Only an Admin can see or change
+  the switch.
+- **Before upgrading, decide each Zendesk connection's Filing setting.** A
+  connection that shows Off while its procedures still offer tickets stops
+  offering them at the upgrade. Switch host-brokered connections to Live only
+  after the upgrade, because on earlier releases Live also turns on a
+  default-reply ticket offer that asks for the user's email address. To keep
+  the default reply from offering tickets, set
+  `procedures.default_reply_policy` to `false` in the application's
+  configuration; this also drops its suggestion to contact support. Where a
+  direct connection's Zendesk form requires the requester's role, pin a value
+  for that field on the Ticket intake page, or have the ticket procedures ask
+  for the role.
+- SDK 0.16.16 types the outcome's `ticketId` as `string | number` and sends it
+  as text.
+- `LLM_CLIENT_TYPE` no longer accepts `baseten`, and the provider-failover
+  settings `LLM_AUTOROUTER_ENABLED` and `LLM_FALLBACK_PROVIDERS` are ignored.
+  The backend uses the one provider that `LLM_CLIENT_TYPE` names.
+- Traffic-log audit events from Bearer sign-ins record `auth_method` `jwt`
+  instead of `clerk_jwt`. Older events keep `clerk_jwt`, so update any SIEM
+  filter on the value.
+- The worker refuses sitemaps that declare a DTD.
+- Upgrading from 0.16.7 also brings in 0.16.8 through 0.16.15, none of which
+  has a database migration or a Helm values change.
+- No database migrations in this release. The Helm chart's `values.yaml`
+  changes only in a comment.
+
+### Fixed
+
+- A repeated Submit of the same card before your backend's answer is recorded,
+  for example after a lost response, is accepted and handed to your backend
+  under the same `handoffId`. Deduplicating on `handoffId` gives the user one
+  ticket. A repeat with changed values is still refused.
+- Your backend can return `ticketId` as a number or as text, and a
+  whole-number `errorCode` or `errorDetail` is kept as text. These were refused
+  before, and the outcome went unrecorded.
+- The dashboard's Broker contract page describes what your backend receives: a
+  timeout, a callback that throws or an answer without a boolean `ok` leaves
+  the outcome unknown, not failed; custom-field values are strings; and the
+  ticket body is the description followed by the last 12 chat messages, each
+  cut at 400 characters.
+
+### Security
+
+- **Admin-only access.** These need an Admin: changing, testing or importing
+  an integration's configuration, including Zendesk and custom API
+  connections and actions, which Members can still read; the traffic logs,
+  which now also work with OIDC sign-in; accepting AI-instruction proposals;
+  and reading deletion requests. Members see Accept disabled on instruction
+  proposals and Save disabled on Suggested Content. A Member refused on the
+  audit log or the traffic logs is recorded as an `auth.denied` audit event.
+- **Integration credentials** are kept out of application reads, the SDK
+  session response, logs and audit events, and the session response carries
+  only the settings the SDK uses. Audit lists and exports mask credential
+  fields in earlier events as `[REDACTED]`. An Admin API client that sends back
+  a configuration it read keeps the stored credentials, unless a block's
+  address, such as the Zendesk subdomain, changed.
+- Image security updates:
+  - Brotli (CVE-2026-111497), all four images. No path lets untrusted input
+    reach the decoder.
+  - Chrome for Testing 156.0.8078.80, worker. Affected in principle, since the
+    worker browser loads the help sites you configure; fixed by the update.
+  - PostgreSQL client libpq-18 in place of libpq-16, backend and worker. Not
+    affected.
+  - Expat, patched library (CVE-2026-113351), backend and worker. Refusing
+    sitemaps that declare a DTD mitigates CVE-2026-115506, since the worker
+    never parses a DTD.
+  - Python 3.14.10 (CVE-2026-115557), backend and worker. The image build
+    refuses an older Python.
+  - CA certificates (CVE-2026-111943), backend and worker, with the distrusted
+    emSign roots removed from the system and Python stores.
+  - `pyasn1` 0.6.5, Pillow 13 and `certifi` 2026.10.23, backend and worker.
+  - Next.js 15.5.28 (GHSA-2464-fhr4-w9xw, GHSA-p3m5-59mp-jv5r) and Node.js 24
+    (CVE-2026-105482, CVE-2026-106069), dashboards.
+  - Playwright 1.63.0, worker.
+  - An unused LLM client library, which carried its own OpenSSL, is removed
+    from the backend.
+
+### Known issues
+
+- Outage detection depends on wording: some outage reports aren't read as
+  Critical, and some other reports are. The user can change the impact on the
+  card wherever the ticket intake shows it (by default, under Review details).
+- With Filing Off, a card drafted before the switch shows "Couldn't submit
+  right now. Nothing was sent — please try again." at Submit; switching back to
+  Live lets it through. The procedure Playground and Copilot's simulations
+  ignore the switch.
+
+## 0.16.15 — 2026-10-19
+
+### Fixed
+
+- Required fields that a conditional branch of the Zendesk form opens, but
+  that no intake role maps, appear on the ticket card as empty required rows,
+  so the user can fill them and a validation error points at the row. Fields
+  the Ticket intake page fills another way (a pinned value, the assistant, or
+  your backend) keep their handling. A stored intake picks these fields up at
+  its next form sync.
+
+### Security
+
+- Worker browser update to Chrome for Testing 155.0.8059.84.
+- Backend and worker dependency security updates: `psycopg` 3.3.6 and
+  `psycopg2-binary` 2.9.13, which bundle OpenSSL 3.5.8, and `cryptography`
+  50.0.2, which bundles OpenSSL 4.0.3.
+
+### Changed
+
+- No database migrations in this release.
+
+## 0.16.14 — 2026-10-15
+
+### Security
+
+- Base image security refresh for all four images: OpenSSL 4.0.3
+  (CVE-2026-54873, CVE-2026-72897, CVE-2026-84782, CVE-2026-84784) and zlib
+  (CVE-2026-85091).
+
+### Changed
+
+- No database migrations in this release.
+
+## 0.16.13 — 2026-10-15
+
+### Fixed
+
+- Changing a dropdown on the ticket card refreshes the fields its value
+  requires, nested conditional fields included, so the fields a branch opens
+  appear on the card. Values from branches that are no longer selected are
+  dropped at submit.
+- When validation rejects a field, the card marks that field's row with the
+  reason and opens it, instead of showing only a generic note.
+
+### Changed
+
+- The refresh after a dropdown change, the per-field reasons and opening
+  rejected rows need SDK 0.16.13. Older SDKs keep working: nested fields are
+  offered when the draft already carries their parent values, and a rejected
+  row is marked "This value wasn't accepted."
+- No database migrations in this release.
+
+## 0.16.12 — 2026-10-15
+
+### Fixed
+
+- Refreshing or reprocessing a page that now produces fewer chunks no longer
+  leaves its old trailing chunks in knowledge search. The worker's cleanup
+  before re-chunking failed against Pinecone's preview fetch API, logged
+  `Batch pinecone cleanup failed, falling back per-page`, and deleted nothing.
+  First ingests and full source refreshes were unaffected apart from the
+  warning. After upgrading, refresh an affected page, or run a full source
+  refresh, to remove its stale chunks.
+
+### Changed
+
+- No database migrations in this release.
+
+## 0.16.11 — 2026-10-14
+
+### Security
+
+- Worker browser update to Chrome for Testing 155.0.8059.39.
+
+### Changed
+
+- No database migrations in this release.
+
+## 0.16.10 — 2026-10-13
+
+### Security
+
+- Worker dependency security updates (`anyio`, `PyJWT`, `CairoSVG`, `fsspec`,
+  `urllib3`).
+
+### Changed
+
+- First complete on-prem image set since 0.16.7. It carries the 0.16.8 and
+  0.16.9 fixes.
+- No database migrations in this release.
+
+## 0.16.9 — 2026-10-13
+
+<Warning>
+  The worker image for 0.16.9 was not published because it was held by the
+  vulnerability gate. On-prem deployments should use 0.16.10 or later, which
+  carries every 0.16.9 fix.
+</Warning>
+
+### Security
+
+- Backend dependency security updates (`anyio`, `PyJWT`, `CairoSVG`,
+  `langgraph-sdk`, `urllib3`).
+- Dashboard dependency security updates: `sharp` 0.35.5
+  (GHSA-wq5f-xc86-pv6w) and `source-map-js` 1.2.2 (CVE-2026-93749).
+
+### Changed
+
+- No database migrations in this release.
+
+## 0.16.8 — 2026-10-13
+
+<Warning>
+  The images for 0.16.8 were not published because they were held by the
+  vulnerability gate. On-prem deployments should use 0.16.10 or later, which
+  carries every 0.16.8 fix.
+</Warning>
+
+### Fixed
+
+- Knowledge search returns documents again. Pinecone's preview search API
+  began rejecting a reserved field that Moss requested, so every search
+  returned no documents and the assistant answered without the knowledge base.
+
+### Changed
+
+- No database migrations in this release.
+
+## 0.16.7 — 2026-09-17
+
+### Added
+
+- **Multi-architecture on-prem images.** Every on-prem image tag
+  (`moss-backend`, `moss-worker`, `moss-dashboard`, `moss-dashboard-oidc`)
+  resolves to an OCI image index with `linux/amd64` and `linux/arm64` images.
+  Cosign signatures and CycloneDX SBOM attestations cover the index digest and
+  each architecture digest. Mirror the full index together with its signature
+  and attestation tags; `docker pull` and `docker push` flatten it to one
+  architecture.
+
+### Changed
+
+- Each image tag resolves to an index digest instead of a single-image digest.
+  Verification by tag is unaffected. Deployments that pin a digest re-pin
+  once, to the index digest or to the architecture digest they want.
+- The SDK package loads in CommonJS projects: `main` and the `require`
+  condition point at a CommonJS build with its own type declarations.
+- `getAppearance` and the appearance preset objects are no longer declared by
+  the SDK; select a preset with the `appearance` config option.
+- SDK tokens whose `metadata` claim is present but not an object are rejected
+  with 401 `INVALID_TOKEN`. A non-empty list, string or number caused a server
+  error before, and an empty one (`[]`, `""`, `0`, `false`) was accepted.
+- The worker drops unused dependencies, `nltk` among them.
+- Base image refresh.
+- No database migrations in this release.
+
+### Fixed
+
+- `FloatingActionBar`, `fetchAppConfig`, `convertBackendConfig`,
+  `mergeAppearance`, `MOSS_TRIGGER_ATTR` and `installModalDialogEscape` can be
+  imported from the SDK package. Its type declarations listed them, but the
+  bundle did not carry them.
+
+### Security
+
+- Dashboard dependency security update: Next.js 15.5.24 and `sharp` 0.35.4
+  (CVE-2026-75604, GHSA-2xp9-vwfh-vxw4, GHSA-rgj7-g3m4-5g8c).
+
 ## 0.16.6 — 2026-09-05
 
 ### Added
