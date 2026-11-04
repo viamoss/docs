@@ -117,7 +117,8 @@ number needs a cast there.
   on the strength of that value alone.
 - Resolve `{ ok: false }` when filing failed or was refused. `errorCode` and
   `errorDetail` land in the handoff's audit trail; they are never shown to the
-  user.
+  user. From Moss 0.16.16, either one sent as a whole number is recorded as
+  text, and any other value that isn't text is dropped.
 - Do not resolve early to release the SDK. A callback still pending after
   15 seconds, or one that rejects, is treated as **unknown** rather than
   failed: the card tells the user the request was handed over without a
