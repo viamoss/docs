@@ -9,6 +9,89 @@ icon: "clock-rotate-left"
 Notable customer-visible changes to the Moss SDK (`@viamoss/moss-sdk`) and the
 Moss dashboard. From v0.13.0, the SDK version tracks the Moss platform version.
 
+## 0.16.20 — 2026-11-04
+
+### Added
+
+- **Pinecone private endpoint (AWS PrivateLink).** With
+  `PINECONE_USE_PRIVATE_ENDPOINT=true` (off by default), sdk-backend,
+  dashboard-backend and the worker still look the index up on
+  `api.pinecone.io`, then send all data-plane traffic (search, fetch, upsert
+  and delete) to the index's private host,
+  `<index>.svc.private.<...>.pinecone.io`, which Moss reads from the index
+  description; there is no host to configure. `api.pinecone.io` must stay
+  reachable from all three workloads.
+  - There is no fallback to the public host. If the index's Pinecone project
+    has no private endpoint, Moss doesn't connect to the index: chats answer
+    without the application's knowledge base, deleting a source fails, and
+    chunking jobs fail before they touch a source's pages or vectors. Each
+    logs an error that names the index and the setting.
+  - Set it on all three workloads, with the upper-case name and the same
+    value. `true`, `t`, `yes`, `y`, `on` and `1` turn it on, in any case;
+    `false`, `f`, `no`, `n`, `off` and `0` leave it off. Any other value,
+    including an empty one or one with surrounding spaces or quotes, stops the
+    backends from starting and fails every chunking job.
+  - Each process logs `Pinecone data-plane host: private` (or `public`) the
+    first time it opens the index. The line shows the host Moss picked, not
+    that it is reachable.
+  - Before turning on Pinecone's private-endpoint-only restriction for the
+    project, check that Pinecone answers through the private host, since a
+    wrong DNS record or security group still logs `private`. On sdk-backend,
+    one chat turn that uses the knowledge base logs the `private` line, then
+    `Pinecone multi-namespace search completed` with `results=N/M` and N above
+    0, and no `search failed`. On the worker, one knowledge-source refresh logs
+    the `private` line and the source ends Ready with more than 0 chunks. On
+    dashboard-backend, which may not log the line for a while, confirm the
+    variable is set on its deployment. With the restriction on, Pinecone
+    rejects data-plane requests that don't come through the endpoint, so a
+    workload still on the public host loses retrieval or indexing.
+  - The setting was tested against a mocked Pinecone API, not a live
+    PrivateLink endpoint, so the check above is the test on your install.
+
+### Changed
+
+- New optional setting: `PINECONE_USE_PRIVATE_ENDPOINT`. In the Helm chart's
+  `values.yaml`, only commented examples for it are added, on sdk-backend,
+  dashboard-backend and the worker; the chart README documents it. With the
+  setting off, Moss sends the same Pinecone requests to the same hosts as
+  0.16.19.
+- No database migrations in this release.
+
+### Fixed
+
+- With Moss open in more than one tab, a guide runs only in the tab where the
+  user started it. Another tab can show it, and takes it over only when the
+  user continues it there. Plan events (`Moss Plan Started`,
+  `Moss Plan Step Completed`, `Moss Plan Finished`) come only from the tab the
+  guide runs in, so each guide counts once; in 0.16.19 a second tab could
+  report them again. A guide exited from another tab is reported as
+  `Moss Plan Finished` with `outcome: 'abandoned'` by the tab that ran it. The
+  fix needs both the 0.16.20 backend and SDK 0.16.20.
+
+### Security
+
+- Backend dependency security updates (`h2`, `hpack`, `langgraph`,
+  `langgraph-sdk`, `soupsieve`) and worker dependency security updates
+  (`multidict`, `soupsieve`), each to its first patched version, for Medium
+  advisories.
+- The `moss-dashboard` and `moss-dashboard-oidc` builds install one exact,
+  hash-checked pnpm, 10.34.7, instead of a floating pnpm at build time.
+- There is no other Dockerfile change. The images are rebuilt on current
+  base-image packages.
+
+### Known issues
+
+- If the answer that starts a guide doesn't reach the tab, for example after
+  a retried 503, that tab only shows the guide. It reports no
+  `Moss Plan Started`, and doesn't continue the guide after a reload until the
+  user continues it there, with Next or a step.
+- When another tab takes a guide over, with Next or a step there, the original
+  tab still reports `Moss Plan Step Completed` for the other tab's steps if its
+  user asks something later. A New chat in the original tab still ends the
+  guide on the device and reports it finished there.
+- If the tab running a guide is mid page load when a tab that only shows the
+  guide exits it, no tab reports that `Moss Plan Finished`.
+
 ## 0.16.19 — 2026-11-03
 
 ### Added
@@ -128,7 +211,7 @@ Moss dashboard. From v0.13.0, the SDK version tracks the Moss platform version.
 - With Moss open in two tabs during one guide, the tab that isn't running the
   guide also emits `Moss Plan Started`, `Moss Plan Step Completed` and
   `Moss Plan Finished` for it, so those can be counted twice. With one tab the
-  counts are right. Fixed in the next patch.
+  counts are right. Fixed in 0.16.20.
 - `gemini-embedding-001` isn't supported on `eu` or `us`: ingestion with it
   fails, and chats answer without the application's knowledge base. An
   application's embedding model can't be changed, so moving to
