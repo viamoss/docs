@@ -99,9 +99,16 @@ Resolve your callback with a `SupportTicketOutcome`:
 
 ```ts
 type SupportTicketOutcome =
-  | { ok: true; ticketId?: string; ticketUrl?: string }
+  | { ok: true; ticketId?: string | number; ticketUrl?: string }
   | { ok: false; errorCode?: string; errorDetail?: string };
 ```
+
+`ticketId` may be passed as your ticketing system returns it, a whole number,
+or as text; Moss records it as text. Past `Number.MAX_SAFE_INTEGER` a number may
+already have been rounded, so Moss records the filing without it; pass an id
+that large as text. A fraction names no ticket and is dropped the same way.
+SDKs before 0.16.16 type `ticketId` as `string`, so a typed host returning a
+number needs a cast there.
 
 **The resolution is the ticket's outcome, not an acknowledgement.**
 
@@ -116,6 +123,14 @@ type SupportTicketOutcome =
   failed: the card tells the user the request was handed over without a
   confirmation, because your backend may well have filed it. Late resolutions
   are ignored.
+
+### Repeated submits
+
+From Moss 0.16.16, when the user submits the same card again before your
+backend's outcome is recorded, for example after a lost response, Moss accepts
+the repeat and calls `onSupportTicket` again under the same `handoffId`.
+Deduplicating on `handoffId` gives the user one ticket. A repeat whose values
+differ from the first submit is refused and never reaches your callback.
 
 <Warning>
     Treat `handoffId` as an idempotency key on your backend. If the same
