@@ -9,6 +9,289 @@ icon: "clock-rotate-left"
 Notable customer-visible changes to the Moss SDK (`@viamoss/moss-sdk`) and the
 Moss dashboard. From v0.13.0, the SDK version tracks the Moss platform version.
 
+## 0.16.22 — 2026-11-10
+
+### Added
+
+- **Returning after inactivity.** Configure > Behavior > Session Behavior has
+  a new field, "When a user returns after inactivity": "Ask to continue or
+  start new" (the default, as before) or "Start a new chat". With "Start a new
+  chat", a user who comes back to a session past its inactivity timeout (30
+  minutes by default) or its max age (2 hours by default) gets a new chat, with
+  no card and no rating. This applies when Moss loads into a timed-out session,
+  and when the user reopens the chat on a page left open, with the launcher,
+  `openChat()` or a `data-moss-trigger` element. The previous chat can't be
+  reopened.
+  - In the SDK, `sessionConfig.onReturnAfterInactivity` takes `'new_chat'` or
+    `'ask'`. A value in your config wins. Left unset, the application's
+    dashboard setting applies, delivered at session start by backend 0.16.22
+    and later; without one, `'ask'`. For npm embeds, only this field comes
+    from the dashboard: the inactivity timeout, max age and `showNotification`
+    stay the ones in your config. A config built with `convertBackendConfig()`
+    takes all four from the dashboard.
+  - Update the backend and dashboard before the SDK. An older backend drops
+    the setting on save without an error, and an older SDK ignores it. SDK
+    0.16.22 on an older backend asks, unless your config sets the field.
+  - Moss's own opens, such as `askMoss()` and proactive or onboarding flows,
+    don't check. `openChat()` followed by `sendMessage()` sends the message in
+    the new chat once it connects. Moss holds one such message, and logs a
+    console warning when it can't send it.
+  - Guide steps taken with the chat closed, and activity on the same session
+    in another tab, count as activity. A guide idle past the timeout ends with
+    its session; if it ran in this tab, `Moss Plan Finished` reports it with
+    `outcome: 'abandoned'` under the old session's `sessionId`.
+- **Moving the chat window.** The chat window also moves from the empty space
+  in the conversation and around the message box, not only from its header and
+  edges, so a window whose header is off screen can be dragged back. Messages,
+  links, buttons, cards, the guide bar and the scrollbar don't drag, and a drag
+  selects no text. On touch, the conversation scrolls, and the window moves
+  from the header, the edges and the area around the message box.
+
+### Changed
+
+- **The worker refuses private addresses on its own fetches.** Image
+  downloads, sitemaps, discovery's page sampling, and Document360 discovery and
+  scraping now reach public addresses only. Check these before you upgrade:
+  - **A forward proxy is no longer used for Document360, image and sitemap
+    fetches.** These fetches connect directly and ignore `HTTP_PROXY` and
+    `HTTPS_PROXY`, and there is no setting yet to send them through a proxy.
+    If your worker's egress requires one, contact us before upgrading. Firecrawl,
+    the LLM and embedding providers, Pinecone, storage uploads, Slack and the
+    browser's page loads during discovery are unchanged.
+  - Images and sitemaps on an intranet stop working until their host or range
+    is listed in the new worker setting `WORKER_FETCH_ALLOWLIST`
+    (comma-separated hosts and CIDRs, such as
+    `wiki.corp.example.com,10.20.0.0/16`). It is empty by default.
+  - `localhost` needs its own entry. Cloud metadata addresses can never be
+    allowed. An invalid entry stops the worker at boot. Your object storage
+    (`S3_ENDPOINT`) needs no entry.
+  - A refused image is recorded as failed and keeps its original address. A
+    discovery start URL on a refused host fails at once. A downloaded body that
+    isn't an image is never stored.
+- **Document360 API host.** It must be a Document360 host
+  (`*.document360.io` or `*.document360.com`, such as `apihub.document360.io`).
+  Any other host is refused when it's saved, and one saved earlier is refused
+  at sync, with a message to enter it again. A help center on its own domain
+  is fine, because that isn't the API host.
+- **Zendesk subdomain.** It must be the account name only, such as `acme`, not
+  a full address. Upper case is accepted and stored in lower case.
+- **CSV exports** (conversations, traffic logs and the audit log). A cell that
+  starts with `=`, `+`, `-`, `@`, a tab or a carriage return gets a leading
+  apostrophe, so spreadsheets open it as text, never as a formula. That
+  includes negative numbers: `-1` exports as `'-1`.
+- **Slack alerts.** Alert text is escaped and length-limited. Worker job
+  alerts carry the outcome, an error code and counts, but not the raw error
+  text; the details stay in the job's record in Moss.
+- New optional setting: `WORKER_FETCH_ALLOWLIST`, on the worker. In the Helm
+  chart's `values.yaml`, only commented examples for it are added.
+- **Support tickets during a guide.** While a ticket card is open, the guide
+  bar is hidden. Cancelling the card brings the guide back on the same step.
+  When the ticket is filed, or its outcome is unconfirmed, the guide ends and
+  stays ended: `onEvent` reports `Moss Ticket Submitted`, then
+  `Moss Plan Finished` with `outcome: 'abandoned'`. A ticket reported as failed
+  leaves the guide running. A guide started after the ticket shows its bar as
+  usual.
+- **The ticket card opens on Moss's reply.** When Moss drafts a support ticket,
+  the chat opens on Moss's message above the ticket form, not on the bottom of
+  the form.
+- **Rating after a filed ticket.** Once a support ticket is filed, "Was this
+  conversation helpful?" appears at once, under the ticket confirmation, so the
+  ticket number and its link stay in view. Answering it leaves the conversation
+  as it is, and New chat doesn't ask again for that conversation. The next
+  message or guide step removes it. It doesn't appear for a ticket that failed,
+  came back unconfirmed or was cancelled. A rating that can't be sent brings
+  the buttons back.
+- **A guide step after a long pause.** When a user idles past the inactivity
+  timeout mid-guide, then clicks a step's target that loads a new page, the new
+  page keeps the session and continues the guide, with no card to continue or
+  start new.
+- **Saving session settings.** A configuration save merges `sessionConfig`
+  with the stored settings: a save that sends only some session settings keeps
+  the others, and a setting sent as `null` is cleared. A save with
+  `sessionConfig: null` no longer clears them all.
+- **Default loading-indicator selectors.** With the loading-indicators
+  stability layer on and its default selectors, `skeleton`, `spinner` and
+  `loader` classes match in any case.
+- Every SDK change in this release works on any backend, except the dashboard
+  setting for returning after inactivity, which needs backend 0.16.22.
+- No database migrations in this release. The one new environment setting is
+  the worker's optional `WORKER_FETCH_ALLOWLIST`, above.
+
+### Fixed
+
+- Moss no longer reads a page that is still drawing its loading placeholders.
+  Before it sends a turn's page context, the SDK waits up to 4 seconds for
+  visible placeholders, such as skeletons, to clear, so answers describe the
+  loaded page instead of saying it is still loading. With none on screen there
+  is no wait. Placeholders that never clear cost one wait, and are then skipped
+  until they're gone or the page's address changes. The settings are under
+  `stability.placeholderGuard` (`enabled`, `timeoutMs`, `excludeSelectors`,
+  `additionalSelectors` and `selectors`). When you set
+  `stability.loadingIndicators.selectors`, the wait uses that list.
+- A turn that starts while an earlier one is still waiting for the page to
+  settle now waits too. It could read the page with no wait.
+- A guide step whose click opens a new tab, through a `target=_blank` link,
+  `window.open()` or a link that redirects, brings the chat up in the new tab
+  at the next step, and the step is sent once. A same-tab redirect, or a page
+  that rewrites its address as it loads, no longer stalls the guide. Switching
+  tabs right after a step's click no longer ends the guide. This fixes the
+  0.16.21 known issue for a page whose address changes as it loads.
+
+### Security
+
+- Integration hosts for Document360 and Zendesk are now validated, and CSV
+  exports open safely in spreadsheets.
+- Alerts and audit records are hardened against untrusted input.
+- **Worker fetches of private addresses (High).** A crawled page could point
+  an image or sitemap link at an internal address, and the worker would fetch
+  it. The worker now refuses private, loopback, link-local and metadata
+  addresses on its own fetches, and stores only bodies that are images.
+- The images are rebuilt on current base-image packages, with no dependency
+  changes.
+
+### Known issues
+
+- Some valid images are refused and keep their original address: a UTF-16
+  SVG, an SVG that ends in a comment containing `</svg>`, an AVIF or HEIC whose
+  last box has size 0, and an SVG with a prefixed DOCTYPE name.
+- The 0.16.21 known issues for a guide whose starting answer is lost, in one
+  tab or with a second tab, still apply, as do the other two 0.16.20 known
+  issues for guides in more than one tab.
+- "Retry failed pages" counts and retries only pages that couldn't be fetched.
+  To run pages that failed indexing again, refresh the source or edit the page.
+- With "Start a new chat", a chat left open while the user is away keeps its
+  conversation: Moss checks only as it loads and as the chat opens. Calling
+  `openChat()` and then `askMoss()` in one handler, past the timeout, starts
+  one extra session that is never used.
+- If the page reloads mid-guide while a ticket card is open, the step's
+  highlight comes back with the guide bar hidden, and a click on it completes
+  the step. When a ticket is filed in a tab that only shows the guide, the tab
+  running it reports `Moss Plan Finished` but keeps the guide bar until a later
+  answer clears it.
+- Placeholders inside shadow roots aren't seen. A placeholder the page
+  re-creates on every render is waited on at each turn; exclude it with
+  `stability.placeholderGuard.excludeSelectors`.
+- The guide stays in the first tab when a step's new tab can't be tied to the
+  click: the tab opened in the background on a different address, the page
+  opened it only after the step was sent, a page-wide `no-referrer` policy or
+  `window.open(url, '_blank', 'noreferrer')` hid where it came from, or it was
+  reached through more than one intermediate page. A `target=_blank` link to a
+  page without Moss waits out the step's window, 30 seconds by default, as
+  since 0.16.19.
+- Within 5 seconds of a step's click, a tab the user opens by hand after a link
+  that sends no referrer, or another link the user opens from the same page,
+  can take the step.
+
+## 0.16.21 — 2026-11-06
+
+### Changed
+
+- **A source whose pages can't be indexed ends in Error.** It used to end
+  Ready with no content or with part of it. Each such page shows "Re-indexing
+  failed" in its page view. A refresh that fails this way keeps the current
+  version serving, with all of its content. The processing count on a source
+  advances while pages are indexed.
+  - A Ready source that still has a page from an earlier run that can never be
+    indexed stays Ready. Until that page is refreshed or edited, each later
+    processing run records the error on it and sends a failed notification.
+  - The failed notification (`CHUNKING_FAILED`) and the worker's log say how
+    many pages failed, as `N/M pages failed chunking (K indexed).`, then give
+    the latest error as one of a fixed set of descriptions, never the raw
+    error text.
+  - This also covers the 0.16.19 known issue on Vertex AI `eu` and `us`: a
+    source on `gemini-embedding-001` now ends in Error instead of Ready with no
+    content.
+- **Ingestion errors keep no raw error text.** A page's or a job's error in the
+  ingestion API, and a source's last error, are now a fixed description: an
+  error code, an HTTP status, an exception type or a provider name, such as
+  OpenAI. They no longer include an exception's message or a provider's
+  response. Errors stored before the upgrade are returned the same way. What
+  the dashboard shows is unchanged: it shows these errors in dev mode only. The
+  worker's log keeps the full message.
+- **Document360 API token on save.** Spaces and line breaks at the ends of a
+  token are removed when it's saved. A token with a line break, or another
+  character that isn't printable ASCII, inside it is refused, with a message
+  to paste it again. A token saved earlier with a trailing line break is now
+  sent without it.
+- No database migrations or new settings in this release.
+
+### Fixed
+
+- **Direct Zendesk filing sends nested branch fields.** Fields that a
+  conditional field opens at any depth, such as a recording type under a
+  product area, are now sent. Tickets on those branches used to be held back
+  as missing a required field.
+- **Host-brokered ticket card.** When a branch of the ticket form requires a
+  text field that Moss fills with the user's role, such as "Your Role", the
+  card now shows the role the user gave. It used to show an empty row.
+- **Plan events with Moss open in more than one tab** (SDK only).
+  - A guide step the user completes with a click, in a tab that was only
+    showing the guide, now reports `Moss Plan Step Completed`, and
+    `Moss Plan Finished` when it was the last step. The click takes the guide
+    over in that tab, as in 0.16.20. In 0.16.20 the tab could report neither
+    event for a step that doesn't open another page, which covers most
+    "Click …" steps.
+  - Pressing Start Guide on an offer after another tab has already started
+    that guide no longer reports `Moss Plan Started`, or the other tab's
+    completed steps, a second time. The tab only shows the guide, and takes it
+    over when the user continues it there, with Next or a step.
+
+### Security
+
+- **Browser in `moss-worker`.** Chrome for Testing moves from 156.0.8078.80 to
+  157.0.8103.38, which fixes 26 Critical and 54 High advisories in 156. The
+  other three images don't include the browser.
+- **glibc, CVE-2026-84243 (High): no fix yet, assessed.** Your scanner may
+  report it in glibc 2.44 in all four images, and no fixed glibc is published
+  yet. Exploiting it needs an attacker-controlled `LANGUAGE`, an active
+  message locale other than C or POSIX, and a crafted message catalog the
+  process can read. The 0.16.21 images run with the C locale, set no locale
+  variable and install no other locale definition. The fixed glibc ships in
+  the first release after one is published. If your deployment sets `LANG`,
+  `LANGUAGE`, `LC_ALL`, `LC_MESSAGES` or `LOCPATH`, or mounts locale files,
+  contact us and we'll reassess.
+- **sqlite-libs, CVE-2026-119586 (High): not affected.** The advisory is in the
+  SQLite command-line shell's `.recover` command. No image includes the
+  `sqlite` CLI, and the library in the backend and worker images has no
+  recover functions. Your scanner may still report it, with no fixed version.
+- **Error text in the ingestion API.** Through 0.16.20, the ingestion API
+  returned a page's or a job's stored error text to any member of the source's
+  organization. In rare cases that text repeated a credential: a Document360
+  token saved with a line break in it, or a token in a source's URL. 0.16.21
+  stores no such text, and returns only the fixed description for errors
+  stored before the upgrade. If a Document360 token was saved with a line
+  break, rotate it.
+- Backend dependency security update (`idna`), to its first patched version,
+  3.15, for a Medium advisory.
+- The images are rebuilt on current base-image packages. The `moss-backend`
+  and `moss-worker` builds also place a copy of each installed Python
+  package's own SBOM where scanners look, so image scans see those packages'
+  components. Nothing changes at run time.
+
+### Known issues
+
+- This replaces the first 0.16.20 known issue. If the backend starts a guide
+  but the answer doesn't reach the tab, that tab only shows the guide. This
+  happens when the answer to a typed yes is lost, or when the SDK's automatic
+  retry of a 503 answers instead of the first attempt. The tab doesn't
+  continue the guide after a reload until the user continues it there, with
+  Next or a step. It never reports that guide's `Moss Plan Started`, even
+  then: Next or a step there reports only `Moss Plan Step Completed`. When the
+  answer to Start Guide is lost to a network or server error, pressing Start
+  Guide again runs the guide in that tab and reports `Moss Plan Started` once.
+- If a tab's Start Guide gets no answer because of a network or server error,
+  and another tab starts the same guide before this tab's next answer, both
+  tabs report `Moss Plan Started`. After a guide overview, the same applies to
+  any guide another tab starts before the user presses Start Guide again.
+- The other two 0.16.20 known issues for guides in more than one tab still
+  apply.
+- A guide step into a page that redirects or changes its address as it loads,
+  such as a changed query value, may not bring up the chat in the new tab; the
+  guide then carries on in the first tab after 30 seconds. In the same tab,
+  the chat comes back but the guide can stall. Fixed in 0.16.22.
+- "Retry failed pages" counts and retries only pages that couldn't be fetched.
+  To run pages that failed indexing again, refresh the source or edit the page.
+
 ## 0.16.20 — 2026-11-04
 
 ### Added
