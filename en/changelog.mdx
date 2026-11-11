@@ -182,6 +182,116 @@ Moss dashboard. From v0.13.0, the SDK version tracks the Moss platform version.
   that sends no referrer, or another link the user opens from the same page,
   can take the step.
 
+## 0.16.21 — 2026-11-06
+
+### Changed
+
+- **A source whose pages can't be indexed ends in Error.** It used to end
+  Ready with no content or with part of it. Each such page shows "Re-indexing
+  failed" in its page view. A refresh that fails this way keeps the current
+  version serving, with all of its content. The processing count on a source
+  advances while pages are indexed.
+  - A Ready source that still has a page from an earlier run that can never be
+    indexed stays Ready. Until that page is refreshed or edited, each later
+    processing run records the error on it and sends a failed notification.
+  - The failed notification (`CHUNKING_FAILED`) and the worker's log say how
+    many pages failed, as `N/M pages failed chunking (K indexed).`, then give
+    the latest error as one of a fixed set of descriptions, never the raw
+    error text.
+  - This also covers the 0.16.19 known issue on Vertex AI `eu` and `us`: a
+    source on `gemini-embedding-001` now ends in Error instead of Ready with no
+    content.
+- **Ingestion errors keep no raw error text.** A page's or a job's error in the
+  ingestion API, and a source's last error, are now a fixed description: an
+  error code, an HTTP status, an exception type or a provider name, such as
+  OpenAI. They no longer include an exception's message or a provider's
+  response. Errors stored before the upgrade are returned the same way. What
+  the dashboard shows is unchanged: it shows these errors in dev mode only. The
+  worker's log keeps the full message.
+- **Document360 API token on save.** Spaces and line breaks at the ends of a
+  token are removed when it's saved. A token with a line break, or another
+  character that isn't printable ASCII, inside it is refused, with a message
+  to paste it again. A token saved earlier with a trailing line break is now
+  sent without it.
+- No database migrations or new settings in this release.
+
+### Fixed
+
+- **Direct Zendesk filing sends nested branch fields.** Fields that a
+  conditional field opens at any depth, such as a recording type under a
+  product area, are now sent. Tickets on those branches used to be held back
+  as missing a required field.
+- **Host-brokered ticket card.** When a branch of the ticket form requires a
+  text field that Moss fills with the user's role, such as "Your Role", the
+  card now shows the role the user gave. It used to show an empty row.
+- **Plan events with Moss open in more than one tab** (SDK only).
+  - A guide step the user completes with a click, in a tab that was only
+    showing the guide, now reports `Moss Plan Step Completed`, and
+    `Moss Plan Finished` when it was the last step. The click takes the guide
+    over in that tab, as in 0.16.20. In 0.16.20 the tab could report neither
+    event for a step that doesn't open another page, which covers most
+    "Click …" steps.
+  - Pressing Start Guide on an offer after another tab has already started
+    that guide no longer reports `Moss Plan Started`, or the other tab's
+    completed steps, a second time. The tab only shows the guide, and takes it
+    over when the user continues it there, with Next or a step.
+
+### Security
+
+- **Browser in `moss-worker`.** Chrome for Testing moves from 156.0.8078.80 to
+  157.0.8103.38, which fixes 26 Critical and 54 High advisories in 156. The
+  other three images don't include the browser.
+- **glibc, CVE-2026-84243 (High): no fix yet, assessed.** Your scanner may
+  report it in glibc 2.44 in all four images, and no fixed glibc is published
+  yet. Exploiting it needs an attacker-controlled `LANGUAGE`, an active
+  message locale other than C or POSIX, and a crafted message catalog the
+  process can read. The 0.16.21 images run with the C locale, set no locale
+  variable and install no other locale definition. The fixed glibc ships in
+  the first release after one is published. If your deployment sets `LANG`,
+  `LANGUAGE`, `LC_ALL`, `LC_MESSAGES` or `LOCPATH`, or mounts locale files,
+  contact us and we'll reassess.
+- **sqlite-libs, CVE-2026-119586 (High): not affected.** The advisory is in the
+  SQLite command-line shell's `.recover` command. No image includes the
+  `sqlite` CLI, and the library in the backend and worker images has no
+  recover functions. Your scanner may still report it, with no fixed version.
+- **Error text in the ingestion API.** Through 0.16.20, the ingestion API
+  returned a page's or a job's stored error text to any member of the source's
+  organization. In rare cases that text repeated a credential: a Document360
+  token saved with a line break in it, or a token in a source's URL. 0.16.21
+  stores no such text, and returns only the fixed description for errors
+  stored before the upgrade. If a Document360 token was saved with a line
+  break, rotate it.
+- Backend dependency security update (`idna`), to its first patched version,
+  3.15, for a Medium advisory.
+- The images are rebuilt on current base-image packages. The `moss-backend`
+  and `moss-worker` builds also place a copy of each installed Python
+  package's own SBOM where scanners look, so image scans see those packages'
+  components. Nothing changes at run time.
+
+### Known issues
+
+- This replaces the first 0.16.20 known issue. If the backend starts a guide
+  but the answer doesn't reach the tab, that tab only shows the guide. This
+  happens when the answer to a typed yes is lost, or when the SDK's automatic
+  retry of a 503 answers instead of the first attempt. The tab doesn't
+  continue the guide after a reload until the user continues it there, with
+  Next or a step. It never reports that guide's `Moss Plan Started`, even
+  then: Next or a step there reports only `Moss Plan Step Completed`. When the
+  answer to Start Guide is lost to a network or server error, pressing Start
+  Guide again runs the guide in that tab and reports `Moss Plan Started` once.
+- If a tab's Start Guide gets no answer because of a network or server error,
+  and another tab starts the same guide before this tab's next answer, both
+  tabs report `Moss Plan Started`. After a guide overview, the same applies to
+  any guide another tab starts before the user presses Start Guide again.
+- The other two 0.16.20 known issues for guides in more than one tab still
+  apply.
+- A guide step into a page that redirects or changes its address as it loads,
+  such as a changed query value, may not bring up the chat in the new tab; the
+  guide then carries on in the first tab after 30 seconds. In the same tab,
+  the chat comes back but the guide can stall. Fixed in 0.16.22.
+- "Retry failed pages" counts and retries only pages that couldn't be fetched.
+  To run pages that failed indexing again, refresh the source or edit the page.
+
 ## 0.16.20 — 2026-11-04
 
 ### Added
