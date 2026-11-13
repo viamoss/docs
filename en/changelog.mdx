@@ -9,6 +9,110 @@ icon: "clock-rotate-left"
 Notable customer-visible changes to the Moss SDK (`@viamoss/moss-sdk`) and the
 Moss dashboard. From v0.13.0, the SDK version tracks the Moss platform version.
 
+## 0.16.23 — 2026-11-13
+
+### Added
+
+- **Closing the chat can end a running guide.** With
+  `closingChatEndsGuide: true` in the SDK config, closing the chat while a
+  guide runs ends the guide, as its Exit control does. The highlight comes
+  off, and a page refresh brings nothing back. It applies to the close button,
+  a `data-moss-trigger` toggle, `AssistantButton`, `closeChat()` and
+  `toggleChat()`. A guide only offered, a guide already finished, a guide
+  running in another tab and Moss's own closes are left alone. It is off by
+  default, and nothing changes until you turn it on.
+- New optional backend settings, all off or unchanged by default:
+  - `SDK_REQUIRE_ORIGIN`: when on, SDK requests that carry no Origin or
+    Referer, and every request for an application with no allowed domains,
+    get 403 `ORIGIN_REQUIRED`. Leave it off unless every application has its
+    list filled in.
+  - `SDK_RATE_LIMITS_ENABLED`: per-minute limits on SDK session starts,
+    queries, streams and recording uploads, kept in Redis. A slow or
+    unreachable Redis lets requests through. Current SDKs don't wait out a
+    429, so a limited request fails its turn.
+  - `LLM_REQUEST_TIMEOUT_SECONDS` (default `45`): the first attempt's timeout
+    for each model request in a chat turn.
+
+### Changed
+
+- **Allowed domains are checked by exact host, on every SDK request.** Check
+  each application's list before you upgrade:
+  - An entry matches only that exact host: `example.com` no longer matches
+    `app.example.com`. For subdomains, add a `*.` entry such as
+    `*.example.com`. A `*.` entry matches subdomains at any depth but not the
+    bare domain, so list both if Moss runs on both.
+  - The check covers every SDK request from the page, not only the first
+    configuration load. A page the list doesn't cover gets 403
+    `DOMAIN_NOT_ALLOWED`, and Moss doesn't load there.
+  - An entry with a port matches only that port. Browsers leave out the
+    default port, so an entry ending in `:443` never matches an https page.
+  - `Origin: null`, which browsers send from sandboxed iframes and local
+    files, is refused when the list isn't empty.
+  - An empty list is unchanged.
+- **Screenshot uploads need the user's token.** SDK 0.16.23 sends it. Older
+  SDKs fall back to sending the screenshot inside the chat request, a few MB
+  each, so check that your ingress accepts bodies that size on
+  `/api/v1/query` until the SDK is upgraded. Upgrade the backend and
+  dashboard first, then the SDK.
+- **Saving a guide from the SDK needs the authoring grant.** Save as Guide in
+  debug mode and in Moss Studio now needs a token with `authoring: true`, and
+  saves only the token user's own session. An ordinary end-user token gets
+  403, and the button says the user may not save guides. The dashboard's own
+  save is unchanged.
+- **A signed token with an empty subject is refused.** A JWT whose `sub` is
+  empty, blank or not a string gets 401 `INVALID_TOKEN`, instead of running as
+  the user named in the request. Tokens with a real subject are unaffected.
+- **A model request that hangs ends sooner.** Each request a chat turn makes
+  has a timeout, then one retry with what is left of the turn's 120 seconds.
+  A hung request now ends at about 118 seconds with "I'm sorry, that took too
+  long to answer. Please try again." instead of the high-traffic message. A
+  slow but working request completes on its retry.
+- **Deletion requests that fail are marked failed,** with details, instead of
+  staying in progress, and can be retried.
+- No database migrations in this release, and the Helm chart's values are
+  unchanged.
+
+### Fixed
+
+- A native modal dialog opened with `showModal()` no longer turns the page
+  grey under Moss when the page styles `::backdrop`, and the chat no longer
+  inherits the dialog's text layout, so its messages wrap.
+- A page whose form has a control named after a form property, such as
+  `parentElement` or `id`, no longer hangs the tab or breaks page capture.
+- Deleting a user's data now completes when their chats have analytics
+  insights, evaluation scores, monitor flags, action logs, page snapshots or
+  guides. It also removes their model-call logs and proactive-guide events.
+- A rate-limited model request that the client gave up on is retried.
+
+### Security
+
+- **Redaction.** Redacted content no longer reaches Moss through a parent's
+  text, accessible names and labels, interaction HTML, element fingerprints,
+  the validation summary or a clicked element's text. This holds across open
+  shadow roots and same-origin frames. Redacted alerts and fields are listed
+  by tag only, so the summary still shows that they're there.
+- **glibc, CVE-2026-84243 (High): fixed.** All four images ship glibc 2.44-r17,
+  which includes the 2.44-r16 fix.
+- **Python, CVE-2026-119170 (High): not affected.** It applies only when
+  OpenSSL runs in FIPS mode, and no image installs a FIPS provider. Scanners
+  may still report it.
+- **Chrome for Testing 157.0.8103.78** in the worker, which fixes
+  CVE-2026-125350 (High) and the advisories published on 11 November.
+- Python dependency updates, and addresses containing a NUL character are
+  refused before any lookup.
+- The SDK package is published with an exact, integrity-checked npm.
+
+### Known issues
+
+- After a guide's own Exit control, a click on the step's target still sends
+  the step. Closing the chat with `closingChatEndsGuide` on doesn't have this
+  gap.
+- Self-hosted: if `RECORDINGS_BUCKET` or `DOM_SNAPSHOTS_BUCKET` names a bucket
+  that doesn't exist, the deletion certificate reports the erasure complete
+  without the request's note about the missing bucket. Check that both name
+  your real buckets. A fix is planned for 0.16.24.
+- The 0.16.22 known issues still apply.
+
 ## 0.16.22 — 2026-11-10
 
 ### Added
