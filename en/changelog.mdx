@@ -52,10 +52,12 @@ Moss dashboard. From v0.13.0, the SDK version tracks the Moss platform version.
     shows that same number, so several targets don't read as separate steps,
     and targets in one group, such as a row of tabs, share one badge.
     `'within-step'`, the default, keeps today's numbering.
-  - `guide.nextInBar`: `false` moves Next from the guide bar to beside the
-    input box. Next moves beside the input on every step, click
+  - `guide.nextInBar`: `false` moves Next from the guide bar to
+    beside the input box. Next moves beside the input on every step, click
     steps included, and hides while Moss works and once the guide is finished.
-    Unset or `true`, the default, keeps the guide bar's Next. With both
+    The guide bar then shows only the plan and its progress, and the chat's
+    step loader shows that Moss is working. Unset or `true`, the default,
+    keeps the guide bar's Next. With both
     `nextInBar` and `nextBesideInput` set to `false` there's no Next at all,
     and development builds warn in the console.
   - `loader`: `'steps'` shows a short list of what Moss is doing
@@ -128,8 +130,10 @@ Moss dashboard. From v0.13.0, the SDK version tracks the Moss platform version.
   sessions got the older guide behavior whatever the application's
   `stateless_turn_policy` setting said. Every extension built from this release
   sends it. Once its new build is installed:
-  - The guide's Exit control ends the guide for Moss too, so the next question
-    isn't answered inside the guide the user left.
+  - Ending a guide in the chat ends it for Moss too, so the next question
+    isn't answered inside the guide the user left. That covers closing the
+    chat when `closingChatEndsGuide` is on, and filing a support ticket during
+    a guide.
   - Asking Moss to stop ("stop guiding me", "exit the guide") ends the guide.
   - A guide with no progress ends on its own: after 2 hours if it was only
     offered, after 24 hours if it was running.
@@ -169,9 +173,8 @@ Moss dashboard. From v0.13.0, the SDK version tracks the Moss platform version.
   the guide** with "I couldn't recover this guide."
 - Pressing Next while a click step is still setting up now moves the guide on.
   Before, the press could be lost, and the guide bar kept showing "Working…".
-- [Drop if it misses 0.16.24.] With `closingChatEndsGuide` on, closing the chat
-  right after pressing Next or sending a message no longer leaves the chat busy
-  when it's reopened.
+- With `closingChatEndsGuide` on, closing the chat right after pressing Next or
+  sending a message no longer leaves the chat busy when it's reopened.
 - Guide highlights no longer fail on pages whose forms have fields named after
   built-in page properties.
 - **Self-hosted: deleting a user's data and missing buckets.** A deletion is
@@ -201,8 +204,11 @@ Moss dashboard. From v0.13.0, the SDK version tracks the Moss platform version.
 ### Known issues
 
 - [At the tag: add any known issue the rehearsal finds, or delete this line.]
-- The 0.16.23 known issues still apply, except the note about a missing
-  recordings or snapshots bucket, which is fixed above.
+- [FOR SOOBIN] The guide bar has no Exit button yet. To end a guide, start a
+  new chat. A fix is planned.
+- The 0.16.23 known issues still apply, except the one about a guide's Exit
+  control (see above) and the note about a missing recordings or snapshots
+  bucket, which is fixed above.
 
 ## 0.16.23 — 2026-11-13
 
