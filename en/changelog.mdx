@@ -9,9 +9,7 @@ icon: "clock-rotate-left"
 Notable customer-visible changes to the Moss SDK (`@viamoss/moss-sdk`) and the
 Moss dashboard. From v0.13.0, the SDK version tracks the Moss platform version.
 
-## 0.16.24–0.16.25 — 2026-11-17
-
-[Date: the 0.16.25 tag date; 2026-11-17 is provisional.]
+## 0.16.24–0.16.25 — 2026-11-16
 
 0.16.24 and 0.16.25 are described together. 0.16.24 wasn't published to npm
 or rolled out to hosted Moss, so the SDK and hosted Moss go from 0.16.23
@@ -158,9 +156,8 @@ published, but install 0.16.25 instead.
   `guide.targetBadges: 'step'`, every highlight of a step shows the step's
   number. When a guide step highlights more than one place, Moss's reply now
   names each one ("Click **Search** or **Share**") instead of numbering
-  them 1, 2, 3. This needs the SDK from this release.
-  [Keep the next sentence only if the first-step wording fix lands.] This
-  also covers the reply that starts a guide and highlights its first step.
+  them 1, 2, 3. This needs the SDK from this release. It also covers the
+  reply that starts a guide and highlights its first step.
 
 - No database migrations in this release.
 
@@ -172,7 +169,10 @@ published, but install 0.16.25 instead.
 - After a guide's Exit, clicking the element its step highlighted no longer
   sends the step.
 - After pressing Next, clicking the highlighted element no longer sends the
-  step a second time.
+  step a second time. If Next's request fails, the step comes back, so Next
+  can be pressed again.
+- After exiting a guide with the keyboard, the focus stays in the message
+  input.
 - **The chat panel fits short browser windows.** In a window shorter than
   the panel, the panel opened with its header, and the New chat and Close
   buttons, off screen. It now fits inside the window, shrinking if it has
@@ -185,7 +185,7 @@ published, but install 0.16.25 instead.
 - **Screen readers hear once that Moss is working.** With the default
   loader, a running guide was announced twice, and nothing was announced
   while a request ran after a guide had finished. Each is now announced
-  once.
+  once, and the default loader no longer re-announces as its text animates.
 - **Coming back to a session too old to resume.** The "Starting fresh" card
   no longer has a working indicator behind it, and nothing can be sent to
   the old session from behind the card.
@@ -193,13 +193,16 @@ published, but install 0.16.25 instead.
   first time starts at most one session. Before, it could start a second,
   empty one. The app's settings are also read once per page load, not twice.
 - **Dashboard: long application names.** The desktop sidebar keeps its
-  width. [Keep the next sentence only if the phone-width fix lands.] At
-  phone width, the page no longer scrolls sideways.
-- [Only if the open-position fix lands; wording from that change.]
-  **`openChat` and `toggleChat` open the chat at the position you pass.**
-- [Only if the step-setup retry fix lands; wording from that change.]
-- [Only if the remaining form-field fixes land.] Guides work on more pages
-  whose forms have fields named after built-in page properties.
+  width, and at phone width the pages no longer scroll sideways.
+- **`openChat` and `toggleChat` open the chat at the position you pass.**
+  The position applies to that open only and isn't saved. If the user moves
+  or resizes the chat during that open, their placement is kept.
+- **Next stays available when a click step's setup gives up.** When a
+  step's target couldn't be found, or Next or Exit was pressed while it was
+  being set up, Next beside the input could stay hidden for the rest of the
+  guide.
+- Guides work on more pages whose forms have fields named after built-in
+  page properties or methods, such as `submit`, `closest` or `matches`.
 - **A request the model provider's safety filter blocks gets its own answer.**
   When a filter such as Model Armor or Gemini's safety settings blocks a
   request or its reply, Moss answers "A safety filter blocked this request, so
@@ -247,11 +250,13 @@ published, but install 0.16.25 instead.
   require the Python 3.14.10 build that fixes it.
 - **soupsieve 4.0** in the backend and worker, which fixes CVE-2026-126190
   and CVE-2026-126191 (High).
+- **opentelemetry-api 1.45.2** in the backend and worker, which fixes
+  CVE-2026-126360 (Medium).
+- **URL rules:** page addresses are matched against URL rules with a length
+  limit and a time limit, so an unusual address can't hold up the service.
 
 ### Known issues
 
-- [At the tag: add any known issue the 0.16.25 rehearsal finds, or delete
-  this line.]
 - The 0.16.23 known issues still apply, except the one about a guide's Exit
   control and the note about a missing recordings or snapshots bucket, both
   fixed above.
