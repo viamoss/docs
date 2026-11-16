@@ -9,6 +9,258 @@ icon: "clock-rotate-left"
 Notable customer-visible changes to the Moss SDK (`@viamoss/moss-sdk`) and the
 Moss dashboard. From v0.13.0, the SDK version tracks the Moss platform version.
 
+## 0.16.24–0.16.25 — 2026-11-16
+
+0.16.24 and 0.16.25 are described together. 0.16.24 wasn't published to npm
+or rolled out to hosted Moss, so the SDK and hosted Moss go from 0.16.23
+straight to 0.16.25. 0.16.24's self-hosted images and Helm chart were
+published, but install 0.16.25 instead.
+
+### Added
+
+- **New appearance settings.** All of them are optional, and set under
+  `appearance.chrome` in your integration's code; none is in the dashboard.
+  Unset, nothing looks different.
+  - `relatedArticles.variant`: `'list'` shows the related articles under an
+    answer as plain rows, with titles in the primary text color, a small
+    sentence-case "Related articles" label and a document icon in the primary
+    color. `'cards'`, the default, keeps the bordered cards.
+  - `guideOffer.label` and `guideOffer.icon`: the text and icon of the button
+    that offers a guide. The icon is `'emoji'` (🚀, the default), `'outline'`
+    (an outline rocket in the button's text color) or `'none'`.
+  - `message.paragraphGap`: the space between paragraphs, lists and other
+    blocks in an answer, as a CSS length. Unset, they sit directly on one
+    another.
+  - `startScreen.queryIcons`: your own icon for each built-in
+    suggested-question icon name. Every question uses `document` unless
+    `zeroState.suggestedQueryIcons` is `'per-query'`. A name without an entry
+    keeps the built-in icon.
+  - `startScreen.queryFontWeight`, `queryGap`, `articlesPaddingX` and
+    `articlesRowGap`: the weight of the suggested questions and the gap
+    between them, and the side padding of the recommended articles and the gap
+    between their rows.
+  - `inputBar.paddingY` and `inputBar.lineHeight`: the input text's top and
+    bottom padding, and its line height as a number (`'1.5'`), a length
+    (`'20px'`) or a percentage (`'150%'`).
+  - `inputBar.focusBorder`: the input's border color while it has focus.
+  - `icon` on the footer links: `'external-link'`, `'ticket'`, `'none'`, or
+    your own element, such as an inline SVG. The Help center icon follows its
+    label, and the Open a ticket icon precedes it. Unset, Help center keeps
+    "↗" and Open a ticket has no icon.
+  - `guide.pageTint`: dims the page around a guide's highlight. `true` lays a
+    36% dark tint over it. An object sets `color`, `opacity` (0 to 1), or
+    both. The chat never dims, clicks still reach the page, and an open modal
+    dialog stays clear. The tint holds through step changes and lifts on a
+    step with nothing highlighted. Off by default.
+  - `guide.targetBadges`: `'step'` numbers the highlight's badge
+    with the guide's step number, as in the guide bar. Every target of a step
+    shows that same number, so several targets don't read as separate steps,
+    and targets in one group, such as a row of tabs, share one badge.
+    `'within-step'`, the default, keeps today's numbering.
+  - `guide.nextInBar`: `false` moves Next from the guide bar to
+    beside the input box. Next moves beside the input on every step, click
+    steps included, and hides while Moss works and once the guide is finished.
+    The guide bar then shows only the plan and its progress, and the chat's
+    step loader shows that Moss is working. Unset or `true`, the default,
+    keeps the guide bar's Next. With both
+    `nextInBar` and `nextBesideInput` set to `false` there's no Next at all,
+    and development builds warn in the console.
+  - `loader`: `'steps'` shows a short list of what Moss is doing
+    while it works, such as "Reading the page" and "Planning the next step".
+    Screen readers hear the row in progress, except while the guide bar is
+    already announcing "Working…". `'line'`, the default, keeps the one-line
+    indicator.
+- **Next beside the input box.** On a guide step with nothing to click, and on
+  file-upload and confirmation steps, Next also shows beside the input box.
+  Other click steps look the same as before, and it doesn't show once the
+  guide is finished. The guide bar's Next stays. To keep Next only in the
+  guide bar, set `chrome.guide.nextBesideInput: false`.
+- **Self-hosted: Zendesk calls through a proxy.** A new backend setting,
+  `ZENDESK_USE_ENV_PROXY`, is off by default. When it's on, Moss's Zendesk
+  calls (connecting, syncing the ticket form and filing tickets) go through the
+  `http://` proxy named in `HTTPS_PROXY`. A value without a scheme, such as
+  `proxy.example.com:3128`, is read as `http://`, and `NO_PROXY` is honoured.
+  An `https://` or malformed proxy value isn't used: the request isn't sent,
+  and the sync banner or the connection check says this server couldn't reach
+  Zendesk through the proxy. With the setting off, nothing changes.
+
+### Changed
+
+- **You can type while Moss answers.** The input stays editable during a
+  reply. Send and Enter wait until the reply has arrived, and the text stays
+  in the box. The input is disabled only while the connection is down.
+- **Next sends what you typed.** With text in the input, a guide's Next sends
+  it as your message. With an empty input, Next goes to the next step, as
+  before.
+- **No related articles while a guide runs.** Replies during a running guide
+  don't show the related-articles list. The answer that offers the guide keeps
+  it. Sources that your application's instructions ask for in the answer text
+  are unchanged.
+- **The guide bar shows when Moss is working.** While a request runs, a spinner and "Working…" take
+  Next's place, and screen readers announce it. When the request ends, Next
+  comes back, with the focus if it had it.
+- **The guide offer's default label is "Start guide", and it's translated.**
+  It was "Guide me", in English for every user. Korean users now see 가이드
+  시작.
+- **One line of input text is centred on the send button.** When
+  `chrome.inputBar` is set, in code or in the dashboard, the send button sits a
+  few pixels higher. With several lines, it stays level with the last one.
+- **Zendesk connection errors name the cause.** With host-brokered filing,
+  when **Test & connect** or **Test connection** can't read the end-user ticket
+  form, the message now says why: the HTTP status, a DNS failure, a timeout, a
+  TLS failure, a failed connection, or a reply that isn't a ticket form. A 404
+  also asks you to check the subdomain. Zendesk's reply itself is never shown.
+- **Zendesk sync errors name the cause too.** When a ticket-form sync fails,
+  the "Last sync had a problem" banner, in Configure > Integrations > Zendesk
+  and on the Ticket intake page, now says why: the HTTP status Zendesk
+  answered, a DNS failure, a timeout, a TLS failure, a failed connection, or a
+  reply that couldn't be read. It no longer shows text from Zendesk's reply.
+- **Guide steps and guide offers.**
+  - When a step only asks the user to check something, such as a setting or a
+    status, and the page shows the check passing, Moss says so and gives the
+    next step in the same reply. If the page shows something else, Moss says
+    what it shows and stays on the step.
+  - Choices on the page, such as radio buttons, selects and links, are
+    highlighted, and the user's pick moves the guide on.
+  - A step with nothing to click ends by pointing to Next, without saying
+    where Next is on the screen.
+  - Moss treats a "where is…" question as a how-to. When the answer lists
+    several places in your application, Moss names the most common one and
+    offers a guide there. Questions about places outside your application get
+    no offer. The offer is the answer's last sentence, before any Sources list
+    your instructions ask for.
+- **Browser extensions send the SDK version they bundle, so they get the
+  current guide behavior.** Extension builds sent no SDK version, so their
+  sessions got the older guide behavior whatever the application's
+  `stateless_turn_policy` setting said. Every extension built from this release
+  sends it. Once its new build is installed:
+  - Ending a guide in the chat ends it for Moss too, so the next question
+    isn't answered inside the guide the user left. That covers closing the
+    chat when `closingChatEndsGuide` is on, and filing a support ticket during
+    a guide.
+  - Asking Moss to stop ("stop guiding me", "exit the guide") ends the guide.
+  - A guide with no progress ends on its own: after 2 hours if it was only
+    offered, after 24 hours if it was running.
+  - Moss decides on each question whether to answer it or guide, instead of
+    keeping the mode an earlier question set.
+
+  An extension switches only when its new build is installed. Pages that load
+  a released SDK from npm or the CDN already had this behavior. An application
+  with `stateless_turn_policy: false` keeps the older behavior.
+- **SDK pre-releases get the current guide behavior.** A pre-release of any
+  version after 0.10.0, such as `0.17.0-beta.3`, is now treated like a release.
+  A page that loads one switches when the backend is upgraded, with no new
+  install. Before, every pre-release got the older behavior. A pre-release of
+  0.10.0 itself still does.
+- **Several highlighted places are named, not numbered.** With
+  `guide.targetBadges: 'step'`, every highlight of a step shows the step's
+  number. When a guide step highlights more than one place, Moss's reply now
+  names each one ("Click **Search** or **Share**") instead of numbering
+  them 1, 2, 3. This needs the SDK from this release. It also covers the
+  reply that starts a guide and highlights its first step.
+
+- No database migrations in this release.
+
+### Fixed
+
+- **A guide's Exit button is back.** Open the guide bar's step list: "Exit
+  guide" is at the end of it, and asks before it ends the guide. Exiting
+  removes the guide's highlight, and Moss ends the guide too.
+- After a guide's Exit, clicking the element its step highlighted no longer
+  sends the step.
+- After pressing Next, clicking the highlighted element no longer sends the
+  step a second time. If Next's request fails, the step comes back, so Next
+  can be pressed again.
+- After exiting a guide with the keyboard, the focus stays in the message
+  input.
+- **The chat panel fits short browser windows.** In a window shorter than
+  the panel, the panel opened with its header, and the New chat and Close
+  buttons, off screen. It now fits inside the window, shrinking if it has
+  to, and gets its full size back in a taller window. The same goes after a
+  resize, after Reset Chat Position, and for a position saved on an earlier
+  visit.
+- **Screen readers name the chat header's buttons.** New chat and Close, and
+  on the classic header Reset Chat Position and Change Language, now have
+  names.
+- **Screen readers hear once that Moss is working.** With the default
+  loader, a running guide was announced twice, and nothing was announced
+  while a request ran after a guide had finished. Each is now announced
+  once, and the default loader no longer re-announces as its text animates.
+- **Coming back to a session too old to resume.** The "Starting fresh" card
+  no longer has a working indicator behind it, and nothing can be sent to
+  the old session from behind the card.
+- **One session per first open.** Loading a page or opening the chat for the
+  first time starts at most one session. Before, it could start a second,
+  empty one. The app's settings are also read once per page load, not twice.
+- **Dashboard: long application names.** The desktop sidebar keeps its
+  width, and at phone width the pages no longer scroll sideways.
+- **`openChat` and `toggleChat` open the chat at the position you pass.**
+  The position applies to that open only and isn't saved. If the user moves
+  or resizes the chat during that open, their placement is kept.
+- **Next stays available when a click step's setup gives up.** When a
+  step's target couldn't be found, or Next or Exit was pressed while it was
+  being set up, Next beside the input could stay hidden for the rest of the
+  guide.
+- Guides work on more pages whose forms have fields named after built-in
+  page properties or methods, such as `submit`, `closest` or `matches`.
+- **A request the model provider's safety filter blocks gets its own answer.**
+  When a filter such as Model Armor or Gemini's safety settings blocks a
+  request or its reply, Moss answers "A safety filter blocked this request, so
+  I can't answer it. If it keeps happening on this page, please contact your
+  administrator." It used to ask the user to rephrase. A blocked request counts
+  as blocked, not as an error, and the session shows a blocked step.
+- **SDK rate limits: an unreachable limit store is logged as an error.** With
+  `SDK_RATE_LIMITS_ENABLED` on, a run of skipped checks is logged as an error
+  whatever the cause. Before, only timeouts counted, so a store that refused
+  connections was logged as a warning only.
+- **Each question reaches Moss once.** With the conversation log that's the
+  default since 0.16.1, every typed question went twice into the conversation
+  Moss reads. So Moss took a conversation's first question for a later one and
+  didn't work out the user's goal for the first answer, and a very short
+  question searched the help articles with its words repeated. The first
+  answer stays as fast as before, and Moss now works out the goal alongside it.
+- **Clicking a guide's first step right after Moss offers it no longer ends
+  the guide** with "I couldn't recover this guide."
+- Pressing Next while a click step is still setting up now moves the guide on.
+  Before, the press could be lost, and the guide bar kept showing "Working…".
+- With `closingChatEndsGuide` on, closing the chat right after pressing Next or
+  sending a message no longer leaves the chat busy when it's reopened.
+- Guide highlights no longer fail on pages whose forms have fields named after
+  built-in page properties.
+- **Self-hosted: deleting a user's data and missing buckets.** A deletion is
+  no longer certified complete when the user's files were stored in a bucket
+  that the dashboard backend can't find. The certificate notes the missing
+  bucket, and the request can be retried once the bucket is configured.
+  - **Helm:** `global.storageBuckets.recordings` and `.screenshots` now set the
+    bucket names for both backends. Rendering fails when the two backends name
+    different buckets, so `helm template`, `install` and `upgrade` stop with a
+    message that names the setting. Set each name to the bucket the install
+    already uses; nothing moves.
+  - **Upgrading with `--reuse-values`:** add
+    `--set global.storageBuckets.recordings=rrweb-recordings`, or upgrade
+    without `--reuse-values`. An install that never changed these names and
+    upgrades without it needs no action.
+  - **Known limit:** for an application that recorded sessions before 0.16.1
+    and has since set session recording to anything but on, recordings from
+    before 0.16.1 may not be checked.
+
+### Security
+
+- **Python, CVE-2026-119170 (High): fixed.** The backend and worker images
+  require the Python 3.14.10 build that fixes it.
+- **soupsieve 4.0** in the backend and worker, which fixes CVE-2026-126190
+  and CVE-2026-126191 (High).
+- **opentelemetry-api 1.45.2** in the backend and worker, which fixes
+  CVE-2026-126360 (Medium).
+- **URL rules:** page addresses are matched against URL rules with a length
+  limit and a time limit, so an unusual address can't hold up the service.
+
+### Known issues
+
+- The 0.16.23 known issues still apply, except the one about a guide's Exit
+  control and the note about a missing recordings or snapshots bucket, both
+  fixed above.
+
 ## 0.16.23 — 2026-11-13
 
 ### Added
