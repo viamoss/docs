@@ -9,7 +9,13 @@ icon: "clock-rotate-left"
 Notable customer-visible changes to the Moss SDK (`@viamoss/moss-sdk`) and the
 Moss dashboard. From v0.13.0, the SDK version tracks the Moss platform version.
 
-## 0.16.24 — 2026-11-16
+## 0.16.24–0.16.25 — 2026-11-17
+
+[Date: the 0.16.25 tag date; 2026-11-17 is provisional.]
+
+0.16.24 and 0.16.25 are described together. The SDK on npm and hosted Moss
+go from 0.16.23 straight to 0.16.25. Self-hosted images and the Helm chart
+were published for both versions.
 
 ### Added
 
@@ -91,8 +97,7 @@ Moss dashboard. From v0.13.0, the SDK version tracks the Moss platform version.
   don't show the related-articles list. The answer that offers the guide keeps
   it. Sources that your application's instructions ask for in the answer text
   are unchanged.
-- [Drop if this change is reverted before the tag.] **The guide bar shows when
-  Moss is working.** While a request runs, a spinner and "Working…" take
+- **The guide bar shows when Moss is working.** While a request runs, a spinner and "Working…" take
   Next's place, and screen readers announce it. When the request ends, Next
   comes back, with the focus if it had it.
 - **The guide offer's default label is "Start guide", and it's translated.**
@@ -148,11 +153,52 @@ Moss dashboard. From v0.13.0, the SDK version tracks the Moss platform version.
   A page that loads one switches when the backend is upgraded, with no new
   install. Before, every pre-release got the older behavior. A pre-release of
   0.10.0 itself still does.
+- **Several highlighted places are named, not numbered.** With
+  `guide.targetBadges: 'step'`, every highlight of a step shows the step's
+  number. When a guide step highlights more than one place, Moss's reply now
+  names each one ("Click **Search** or **Share**") instead of numbering
+  them 1, 2, 3. This needs the SDK from this release.
+  [Keep the next sentence only if the first-step wording fix lands.] This
+  also covers the reply that starts a guide and highlights its first step.
 
 - No database migrations in this release.
 
 ### Fixed
 
+- **A guide's Exit button is back.** Open the guide bar's step list: "Exit
+  guide" is at the end of it, and asks before it ends the guide. Exiting
+  removes the guide's highlight, and Moss ends the guide too.
+- After a guide's Exit, clicking the element its step highlighted no longer
+  sends the step.
+- After pressing Next, clicking the highlighted element no longer sends the
+  step a second time.
+- **The chat panel fits short browser windows.** In a window shorter than
+  the panel, the panel opened with its header, and the New chat and Close
+  buttons, off screen. It now fits inside the window, shrinking if it has
+  to, and gets its full size back in a taller window. The same goes after a
+  resize, after Reset Chat Position, and for a position saved on an earlier
+  visit.
+- **Screen readers name the chat header's buttons.** New chat and Close, and
+  on the classic header Reset Chat Position and Change Language, now have
+  names.
+- **Screen readers hear once that Moss is working.** With the default
+  loader, a running guide was announced twice, and nothing was announced
+  while a request ran after a guide had finished. Each is now announced
+  once.
+- **Coming back to a session too old to resume.** The "Starting fresh" card
+  no longer has a working indicator behind it, and nothing can be sent to
+  the old session from behind the card.
+- **One session per first open.** Loading a page or opening the chat for the
+  first time starts at most one session. Before, it could start a second,
+  empty one. The app's settings are also read once per page load, not twice.
+- **Dashboard: long application names.** The desktop sidebar keeps its
+  width. [Keep the next sentence only if the phone-width fix lands.] At
+  phone width, the page no longer scrolls sideways.
+- [Only if the open-position fix lands; wording from that change.]
+  **`openChat` and `toggleChat` open the chat at the position you pass.**
+- [Only if the step-setup retry fix lands; wording from that change.]
+- [Only if the remaining form-field fixes land.] Guides work on more pages
+  whose forms have fields named after built-in page properties.
 - **A request the model provider's safety filter blocks gets its own answer.**
   When a filter such as Model Armor or Gemini's safety settings blocks a
   request or its reply, Moss answers "A safety filter blocked this request, so
@@ -203,12 +249,11 @@ Moss dashboard. From v0.13.0, the SDK version tracks the Moss platform version.
 
 ### Known issues
 
-- [At the tag: add any known issue the rehearsal finds, or delete this line.]
-- [FOR SOOBIN] The guide bar has no Exit button yet. To end a guide, start a
-  new chat. A fix is planned.
+- [At the tag: add any known issue the 0.16.25 rehearsal finds, or delete
+  this line.]
 - The 0.16.23 known issues still apply, except the one about a guide's Exit
-  control (see above) and the note about a missing recordings or snapshots
-  bucket, which is fixed above.
+  control and the note about a missing recordings or snapshots bucket, both
+  fixed above.
 
 ## 0.16.23 — 2026-11-13
 
