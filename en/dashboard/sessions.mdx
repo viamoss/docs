@@ -1,0 +1,261 @@
+---
+title: "Sessions"
+description: "Find a conversation, read its transcript, and see what the assistant did, which procedure guided it, what went wrong and how the user rated it"
+icon: "messages"
+---
+
+The **Sessions** page lists the conversations users have had with Moss in one application. Open a session to read the transcript and see, turn by turn, what the assistant looked up, which procedure guided it, which tools it ran, what went wrong, and how the user rated it.
+
+Open it from the sidebar under **Analyze > Sessions**. Admins and members can both use it.
+
+To find a conversation quickly, paste its session ID into **Go to session ID** at the top of the list, or type words the user wrote into the search box. For common searches, see [Finding the sessions you need](#finding-the-sessions-you-need).
+
+## What a session is
+
+A session is one chat in the widget: the user's messages and the assistant's answers from the first message until the widget starts a new chat. Each session belongs to one application and one user ID, the ID your app passes to Moss. Session IDs start with `cs_`.
+
+The widget decides when to start a new chat: after a period of inactivity, after a maximum age, or when the user asks for one. These chat limits are described in [Sessions](/en/sdk/api/session); the dashboard only shows the result.
+
+The list shows only sessions that have at least one message. A widget that was opened but never used leaves no row here.
+
+### Active and closed
+
+The server also keeps a status for each session, **active** or **closed**:
+
+- A session is closed after **30 minutes** without a message. The server checks every 15 minutes, so a session can stay active for up to about 45 minutes after its last message. On a self-hosted install, the operator can change the 30 minutes with the `SESSION_IDLE_CLOSE_MINUTES` environment variable on the dashboard backend (`dashboard-backend` in the Helm chart).
+- A new message in a closed session makes it active again. The conversation continues in the same session.
+
+This status is separate from the widget's chat limits. Closing a session does not start a new chat in the widget, and a new chat in the widget does not wait for the old session to close. Closing deletes nothing either: how long sessions are kept is set under **Configure > Data & privacy** (see [Data retention and deletion](/en/dashboard/data-privacy)).
+
+You see the status in the `status` column of a **Session summary** export (see [Session data export](/en/dashboard/session-data-export)). It also matters for **Analytics > Top Questions > Topics**, which only reads closed sessions (see [Analytics](/en/dashboard/analytics#top-questions)).
+
+## The Sessions list
+
+### Cards above the list
+
+The three cards count the whole application over all time. Filters and search do not change them.
+
+| Card | What it shows |
+|---|---|
+| **Evaluation Rate** | Of the sessions a user rated, the share rated helpful. A neutral rating (a 3 on the 1 to 5 scale) counts as rated but not helpful. The line under it gives the number of rated sessions. |
+| **Helpful Sessions** | Sessions rated helpful (a thumbs up on the rating card, or a score of 4 or 5). |
+| **Unhelpful Sessions** | Sessions rated unhelpful (a thumbs down on the rating card, or a score of 1 or 2). |
+
+### Columns
+
+| Column | What it shows |
+|---|---|
+| **Initial Query** | The first question the user typed in the session. |
+| **User** | The user ID your app passed. Hover to see an ID that is cut short. |
+| **Created** | When the session started, in your browser's time zone. |
+| **Last Activity** | When the last message was written. |
+| **Steps** | How many messages the session holds: the user's questions, the actions the user took on the page while Moss guided them, and the assistant's answers. A turn that failed or was replaced is not counted. |
+| **Tool runs** | How many steps Moss recorded in the session, not only actions: one filed ticket usually adds several. See [What Tool runs counts](#what-tool-runs-counts). |
+| **Recording** | A camera icon when the session has a recording you can replay. |
+| **Rating** | The user's rating of the whole session: a score from 1 to 5, or a thumbs up or down. Hover to see when it was given and, for a score or a thumbs down, the user's comment. A dash means no rating. |
+
+The list shows 20 sessions per page, the most recently updated first. Click a row to open the session.
+
+### What Tool runs counts
+
+**Tool runs** counts every step Moss recorded in the session, with one exception: the knowledge-base search Moss runs on its own before an answer (shown as `kb_search` in the transcript) is left out. The count includes:
+
+- the assistant's actions: API actions, support tickets (`zendesk_ticket`), handoffs to a support team (`intercom_conversation`), tools from a connected MCP server, and procedure actions;
+- the assistant's own lookups, such as `search_knowledge_base` (a search the assistant chose to make), `get_page_context`, `get_user_metadata` and `report_procedure_state`;
+- events recorded between turns, such as a ticket or handoff being submitted (`handoff_submitted`) or cancelled (`handoff_cancelled`), and the outcome your systems reported;
+- the marker of a turn the AI model provider blocked.
+
+The **Tool runs** filter lists the same names, so it holds lookups and events as well as actions.
+
+### Search
+
+The search box, **Search message text, or paste a session ID...**, finds sessions whose user questions or assistant answers contain the text you type. It ignores case and matches part of a word. You can also paste a full session ID, or its start up to at least the first dash (for example `cs_3f1c9a2e-`), to find that session.
+
+**Go to session ID** opens a session directly. Paste the ID and select **Go**. If Moss finds no session with that ID, the list stays as it was and a message says so.
+
+### Filters
+
+Select **Filters** to narrow the list. Each active filter shows as a chip next to the button; select the **x** on a chip to clear it, or **Reset Filters** to clear them all. Filters and search are kept in the page address, so you can bookmark a filtered list or send it to a colleague.
+
+| Group | Filter | Shows sessions that |
+|---|---|---|
+| **Topic** | Topic | Were tagged with this topic by the topic analysis (see [Topics](/en/dashboard/analytics#top-questions)). The picker lists the 50 most common topics of the last 90 days. |
+| **People & time** | **User ID** | Belong to a user ID that contains the text you type. Matching ignores case, so `42` also finds `user-142`. |
+| | **Created Date** | Started between the two dates. |
+| | **Last Activity** | Had their last message between the two dates. |
+| **Feedback** | **Session Rating** | Were rated **Helpful**, **Unhelpful** or **Neutral** as a whole, or were **Not rated**. |
+| | **Message Rating** | Have at least one answer rated **Helpful**, or at least one rated **Unhelpful**. **Unhelpful** also finds answers the assistant itself corrected in a later turn. |
+| **Outcome** | **Answer status** | **Answered**: every knowledge-base search in the session found a good match. **Content gap**: at least one search did not (see [Content Gaps](/en/dashboard/analytics#content-gaps)). A session that never searched the knowledge base matches neither. |
+| | **Resolution** | **Resolved**: the session was rated helpful, or the user finished an interactive guide in it. **Unresolved**: everything else, including sessions nobody rated. |
+| | **Recording** | Have (**Yes**) or don't have (**No**) a recording. |
+| **Tool runs** | One or more names | Recorded at least one of the steps you tick. The list holds only names recorded in this application, and appears once there is one. Besides tools, it holds lookups and events such as `search_knowledge_base` and `handoff_submitted` (see [What Tool runs counts](#what-tool-runs-counts)). |
+
+Links from the **Analytics** page open this list with filters already set, including some the **Filters** panel does not offer, such as **Article** and **Content-gap window**. They show as chips too. When you came from **Top Questions**, **Back to Top Questions** takes you back to it with the same date range.
+
+## Finding the sessions you need
+
+| You are looking for | Do this |
+|---|---|
+| Answers users disliked | **Filters > Feedback > Message Rating > Unhelpful**. To see the sessions users rated badly as a whole, use **Session Rating > Unhelpful** instead (a score of 1 or 2 counts as unhelpful). |
+| Sessions with a thumbs-down reason | Open a session from the **Message Rating > Unhelpful** list; the reason shows next to the rating on each answer. **Analytics > Feedback** counts the reasons across the application. |
+| Sessions with a support ticket or a handoff to a person | **Filters > Tool runs**, then tick `zendesk_ticket` (Zendesk tickets) or `intercom_conversation` (Intercom handoffs). This finds every session in which the assistant drafted one, including drafts the user cancelled; each session's card says how it ended. In Zendesk itself, tickets from Moss carry the `moss-created` tag (see [Support ticket handoff](/en/sdk/support-ticket-handoff)). |
+| Sessions in which the user followed an interactive guide | There is no filter for this in 0.17.0. **Resolution > Resolved** includes sessions where the user finished a guide, mixed with sessions rated helpful. In a session, each step the user completed on the page shows as its own card (see [The transcript](#the-transcript)), and in a **Full transcript** export it is a `system_continuation` row. |
+| Questions the knowledge base could not answer | **Filters > Outcome > Answer status > Content gap**, or **Analytics > Content Gaps** for the questions themselves. |
+| Sessions that used one knowledge-base article | **Analytics > Articles**, then **Sessions** on the article's row. |
+| One user's sessions | **Filters > People & time > User ID**, or open the user from the **Users** page and select **View All Sessions**. |
+| Sessions with a recording | **Filters > Outcome > Recording > Yes**. |
+
+To work with the results in a spreadsheet, select **Export**. See [Session data export](/en/dashboard/session-data-export) for what each export holds.
+
+## The session page
+
+### Header
+
+- **Back to Sessions List** returns to the list.
+- **API logs** opens the API logs recorded for this session, from 5 minutes before the session started to 5 minutes after its last message. Only admins see this button (see [API logs](/en/dashboard/analytics#api-logs)).
+- The rating circle shows the session's score or thumbs. Hover to see the comment and when the rating was given.
+- **Session ID**, with a copy button.
+- A chip such as **1 support ticket · confirmed #1234** appears when the assistant drafted a support ticket, a handoff or an action proposal in the session. It sums up where each one ended. Select it to jump to the card in the transcript.
+
+Below these are **User** (with a copy button), **Duration** (from when the session started, which can be before the first message, to the last message), **Steps** (the same count as in the list, followed by how many questions the user typed), **Created** and **Last Activity**.
+
+### Guided by
+
+When a [procedure](/en/dashboard/procedures) guided the session, a row names it with the version that was live at the time:
+
+- **Guided by (most recent)** names the procedure that guided the session last.
+- **Guided by (in order)** appears instead when more than one procedure guided the session. It lists them oldest first, with the time each took over and how:
+  - **Matched**: a trigger keyword in the user's message selected it.
+  - **Agent-selected**: the assistant chose it from the published procedures by its description.
+  - **Republished**: the procedure was already guiding the session and a new version was published.
+  - **Stopped — unpublished or deleted**: the procedure was taken down while it was guiding the session.
+
+A procedure that has since been deleted or unpublished shows as **Unresolved procedure** with its ID.
+
+If the user left a comment with their session rating, it appears under **Evaluation comment**.
+
+### The transcript
+
+**Conversation Transcript** shows the session as a series of cards, oldest first, with a date line where the day changes. Each card starts with what prompted the assistant:
+
+- a question the user typed, or
+- an action the user took on the page while Moss guided them, such as **Clicked** or **Entered input**, with a preview of the element they used.
+
+Below it is the assistant's response, from top to bottom:
+
+1. **What the assistant had.** Chips for the page URL, **N documents** (the knowledge-base passages it retrieved, ranked by relevance), **Page Structure** and **Screenshot** when they were captured. Select a chip to open it.
+2. **The steps it took.** One row per recorded step: the tools it ran and its lookups, including the `kb_search` row of the knowledge-base search when one was recorded. Each row has the name, its status, how long it took and, for a ticket or handoff, where it ended up. A row marked **Automatic handoff** ran because a handoff rule matched, not because the assistant chose it. When a procedure ran the tool, the row links to the procedure. Expand a row to see its **Input**, **Output** and run details. A failed tool run that left an API log has an **API log entry** link; the API logs page is for admins only.
+3. **The answer** the user saw.
+4. **How the turn ended**, when it did not end normally: **Failed** (no answer), **In progress** (still being answered) or **Unfinished** (it never reported a result), with a line explaining it.
+5. **Answered by**, when your application has chosen a model on the **Model** card under **Configure > Behavior**: the model, its data processor and region, and how long the turn took, in seconds. It also says when another model answered in its place, or why no model answered. From 0.17.0.
+6. The problems the user was shown, when something went wrong (see [Problems in a turn](#problems-in-a-turn)).
+7. **Ticket, handoff and action cards**, when the assistant drafted a support ticket, handed the user to a support team, or proposed actions for the user to confirm. Each card shows exactly what the user saw, what they changed before submitting, and the outcome your systems reported. The [support ticket guide](/en/sdk/support-ticket-handoff) explains the flow.
+8. **Suggested Action**, when the answer pointed the user to an element on the page, with the kind of interaction (for example `click`).
+9. **The user's feedback** on this answer: a **Helpful** or **Not helpful** badge, the reason they gave after a thumbs down, and **User's comment**. A **Not helpful (AI)** badge means a later answer in the same session corrected this one.
+
+The toolbar above the transcript has:
+
+- **(Re)Evaluate All** and, under each answer, **Evaluate response**. These run an AI judge on the answer and show a **Proper** or **Improper** verdict, scores out of 5 for **Grounding**, **Completeness** and **Clarity** (**LLM Response Quality**) and for **Relevance**, **Coverage** and **Redundancy** (**RAG Retrieval Quality**), the issues it found, a **Suggested Fix**, and its reasoning. Results are saved with the session. Only answers that finished can be evaluated.
+- **Show Debug Info**, which adds each message's sequence number and the raw parts of each answer.
+- **Show Recording** and **Hide Recording**, when the session has a recording.
+
+### Ratings, scores and reasons
+
+Users can rate in two places in the widget:
+
+- **Each answer**, with a thumbs up or down. This is the **Message Rating** filter and the badge on each answer.
+- **The whole session**, on the rating card. This is the **Rating** column and the **Session Rating** filter.
+
+From 0.17.0, two widget options collect more:
+
+- With `chrome.feedback.sessionRating: 'stars'`, the rating card asks for a score from 1 to 5 instead of thumbs. Scores of 4 and 5 count as **Helpful**, 1 and 2 as **Unhelpful**, and 3 as **Neutral**. The dashboard shows the score itself, as "Rated 3 of 5".
+- With `chrome.feedback.askWhatWentWrong: true`, a thumbs down on an answer asks the user what went wrong, with an optional comment.
+
+Both are off unless you set them; see [Appearance](/en/sdk/appearance). The reasons a user can pick are fixed:
+
+| Reason shown | Stored as | Offered after a thumbs down on |
+|---|---|---|
+| Steps didn't match the page | `steps_mismatch` | a guide |
+| Guide was hard to follow | `hard_to_follow` | a guide |
+| Didn't solve the problem | `not_solved` | a guide |
+| Answer was wrong | `wrong_answer` | an answer outside a guide |
+| Didn't answer my question | `not_answered` | an answer outside a guide |
+| Something else | `other` | both |
+
+**Analytics > Feedback** shows the score distribution and how often each reason was given. Exports carry the stored keys.
+
+### Problems in a turn
+
+From 0.17.0, when something goes wrong while Moss answers, it tells the user in the chat, records the problem with the turn, and shows it on the session page under the answer. Each problem shows:
+
+- who can fix it: **The user can fix**, **An admin can fix** or **Moss fixes**;
+- what happened, in words (the table below);
+- the integration and the step involved, when there was one, and a short detail such as an HTTP status;
+- **Open integrations** when the fix is in **Configure > Integrations**;
+- a **Reference**, the session and turn ID, which the user also sees in the chat. Quote it when you contact Moss support.
+
+When a procedure guided the turn, a line above the problems names it and where it stands: **Finished**, **Stopped**, **Waiting on the user** or **Not finished**, with the reason the assistant gave.
+
+| Problem shown | Who can fix | What the user is told |
+|---|---|---|
+| The model was overloaded | Moss | The assistant is busy right now. Try again. |
+| The model took too long | Moss | That took too long to answer. Try again. |
+| A safety filter blocked the request | The user | A safety filter blocked this request. |
+| The model gave no usable answer | Moss | The assistant gave no usable answer. Try again. |
+| The assistant ran out of steps | The user | The assistant ran out of steps. Ask again in smaller parts. |
+| Moss failed | Moss | Something went wrong on Moss's side. |
+| Tools could not be loaded | Moss | Some of the assistant's tools could not be loaded for this answer. |
+| A tool failed | Moss | One of the assistant's tools failed, so this answer was written without it. |
+| The integration did not respond | The user | *Integration* did not respond. |
+| The integration refused the request | The user | *Integration* refused the request. |
+| The integration is rate limiting | The user | *Integration* is receiving too many requests. Try again shortly. |
+| A step did not complete | The user | A step did not complete. |
+| The integration refused Moss's credentials | An admin | *Integration* refused Moss's credentials. |
+| The connection is turned off | An admin | *Integration* is turned off in Moss. |
+| The user is not allowed to run this | An admin | You are not allowed to run this. |
+| The procedure did not finish | The user | This isn't finished yet. |
+| The request could not be read | Moss | The assistant could not read this request. |
+| The control was not found on the page | The user | The assistant could not find that control on this page. |
+
+The user's wording above is the widget's English text; the widget shows it in the chat's language. *Integration* is the connection's name, or "The connected service".
+
+When a step of an action card the user confirmed fails, the card in the chat says why. Two problems are reported only this way: the connection is not set up, and the attached file was not found. On the session page, such a problem is in that step's details (its **Input**) on the turn that proposed the card, not listed with the turn's problems.
+
+The widget can also tell the user about a problem with a request that never became a turn: the page could not sign in, too many requests, an attached file was refused, a card had expired or no longer matched, the connection was lost, or the page could not be read or opened. These are not recorded with a turn, so the session page does not show them. To track them, pass `onError`, which receives every problem the chat shows, with its `code` and reference (see [onError](/en/sdk/events#onerror)). A `Moss Error` event also fires for failed requests, but not for every problem.
+
+### Recordings
+
+When a session has a recording, the session page shows the transcript on the left and a replay of the user's page on the right; **Hide Recording** gives the transcript the full width. When the recording lines up with the transcript, the turn being replayed is highlighted and scrolled into view as the replay plays, and each turn has **Play from here** to jump the replay to it.
+
+A session has a recording only when **Enable Session Replay** is on under **Configure > Behavior**. With the npm package, also set `enableSessionRecording: true` in your `AgentProvider` config.
+
+<Warning>
+  **Changed in 0.17.0.** Before 0.17.0, **Enable Session Replay** counted as on until someone turned it off, so an application that never saved the switch recorded sessions from script-tag installs, and the server did not check the switch for npm installs. From 0.17.0 it is off until an admin turns it on, and the server refuses recordings while it is off, for every install type. After upgrading, an application that never saved the switch stops recording until an admin turns **Enable Session Replay** on.
+</Warning>
+
+See [Dashboard settings](/en/configurations/dashboard-settings) for the switch and [Page data](/en/sdk/page-data) for what a recording captures and the controls over it.
+
+How long recordings are kept is set separately from conversations under **Configure > Data & privacy** (see [Data retention and deletion](/en/dashboard/data-privacy)).
+
+## Common questions
+
+**How long does a session last, and where do I limit it?**
+The widget decides when to start a new chat: by default after 30 minutes of inactivity or 2 hours in all. See [Sessions](/en/sdk/api/session) for where to set both. Separately, the server marks a session closed after 30 minutes without a message, and a new message reopens it.
+
+**Can I see which sessions used an interactive guide?**
+Not with a filter in 0.17.0. See [Finding the sessions you need](#finding-the-sessions-you-need) for what comes closest.
+
+**Where do 1 to 5 scores and thumbs-down reasons show up?**
+Scores: in the **Rating** column, on the session page, under **Analytics > Feedback**, and in both export types. Reasons: on each answer on the session page, under **Analytics > Feedback**, and in the **Full transcript** export. Turn them on in the widget with `chrome.feedback.sessionRating: 'stars'` and `chrome.feedback.askWhatWentWrong: true`.
+
+**How do I tell which tickets came through Moss?**
+In Zendesk, tickets from Moss carry the `moss-created` tag. In the dashboard, filter by **Tool runs > `zendesk_ticket`**: this finds every session in which the assistant drafted a ticket, including drafts the user cancelled, and each session's ticket card shows how it ended and the ticket number your backend returned. See [Support ticket handoff](/en/sdk/support-ticket-handoff).
+
+**What do the "experiencing high traffic" and "that took too long to answer" replies mean?**
+Both mean the AI model did not answer; neither is about traffic on your site. "The service is currently experiencing high traffic" means the model provider kept answering busy or with a server error after Moss retried, or that the model chosen for the application could not answer and no other model is allowed to stand in; the turn shows **The model was overloaded**. "That took too long to answer" means the model did not answer before the turn ran out of time, and it shows **The model took too long**. On a self-hosted install, see [Models and response time](/en/self-hosting/models-and-response-time).
+
+**Why does a session in the list have fewer steps than the transcript shows?**
+**Steps** counts only messages that finished. A turn that failed or is still running is shown in the transcript but not counted.
+
+**How do I delete a user's sessions?**
+Under **Configure > Data & privacy**. See [Data retention and deletion](/en/dashboard/data-privacy).

@@ -1,16 +1,15 @@
 ---
-title: "빠른 설치"
-description: "Moss AI SDK 시작하기"
+title: "빠른 시작"
+description: "React 앱에 Moss 어시스턴트 추가하기"
 icon: "rocket"
 ---
 
-# 빠른 시작 가이드
+# 빠른 시작
 
-몇 단계만으로 AI 어시스턴트를 실행하세요.
+세 단계로 React 앱에 Moss 어시스턴트를 추가하세요. 그 밖의 사이트에서는 [CDN 스크립트 태그](/ko/sdk/installation#cdn-스크립트-태그)를 쓰세요.
 
 <Info>
-    [Moss 대시보드](https://dashboard.viamoss.ai)에서 **애플리케이션 ID**와
-    인증을 위한 JWT 서명 키가 필요합니다.
+    [Moss 대시보드](https://dashboard.viamoss.ai)의 **구성 > 일반**에 표시된 **애플리케이션 ID**와 JWT 서명 키가 필요합니다. [인증](/ko/sdk/authentication)을 참고하세요.
 </Info>
 
 ## 1. SDK 설치
@@ -19,9 +18,13 @@ icon: "rocket"
 npm install @viamoss/moss-sdk
 ```
 
+이 패키지는 비공개입니다. 설치에 쓰는 npm 계정이나 토큰에 패키지 접근 권한이 있어야 합니다. npm이 설치를 거부하면 Moss에 문의하세요.
+
+SDK에는 React 18이 필요합니다. [요구 사항](/ko/sdk/installation#요구-사항)을 참고하세요.
+
 ## 2. 앱에 Moss 추가
 
-애플리케이션에 `AgentProvider`와 `AssistantButton`을 추가하세요. provider는 전체 앱을 감쌀 필요가 **없습니다** — Moss 컴포넌트만 감싸면 됩니다.
+`AgentProvider`와 `AssistantButton`을 추가하세요. 프로바이더는 앱 전체가 아니라 Moss 컴포넌트만 감싸면 됩니다.
 
 ```tsx App.tsx
 import { AgentProvider, AssistantButton } from '@viamoss/moss-sdk';
@@ -44,57 +47,76 @@ function App() {
 ```
 
 <Tip>
-    `AgentProvider`는 Moss UI 컴포넌트만 감싸면 됩니다. React 트리에서 어디에
-    위치하든 전체 페이지 DOM을 관찰합니다.
+    `AgentProvider`는 React 트리의 어디에 있든 페이지 전체를 읽습니다.
 </Tip>
+
+<Warning>
+    Next.js처럼 서버에서 렌더링하는 프레임워크에서는 SDK를 브라우저에서만 불러오세요. 그러지 않으면 import에서 오류가 납니다. [서버 사이드 렌더링](/ko/sdk/installation#서버-사이드-렌더링)을 참고하세요.
+</Warning>
 
 ## 3. 인증 설정
 
-사용자를 위한 JWT 토큰을 생성하는 백엔드 엔드포인트를 만드세요. 전체 설정 방법은 [인증 가이드](/ko/sdk/authentication)를 참조하세요.
+로그인한 사용자를 위해 토큰에 서명하는 백엔드 엔드포인트를 만드세요. 위의 `fetchMossToken()`이 이 엔드포인트를 호출합니다. 전체 설정은 [인증](/ko/sdk/authentication)을 참고하세요.
 
-```typescript api/moss-token.ts
-// Next.js API 라우트 예시
+```typescript app/api/moss-token/route.ts
+// Next.js App Router 라우트 핸들러, /api/moss-token에서 제공됩니다
 import jwt from 'jsonwebtoken';
+import { getCurrentUser } from '@/lib/auth'; // 자체 세션 조회
 
 export async function GET(request: Request) {
   const user = await getCurrentUser(request);
+  if (!user) {
+    return new Response('Unauthorized', { status: 401 });
+  }
 
   const token = jwt.sign(
-    { sub: user.id, app: 'YOUR_APP_ID' },
-    process.env.MOSS_JWT_SECRET,
-    { expiresIn: '1h', header: { kid: process.env.MOSS_KEY_ID } }
+    {
+      sub: String(user.id),                // 필수: 사용자 ID, 문자열로
+      app: 'YOUR_APP_ID',                  // 필수: Moss 애플리케이션 ID
+    },
+    process.env.MOSS_JWT_SECRET!,          // moss_sk_… 비밀 키
+    {
+      algorithm: 'HS256',
+      expiresIn: '1h',                     // exp를 설정합니다. iat는 jsonwebtoken이 추가합니다
+      keyid: process.env.MOSS_KEY_ID!,     // key_… ID, kid 헤더로 전송됩니다
+    }
   );
 
   return Response.json({ token });
 }
 ```
 
+```typescript
+async function fetchMossToken(): Promise<string> {
+  const response = await fetch('/api/moss-token');
+  if (!response.ok) throw new Error('Could not get a Moss token');
+  return (await response.json()).token;
+}
+```
+
 ## 다음 단계
 
-완료했습니다! 이제 Moss AI 어시스턴트가 애플리케이션에 플로팅 액션 버튼으로 나타납니다.
+이제 앱 오른쪽 아래에 Moss의 플로팅 버튼이 나타납니다. 버튼을 클릭하면 채팅이 열립니다.
+
+서비스를 공개하기 전에 Moss가 페이지에서 무엇을 읽어도 되는지 정하세요. 네이티브 폼 필드(`input`, `textarea`, `select`)의 값은 기본으로 마스킹되지만, 비전 스크린샷에서는 마스킹되지 않습니다. 다른 요소로 만든 커스텀 컨트롤을 포함해 그 밖의 민감한 영역에는 `data-moss-redact`를 붙이세요.
 
 <CardGroup cols={2}>
     <Card
-        title="인증"
-        icon="lock"
-        href="/ko/sdk/authentication"
+        title="페이지 데이터와 개인정보"
+        icon="shield-halved"
+        href="/ko/sdk/page-data"
     >
-        전체 JWT 인증 설정
+        Moss가 읽는 것과 그 범위를 제한하는 방법
     </Card>
     <Card
         title="설정"
         icon="gear"
-        href="/ko/configurations/overview"
+        href="/ko/sdk/configuration"
     >
-        SDK 동작 및 옵션 사용자 정의
+        모든 SDK 옵션
     </Card>
 </CardGroup>
 
 ## 도움이 필요하신가요?
 
-<Tip>
-    애플리케이션 ID, JWT 서명 키 및 자세한 분석을 위해
-    [대시보드](https://dashboard.viamoss.ai)를 확인하세요.
-</Tip>
-
-문제가 발생하면 지원팀에 문의하거나 [문제 해결 가이드](/ko/sdk/advanced#troubleshooting)를 확인하세요.
+버튼이 나타나지 않거나 채팅이 연결되지 않으면 [문제 해결 가이드](/ko/sdk/advanced#문제-해결)를 참고하세요.

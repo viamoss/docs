@@ -1,0 +1,304 @@
+---
+title: "Data & privacy"
+description: "Choose how long Moss keeps each type of data, delete one user's data, and see what an application collects"
+icon: "user-shield"
+---
+
+**Configure > Data & privacy** is where an admin sets how long an application's data is kept and deletes one user's data on request. The page was rebuilt in 0.17.0: on 0.16.x, **Configure > Data & Privacy** holds only the traffic log (API logs). Its retention settings, user-deletion screens and capture summary are new in 0.17.0; deleting a user's data through the API already existed.
+
+**Automatic deletion is off for every application until an admin turns it on.** While it is off, Moss keeps conversations, screenshots, recordings, page snapshots and API logs until someone deletes them.
+
+The page has four cards:
+
+- **What Moss collects**: which kinds of capture are on for this application.
+- **How long data is kept**: a period for each type of data, and the **Automatic deletion** switch.
+- **Delete a user's data**: deletes everything this application holds about one person, with a status and a certificate.
+- **Collect detailed API logs**: the switch that records API requests and responses.
+
+**Change history**, at the top right, opens the audit log filtered to changes made on this page.
+
+Data & privacy is under **Configure**, so only admins can open it. Every setting on it applies to one application.
+
+<Note>
+    The chat's own session limits (how long before the widget starts a new chat) delete nothing. They are described in [Sessions](/en/sdk/api/session). How long data is stored is set on this page.
+</Note>
+
+## What Moss collects
+
+This card shows the application's capture settings as chips. Each chip links to where you change it; **Change in Behavior** opens **Configure > Behavior**.
+
+| Chip | On when | Change it in |
+| --- | --- | --- |
+| **Vision screenshots** | **Enable Vision** is on and the application sends full page context | **Configure > Behavior > Core Features** |
+| **Full page text** | The application sends full page context, which it does while **On-screen guidance** is on (the default) | **Configure > Behavior > Core Features** |
+| **Session Replay** | **Enable Session Replay** is on | **Configure > Behavior > Core Features** |
+| **Screen history for AI** | **Enable Screen History for AI** is on | **Configure > Behavior > Core Features** |
+| **API logs** | API log recording is on | **Analyze > API logs**, or the switch at the bottom of this page |
+| **Masking** | **Backend PII filtering** is on. It reads **Masking: standard rules**, or **Masking: standard + N rules** when additional or custom patterns are on; **Masking: off** otherwise | **Configure > Security** |
+
+The chips show the application's settings, not what each page does. Your page's code can change some captures, and the server doesn't check them against these settings:
+
+- `useVision` turns screenshots on or off, whatever **Enable Vision** says.
+- `pageContext` and `enableScreenHistoryRecording` set page context and screen history, in either direction. On the CDN script they override the application's settings when the page sets them in `window.mossSettings`; an npm install uses only its own config for both.
+- Session recording is the exception: a page can turn it off, but the server refuses recordings while **Enable Session Replay** is off.
+
+What each kind of data is, and every control over it, is in [Data protection](/en/security/data-protection) and [Page data](/en/sdk/page-data).
+
+## How long data is kept
+
+### Automatic deletion
+
+**Automatic deletion** is the switch at the top of the card. It is off by default, and the card says **Automatic deletion is off. Everything is kept until you delete it.**
+
+To turn it on:
+
+1. Choose a period for each type of data in the table (see [Periods](#periods)), or leave the defaults.
+2. Turn on **Automatic deletion**.
+3. The **Turn on automatic deletion?** dialog lists the period that will apply to each type. Periods you didn't choose are marked **Default, not chosen by you**.
+4. Tick **I understand that data older than these periods will be deleted for good.** and click **Turn on**.
+
+What happens next:
+
+- **Existing data counts.** Everything already older than its period is deleted, including files saved before version 0.17.0. It can't be recovered.
+- **Deletion happens in scheduled runs**, not when you save. The line next to the switch shows **On · waiting for first run** until the first run, then **On · last run** and when.
+- **The periods are fixed when you turn it on.** The periods listed in the dialog are saved with the application, so a later change to Moss's defaults doesn't change them.
+- **A large backlog can take several runs.** The table's **Last deleted** column shows, for each type, how many items were deleted and when.
+
+While automatic deletion is on, making a period shorter asks first, for example **Keep Screenshots for less time?**: data older than the new period is deleted at the next run. Making a period longer deletes nothing.
+
+Turning **Automatic deletion** off takes effect at once and stops further runs, including one in progress. It doesn't bring back anything already deleted.
+
+### Periods
+
+| Data | Default once Automatic deletion is on | The period counts from |
+| --- | --- | --- |
+| **Conversations** | Keep until deleted | The conversation's last message |
+| **Screenshots** | 7 days | When each screenshot was taken |
+| **Recordings (Session Replay)** | Keep until deleted | When recording started |
+| **Page snapshots** | Keep until deleted | When each page was saved |
+| **API logs** | 90 days | When each request was made |
+
+For each type, choose **7 days**, **30 days**, **90 days**, **1 year**, **Keep until deleted**, or **Custom…**, a whole number of days from 1 to 36,500. The default for each type is marked **(default)**.
+
+A screenshot, recording, page snapshot or API log that belongs to a conversation can also go earlier, when its conversation is deleted. The table says so under the period, for example **Or with its conversation, 30 days after its last message.**
+
+### What goes with a conversation
+
+When a conversation reaches its period, Moss deletes the whole conversation:
+
+- its messages, screenshots, recording, page snapshots, uploaded files and API logs;
+- the evaluation scores, conversation insights, monitor results and help-desk handoff records that came from it.
+
+Suggestions that cited the conversation are kept, but lose their link to it and the text written from it.
+
+**A user goes with their last conversation.** Once a user has no conversation left, and their profile hasn't changed for the Conversations period, the profile is deleted too.
+
+### When a conversation counts as closed
+
+Automatic deletion takes only closed conversations, so it never deletes a chat that is still going on.
+
+- The server closes a conversation after 30 minutes without a message (by default). It checks every 15 minutes, so a conversation can stay open for up to 45 minutes after its last message.
+- A new message in a closed conversation reopens it, and its period starts again from that message.
+- A conversation with a support ticket that may still be filed is kept while that ticket can still be filed.
+
+This is not the chat's session timeout. The timeout and maximum age in [Sessions](/en/sdk/api/session) only decide when the widget starts a new chat; they close and delete nothing on the server.
+
+### Minimums and legal hold
+
+Your Moss administrator can set two controls that admins can't change on this page: Moss on the Moss-hosted service, or your operator on a self-hosted install.
+
+**A minimum** is the shortest period allowed for a type of data. A minimum only ever keeps data longer:
+
+- The type's row shows **Minimum N days, set by your Moss administrator.**
+- If you chose a shorter period, Moss keeps the data for the minimum instead, and the row shows both: **You chose X days. Minimum N days, set by your Moss administrator.**
+- Deleting a conversation deletes its screenshots, recording, page snapshots and API logs, so Conversations is kept at least as long as the largest of their minimums.
+- API logs inside the minimum can't be deleted by hand on **Analyze > API logs** either.
+
+**A legal hold** stops all deletion for the application. The card says deletion is **Paused by a legal hold**, gives the date the hold began, and adds **Nothing is deleted while it's on.** While the hold is on:
+
+- automatic deletion doesn't run, and neither the switch nor the periods can be changed (**Locked by a legal hold. Managed by your Moss administrator.**);
+- **Delete a user's data** refuses new requests and retries, and records nothing;
+- API logs can't be deleted by hand;
+- the application's audit events are not deleted by age.
+
+On the Moss-hosted service, contact Moss support about a legal hold.
+
+### What automatic deletion doesn't cover
+
+The card lists what it doesn't reach:
+
+- **Tickets already sent to your help desk.**
+- **Copies in the user's browser.**
+- **Your backups.**
+- **Audit events, kept for a period your Moss administrator sets.** The period is 365 days unless they change it. See [Audit logging](/en/security/audit-logging).
+- **Guide events from tours and surveys, until you delete the user.**
+
+Automatic deletion acts on the application's records in Moss's database and its files in file storage. It doesn't remove earlier versions of a file that the file storage keeps, and it sends no request to delete anything to a model provider or another outside service.
+
+### Status and problems
+
+The line next to the switch shows where automatic deletion stands:
+
+| Status | Meaning |
+| --- | --- |
+| **Off** | Nothing is deleted automatically. |
+| **On · waiting for first run** | Turned on; the first run hasn't happened yet. |
+| **On · last run** and when | Running normally. |
+| **On · behind** | Some data is more than a day past its period, or the application is waiting its turn. It catches up on its own. |
+| **On · last run failed** | The last run failed. It tries again on the next run. |
+| **On · not running yet** / **On · stopped running** | No run has happened for longer than expected. |
+| **Paused by a legal hold** | See [Minimums and legal hold](#minimums-and-legal-hold). |
+
+When something is wrong, a banner above the table says what, with **Details**. **Automatic deletion details** lists **Recent runs** and **What to do**: on the Moss-hosted service it tells you when to contact Moss support, and on a self-hosted install it shows the commands your operator can run.
+
+## Delete a user's data
+
+Use this to delete everything an application holds about one person, for example when they ask you to erase their data. **It can't be undone.**
+
+### Steps
+
+1. Open **Configure > Data & privacy** and click **New request** on the **Delete a user's data** card.
+   You can also start from the user: **Analyze > Users**, open the user, then **Danger zone > Delete this user's data > Review deletion**.
+2. **Find the user.** Type the start of their user ID (at least 3 characters) and pick them from **Matching users**. For a shorter ID, or a user Moss has no profile for, type the whole ID and choose **Use the exact ID**. Each match shows whether there is a profile, how many conversations they have, when they were last seen, and whether the ID also appears **In API logs** or **In guide events**.
+3. **Review deletion.** The page lists **What gets deleted**, **What gets edited** and **What isn't deleted** (below).
+4. Optionally enter a **Ticket reference**, such as your privacy-request number. It is shown on the request and its certificate.
+5. Type the user ID where the page asks you to (**Type** the ID **to confirm**) and click **Delete this user's data**.
+
+The request page opens and updates on its own. If Moss has no data for the ID, the button reads **Record request** instead: Moss deletes nothing but records the request, so you have a certificate showing you handled it.
+
+A user can have only one open request at a time. A second one is refused with **This user already has an open request. Nothing new was recorded.**, with a link to the open one. A **Failed** request still counts as open: use **Retry** on it.
+
+### What is deleted, and what isn't
+
+| What gets deleted | What isn't deleted |
+| --- | --- |
+| Their profile | Backups and earlier file versions, until they expire |
+| Every conversation, with its messages, screenshots, recordings, page snapshots and attachments | Copies outside Moss, such as help-desk tickets already sent and the user's browser |
+| Evaluation scores, insights, monitor results and help-desk handoffs from those conversations | Other audit records of admin actions |
+| API logs and guide events with this user ID | This request, kept as proof of the deletion |
+| Audit records about this user, including your team's reviews and reads of their conversations, except those an audit minimum keeps (below) | |
+
+**What gets edited:** suggestions that cited the user's conversations lose their links to them and the text written from them. Nothing else in the suggestion changes.
+
+**If your Moss administrator sets an audit minimum** (none by default), some audit records about the user are kept: records of an action by your team or an API key that hold no content, namely evaluations of the user's conversations, deletions of their metadata and AI-assistant tool calls, and that are younger than the minimum. They stay until the normal audit period removes them, and the certificate's JSON lists them as retained.
+
+While a user's deletion request is open, their list of earlier chats in the widget is empty.
+
+### Statuses
+
+| Status | Meaning |
+| --- | --- |
+| **In progress** | Deleting now. |
+| **Taking longer than expected** | Running for 15 minutes or more. **Retry** runs it again under the same request ID. |
+| **Queued** | Waiting to run. With **Finishes at the next automatic deletion run**, it finishes at the next scheduled deletion run. With **Waits for automatic deletion, which isn't running**, nothing will run it until deletion is scheduled; see [Self-hosted installs](#self-hosted-installs). |
+| **Done** | The run finished. The page shows the date, what was deleted and the certificate. |
+| **No data found** | Moss held no data for this ID. The request is kept as a record. |
+| **Failed** | It stopped before finishing, and some items may already be deleted. The page says why. Click **Retry**. |
+
+A request waits for the next scheduled run when it can't finish at once, for example when another deletion in the application is running at the same moment, or when the user's audit records can only be removed by the scheduled job.
+
+**All requests** opens **Deletion requests**, which lists every request in the application, with who asked, the reference, the status and how many items were deleted. Search by the start of a user ID or by ticket reference.
+
+### The certificate
+
+When a request is **Done**, its page shows a **Certificate**:
+
+- The headline is **Verified: no records found for this user in this app** when every check passed, or **Not fully verified.** with the reason and what to do.
+- Rows show whether **Data in this app** and **Audit records about this user** were verified, how many **Records left**, and when it was **Checked**.
+- **Not covered** is always **Backups, earlier file versions and copies outside Moss**.
+- **Kept** is the request itself, as proof of the deletion.
+
+**View certificate (JSON)** shows the full certificate. Its `deleted_items` holds the count for each kind of data, and `verification.complete` is `true` only when the request finished, nothing remains and the audit records about the user were verified. `verification.not_verified` always lists historical object versions, backups and external processor copies.
+
+The request and its certificate are kept as proof. Your Moss administrator can set a period after which completed requests are deleted; by default they are kept.
+
+### With the API
+
+The same requests are available on the dashboard API, signed in as an admin of the application's organization:
+
+| Method and path | What it does |
+| --- | --- |
+| `POST /api/v1/applications/{application_id}/deletion-requests` | Body `{"user_id": "…", "request_reference": "…"}` (`request_reference` optional). Returns `201` with the request and its `status`. |
+| `GET /api/v1/applications/{application_id}/deletion-requests` | Lists requests. |
+| `GET /api/v1/applications/{application_id}/deletion-requests/{request_id}` | One request and its status. |
+| `GET /api/v1/applications/{application_id}/deletion-requests/{request_id}/certificate` | The JSON certificate, once the request is `completed`. Earlier it answers `400`. |
+| `POST /api/v1/applications/{application_id}/deletion-requests/{request_id}/retry` | Runs a failed or stalled request again under the same ID. New in 0.17.0. |
+
+A legal hold refuses a new request or a retry with `423` and code `legal_hold`, and records nothing. A second request for a user with an open one gets `409` with code `request_open`. A `201` doesn't mean the data is gone: check the request's `status`.
+
+## Collect detailed API logs
+
+The last card holds the switch **Collect detailed API logs**: "Record supported API requests and responses for this application." It is off by default.
+
+- It is the same setting as **Record API logs** on **Analyze > API logs**. That switch asks for confirmation first and says how long logs will be kept.
+- Turning it off stops recording. Logs already recorded stay, as the card says (**Capture is off. Existing logs remain available.**), until the **API logs** period or a manual delete removes them.
+- From 0.17.0, request and response bodies are masked before they are stored. What is masked, and what 0.16.x did, is in [Data protection](/en/security/data-protection#masking-in-api-logs).
+- On 0.16.x this switch is **Enable Traffic Log**, and the list of logs is on this page. From 0.17.0 the list is under **Analyze > API logs**.
+- An application created by importing a bundle starts with recording off.
+
+To view, export or delete API logs, see [API logs](/en/dashboard/analytics#api-logs).
+
+## Change history
+
+**Change history** opens **Configure > Audit Log** showing the last 90 days of:
+
+- changes an admin made to Automatic deletion or a period;
+- changes your Moss administrator made to a minimum or legal hold;
+- retention settings moved from an earlier version during the upgrade to 0.17.0;
+- changes to API log recording.
+
+Each retention change shows who made it and the values before and after. Automatic deletion runs are recorded separately and are not in this view. See [Audit logging](/en/security/audit-logging).
+
+## Self-hosted installs
+
+On a self-hosted install, deletion is done by one scheduled job, the retention CronJob, which your operator sets up. It serves every application on the install and runs every 15 minutes by default. It is off until your operator turns it on. Setup and sizing are in [Operations](/en/self-hosting/operations#the-retention-cronjob).
+
+Without the job:
+
+- **Nothing is deleted automatically.** An admin can still turn Automatic deletion on, but the card then says **Automatic deletion is on, but no schedule runs it.** While Automatic deletion is off, it says **Automatic deletion isn't scheduled on this install yet.**
+- **Some user deletions can't finish.** A request that has to wait shows **Queued** with **Waits for automatic deletion, which isn't running**. The request page shows the command your operator can run to finish it.
+
+So set up the job even if you keep Automatic deletion off.
+
+If the job has no access to file storage, **Automatic deletion details** shows: **File storage isn't set up on this install, so only API logs are deleted. Conversations, screenshots, recordings and page snapshots are kept until it is.** Your operator must give the job the same file storage the backends use.
+
+Your operator also sets the minimums and legal holds, an audit minimum (none by default; see [What is deleted, and what isn't](#what-is-deleted-and-what-isnt)), and how long audit events (365 days by default) and completed deletion requests (kept by default) are kept.
+
+## Before 0.17.0
+
+On 0.16.x, **Configure > Data & Privacy** shows only the traffic log: the **Enable Traffic Log** switch, the list of logged requests and its export. There are no retention periods and no deletion requests in the dashboard:
+
+- Nothing is deleted automatically. Conversations, screenshots, recordings, page snapshots and API logs are kept until deleted. An API-log period can be saved through the API on 0.16.x, but nothing applies it, and it isn't carried into 0.17.0.
+- A user's data is deleted only through the API: `POST /api/v1/applications/{application_id}/deletion-requests`, then `GET` the request for its status and certificate. There is no **Retry**.
+- Audit events are deleted after 365 days, as on 0.17.0.
+
+When an install upgrades to 0.17.0, every application starts with Automatic deletion off. Nothing is deleted until an admin turns it on (and, on a self-hosted install, the retention CronJob runs).
+
+## Common questions
+
+**Does Moss delete anything automatically by default?**
+No. Automatic deletion is off for every application until an admin turns it on here. Audit events are the exception: they are deleted after the period your Moss administrator sets, 365 days by default.
+
+**If we turn automatic deletion on, what happens to data we already have?**
+It counts. At the first run, everything already older than its period is deleted, including files saved before 0.17.0. See [Automatic deletion](#automatic-deletion).
+
+**We set the chat session timeout to 30 minutes. Does that delete conversations?**
+No. The timeout only decides when the widget starts a new chat. In the dashboard, conversations are deleted only by Automatic deletion or a request to delete a user's data. See [When a conversation counts as closed](#when-a-conversation-counts-as-closed).
+
+**How do we delete one person's data and prove it?**
+Use [Delete a user's data](#delete-a-users-data). When the request is **Done**, its certificate shows what was deleted and what was verified, and you can view it as JSON. Backups and copies outside Moss are not covered.
+
+**Does deleting a user remove tickets we sent to our help desk?**
+No. Tickets already filed in your help desk stay there; delete them in that tool. Moss deletes its own handoff records for the user's conversations.
+
+**Can we bring back data after turning automatic deletion off?**
+No. Turning it off stops further deletion; anything already deleted is gone.
+
+**Who can set a legal hold or a minimum?**
+Your Moss administrator: Moss on the Moss-hosted service, or your operator on a self-hosted install. Admins see them on this page but can't change them.
+
+**Do these settings copy over when we export an application?**
+The periods you chose do. Automatic deletion, legal holds and minimums don't, so an imported application starts with Automatic deletion off. API log recording also starts off.
+
+**Where are screenshots and recordings stored, and what goes to the model?**
+See [Data protection](/en/security/data-protection).

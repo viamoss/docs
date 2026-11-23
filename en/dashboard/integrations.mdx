@@ -1,0 +1,353 @@
+---
+title: "Integrations"
+description: "Connect Document360, Intercom, your own APIs, your MCP server and Zendesk to an application"
+icon: "plug"
+---
+
+**Configure > Integrations** connects an application to outside services. It has five cards in two groups:
+
+- **Knowledge sources**: [Document360](#document360) and [Intercom](#intercom) bring help articles into the knowledge base. Intercom can also hand users to your support team.
+- **Actions & APIs**: [Custom API actions](#custom-api-actions), [MCP server](#mcp-server) and [Zendesk](#zendesk) give procedures tools that act for the user: call your API, call your MCP server's tools, or file a support ticket.
+
+The Configure pages are for admins only. Everything on this page applies to one application; set it up again in each application that needs it.
+
+<Note>
+    The tools on this page are used through **published procedures**. A procedure lists the tools it may use under **Tools it can use**, and the assistant calls a tool only while that procedure is running. The one exception is the default support handoff to Zendesk or Intercom, described below. See [Procedures](/en/dashboard/procedures).
+</Note>
+
+<Note>
+    The **MCP server** card lets Moss call tools on **your** MCP server. It is not how outside AI assistants (such as a desktop chat app) connect to Moss; that is [AI assistants](/en/dashboard/ai-assistants).
+</Note>
+
+## Document360
+
+The **Document360** card stores the credentials Moss uses to import your Document360 articles. Enter an **API token**: a v2 API token with GET permission on Project Versions, Categories and Articles, or, from 0.17.0, an enhanced (v3) API key, which needs the Draft writer or Editor content role with access to the workspaces you import. Choose the **Host** (Default, US, or a custom `apihub.<region>.document360.io`). Click **Save**, then **Test connection**. Then add the articles as a source under **Content > Knowledge Base**; how sources import and refresh is covered in [Knowledge base](/en/dashboard/knowledge-base).
+
+## Intercom
+
+<Info>
+    New in 0.17.0.
+</Info>
+
+The **Intercom** card connects an Intercom workspace. It does two things:
+
+1. **Help Center articles as a knowledge source.** After you connect, add the articles under **Content > Knowledge Base** with **Add Content > Intercom**. See [Knowledge base](/en/dashboard/knowledge-base).
+2. **Handing a user to your support team** in an Intercom conversation inside the chat, when a procedure allows it or when Intercom is the application's support destination.
+
+### Connect Intercom
+
+1. Open **Configure > Integrations > Intercom**.
+2. Paste an **Access token**. Create it in Intercom under **Settings > Integrations > Developer Hub > your app > Authentication**. For articles, the token must be able to read Help Center articles and collections. Handing users to your team also uses this token to open conversations, reply in them, add internal notes, tag them, set their attributes, assign them to a team and mark them read.
+3. Choose the **Workspace region**: **US** (`api.intercom.io`), **EU** (`api.eu.intercom.io`) or **Australia** (`api.au.intercom.io`). The token is checked against this region when you save.
+4. Click **Save**. **Test connection** then reports how many Help Center collections Moss can see.
+
+**Clear** removes the stored token. Sources you already imported stay, but later imports from Intercom fail until you enter a token again. It also stops handing users to Intercom and forgets the **Handoff team**.
+
+### Handing users to your support team
+
+These settings appear once a token is saved.
+
+| Setting | What it does |
+|---|---|
+| **Handoff team** | The Intercom team a conversation is assigned to when a user asks for a person. Choose **Let my Intercom Workflow route it** if an Intercom Workflow already routes new conversations; Moss never does both. |
+| **Conversation attributes** | One switch per Sentiment or Urgency list attribute in your workspace. When a user asks for a person, Moss judges the conversation and fills in the attributes that are on, so your Intercom rules can act on them. Switch one off to leave it to your own rules. If the workspace has no such attribute, Moss writes none. |
+| **Hand off at once when** | Conditions on Sentiment (positive, neutral, negative) and Urgency (high, medium, low). Moss judges each message, and when one matches, the Intercom conversation opens right away without the AI answering. Click **Save conditions**. |
+
+The conditions are active only when the application's default handoff goes to Intercom. If it goes elsewhere, the card says so and the conditions are off. When Zendesk filing is **Live** as well, each procedure decides where it hands off: a procedure allows `intercom_conversation` or `zendesk_ticket` under **Tools it can use > Built-in**.
+
+Moss finds the user in Intercom by contact: the Intercom contact's `external_id` must be the user ID in the Moss token's `sub` claim (the same value your page passes as `userId`). Moss does not create contacts. If no contact matches, the assistant tells the user support can't be reached from the chat.
+
+## Custom API actions
+
+The **Custom API actions** card connects your own HTTP APIs. A **connection** holds the base URL and the credential; each **action** on it is one operation the assistant can call, such as `track_shipment`.
+
+### Add a connection
+
+Click **Add connection** and choose how to start:
+
+- **Import OpenAPI spec**: paste an OpenAPI 3.x JSON spec or give its URL, click **Parse spec**, tick the operations you want and click **Import selected**. Each operation becomes an action.
+- **Manual**: fill in the fields below and click **Create connection**, then add actions from the connection page.
+
+| Field | What it is |
+|---|---|
+| **Display name** | The name shown in the dashboard, for example "Shipping API". |
+| **Connection name** | The identifier procedures refer to, for example `shipping_api`. It must be unique in the application. |
+| **Auth type** | `none`, `bearer` (a **Bearer token**), `api key` (a **Header name** and a **Key**) or `basic` (**Username** and **Password**). Stored secrets show as "configured — leave blank to keep". Changing the auth type deletes the stored credential. |
+| **Base URL** | Must be an `https://` URL on a public host. Anything else is built and shown but never sent. |
+
+### Add actions
+
+On the connection page, click **Add action**.
+
+| Field | What it is |
+|---|---|
+| **Name** | The name the assistant calls. Letters, numbers and underscores. |
+| **Display name** | Shown in the dashboard. |
+| **Description** | The assistant reads this to decide when to call the action. Write it for the model. |
+| **Method** and **Path** | The endpoint, relative to the base URL, for example `GET /track/shipments`. |
+| **Request fields** | Each value the assistant fills in: **Field name**, **Sent in** (Query, Path, Header or Body; from 0.17.0 also File: a file the user attached in the chat, sent as a multipart part when the user confirms the step; file attachments are a Beta chat option, see [Appearance](/en/sdk/appearance)), **Type** (Text, Number, Whole number, Yes / No), **Required**, and a **Description** the assistant reads to know what to put there. |
+| **Batch rules** | Optional, from 0.17.0. Checked before the confirmation card when the assistant runs several actions together: **Fill from an earlier step** (a field takes its value from an earlier action's result in the same batch), **Check an id exists** (the batch stops if the id is not in a list action's result), **Require one of several fields**. |
+
+Fields named `company_id`, `tenant_id`, `org_id` or `organization_id` are filled with the signed-in user's company from the user's token, whatever the assistant writes, and a `user_id` field must be the signed-in user. See [what your page must pass](#what-your-page-must-pass).
+
+### Dry run and live calls
+
+A new connection is in **dry run**: Moss builds and records each request but never sends it, and the assistant tells the user it could not do that step. Turn on **Enabled** on the connection page when you are ready; actions then call the real API. The connection's status shows **Live**, **Dry run**, **Needs credentials** or **URL unsupported**.
+
+To check an action without calling anything, open it and click **Test**, enter **Test inputs** and click **Run dry-run test**. The page shows the request Moss would send under **Request (not sent)**.
+
+Actions that read (`GET`, `HEAD`) run as soon as the assistant calls them. From 0.17.0, any other method is treated as changing data: the assistant puts it on a confirmation card, and nothing is sent until the user confirms. **Recent problems** on the connection page (new in 0.17.0) lists steps that failed.
+
+## MCP server
+
+<Info>
+    New in 0.17.0.
+</Info>
+
+The **MCP server** card connects one MCP server to the application. Moss loads the server's tools, with their names, descriptions and parameters, and procedures can use them like API actions.
+
+### Connect the server
+
+1. Open **Configure > Integrations > MCP server**.
+2. Enter a **Display name** and the **MCP URL**. The URL must be `https` on a public host.
+3. Choose how Moss signs in to the server (**Sign-in**):
+
+   | Sign-in | Use it when | Fields |
+   |---|---|---|
+   | **None** | The server needs no credentials. | none |
+   | **Bearer token** | One token works for every user. | **Bearer token** |
+   | **Session bridge** | Each user must act as themselves on your server. Each user signs in through the host page. | **Token endpoint**, **Bridge grant type**, **Bridge code parameter**, **Login client ID** and **Login client secret**, **Exchange client ID** and **Exchange client secret**, and an optional **Scope** (space-separated) |
+
+4. Click **Connect**.
+
+With **None** or **Bearer token**, click **List tools now** to load the tools. With **Session bridge**, the tools load the first time a signed-in user's session connects, and refresh every time a session connects.
+
+**Session bridge** works like this: your page hands Moss a single-use code from your backend through the SDK's `getBridgeCode`. Moss redeems the code at your **Token endpoint** with your server's own grant type and code parameter (using the login client), then trades the result for a token for the MCP URL with a standard OAuth token exchange (RFC 8693, using the exchange client). The client secrets stay on the Moss server.
+
+### What your page must pass
+
+- **A signed-in user.** Tool calls act for the user in the session's JWT. See [Authentication](/en/sdk/authentication).
+- **The user's company, if your tools take one.** Moss fills company arguments from `company_id` (or `companyId`) in the JWT's `metadata` claim. A browser-supplied value is never used. If the token carries no company, a call that needs one is not sent.
+- **`getBridgeCode`, for Session bridge only.** A function that returns a fresh single-use code from your backend. Moss asks for a new code when the session has no MCP token or its token expires within a minute, before each message and before a confirmed action runs. New in SDK 0.17.0.
+
+<Tabs>
+  <Tab title="npm">
+    ```tsx
+    <AgentProvider config={{
+      apiUrl: 'https://moss-api.viamoss.ai',
+      applicationId: 'YOUR_APP_ID',
+      userId: currentUser.id,
+      getJwt: () => fetchMossToken(),
+      getBridgeCode: async () => {
+        const res = await fetch('/api/moss/bridge-code', { method: 'POST' });
+        if (!res.ok) throw new Error(`Bridge code request failed: ${res.status}`);
+        return res.text();
+      },
+    }}>
+      {children}
+    </AgentProvider>
+    ```
+  </Tab>
+  <Tab title="CDN script">
+    ```html
+    <script>
+      window.mossSettings = {
+        getJwt: () => fetchMossToken(),
+        getBridgeCode: async () => {
+          const res = await fetch('/api/moss/bridge-code', { method: 'POST' });
+          if (!res.ok) throw new Error('Bridge code request failed: ' + res.status);
+          return res.text();
+        },
+      };
+    </script>
+    ```
+    Set `window.mossSettings` before the Moss script loads. See [Installation](/en/sdk/installation).
+  </Tab>
+</Tabs>
+
+If `getBridgeCode` fails or the server refuses the code, the message still goes ahead, the tool call fails, and the problem shows under **Recent problems**.
+
+### Tools and their arguments
+
+The connection page lists the server's tools in two groups:
+
+- **Read-only**: tools the server marks read-only (the MCP `readOnlyHint` annotation). The assistant calls them as it needs them.
+- **Can change data**: every other tool. The assistant proposes these calls on a confirmation card, and nothing runs until the user confirms it.
+
+For each argument, **Filled from** says where the value comes from:
+
+| Source | Meaning |
+|---|---|
+| **Built-in rule** (default) | `company_id`, `tenant_id`, `org_id` and `organization_id` carry the signed-in user's company; `user_id` must be the signed-in user; anything else is what the model writes. |
+| **Signed-in user's company** | Always the company from the user's token. Use it for a company argument with another name, such as `account_id`. |
+| **Signed-in user** | Always the signed-in user. |
+| **What the model writes** | The assistant's value, used as is. |
+
+An argument whose input schema sets `"contentEncoding": "base64"` receives a file the user attached in the chat, on a step the user confirmed; the model never writes it. File attachments are a Beta chat option; see [Appearance](/en/sdk/appearance).
+
+If a tool has the same name as an API action, the API action keeps the name and the MCP tool is not used; the page says so. Rename the API action, or give the server's tools distinct names.
+
+**Tool changes** records tools the server added, removed or changed. If a procedure uses a tool the server no longer lists, the page warns you. That is a change on the server, not a Moss error: the procedure runs without the tool until the server lists it again or you remove it from the procedure.
+
+### Dry run and live calls
+
+A new connection is in dry run: tool calls are recorded but never sent, and the assistant tells the user it could not do that step. Turn on **Live calls** when you are ready; tools then call the real server and return live results. Turn it off to go back to dry run.
+
+### When something fails
+
+**Recent problems** lists failed calls with the side that can fix them:
+
+| Label | Who fixes it |
+|---|---|
+| **MCP server** | The server failed or changed. Check with whoever runs it. |
+| **Settings** | The settings on this page, or the host page's `getBridgeCode`. |
+| **Moss** | A fault in Moss itself. Report it to Moss. |
+
+**Disconnect** removes the connection. Procedures keep their MCP tools, but nothing can call them until a server is connected again.
+
+### Use the tools in a procedure
+
+In the procedure editor, pick tools under **Tools it can use > MCP tools**, or type `@` in the procedure text to insert one. See [Procedures](/en/dashboard/procedures).
+
+## Zendesk
+
+The **Zendesk** card lets procedures file Zendesk support tickets for a user. You choose who files the ticket:
+
+| | **Direct** | **Host-brokered** |
+|---|---|---|
+| Who calls Zendesk | Moss, with the API token you store here | Your backend, through your page's `onSupportTicket` callback |
+| Credentials Moss stores | Subdomain, API user email, API token | Subdomain only |
+| What the user sees | The assistant asks for the user's email and the problem in the chat, then files | The assistant drafts the ticket on a card; the user reviews, edits and submits it |
+| Requester | The email the user gives in the chat, or `email` in the `userMetadata` your page passes | Attached by your backend from your own session |
+| How Moss reads your ticket form | With your credential | Anonymously, as an end user would |
+| Code needed | None | [Support ticket handoff](/en/sdk/support-ticket-handoff) |
+
+Every ticket Moss drafts carries the Zendesk tag `moss-created`, in both modes. Use it to find, route and report on tickets that came through Moss.
+
+### Connect Zendesk
+
+1. Open **Configure > Integrations > Zendesk**.
+2. Choose the **Filing mode**: **Direct — Moss files with your Zendesk credentials** or **Host-brokered — your backend files, Moss stores no credentials**.
+3. Enter the **Subdomain**: your account name only, for example `acme` for `acme.zendesk.com`.
+4. For **Direct**, enter the **API user email** and an **API token**. Create the token in Zendesk under **Admin Center > Apps and integrations > Zendesk API > Token access**. Tickets are filed as this user.
+5. Optional: enter a [**Session reference field**](#session-reference-field).
+6. Click **Test & connect**. Moss checks the connection (for Direct, that the credentials work; for Host-brokered, that your end-user ticket form can be read anonymously) and then reads your ticket forms.
+7. Open **Ticket intake** and check which fields the assistant fills and what the user sees. See [Ticket intake](#ticket-intake).
+8. Set **Filing** to **Live**.
+
+Filing starts **Off** on a new connection, so nothing is offered until you turn it on.
+
+For **Host-brokered**, your page also needs the `onSupportTicket` callback, and your backend files the ticket: see [Support ticket handoff](/en/sdk/support-ticket-handoff). The **Broker contract** page (below) shows your developers exactly what their backend receives.
+
+### The Zendesk panel
+
+Once connected, the panel shows a status (**Connected**, **Filing off**, **Paused** or **Not connected**), the **Filing** control, and these facts: **Account**, **Mode**, **Session reference field**, **Schema** (read with your credential, or read anonymously), **Last sync** with any changes to review, and **Connection test** (**Account** and **Session reference field** are new in 0.17.0). **Test connection** checks the connection again.
+
+From 0.17.0, **Edit connection** changes the mode, subdomain, API user or session reference field; click **Test & save**. In Direct mode you can leave the API token blank to keep the stored one, as long as the subdomain and API user are unchanged. Saving with **Edit connection** keeps the Filing setting and the intake configuration.
+
+**Disconnect** deletes the connection: the stored subdomain (and, for Direct, the API user and token), the Filing setting, the session reference field, and the Ticket intake arrangement, including pinned values. Connecting again starts with Filing **Off** and the default arrangement. Procedures that file Zendesk tickets stop until you connect again.
+
+### Turn filing on and off
+
+**Filing** is the one switch for ticketing in Moss:
+
+| Setting | Effect |
+|---|---|
+| **Live** | Tickets reach Zendesk for real. |
+| **Off** | Moss doesn't offer tickets. The ticket tool is withdrawn from every procedure and from the default handoff, and a ticket card already on screen can no longer be submitted. Procedures keep their ticket step, so switching back to Live restores it. |
+| **Paused** (automatic) | Moss held filing because of a change to your Zendesk form. Nothing is sent until you resolve it. See [When your Zendesk form changes](#when-your-zendesk-form-changes). |
+
+Off is not a dry run: Moss doesn't draft tickets at all while filing is off. For the full list of conditions under which a ticket is offered, in either mode, see [When Moss offers a ticket](/en/sdk/support-ticket-handoff#when-moss-offers-a-ticket).
+
+### Ticket intake
+
+Open **Ticket intake** from the Zendesk panel. The page shows which fields the assistant fills, what the user sees on the ticket card, and how the form is kept in sync. The header shows when the form was last synced, any schema changes to review, and whether filing is on. The ticket card exists only in Host-brokered mode, so in Direct mode only the form and **Filled by** settings matter.
+
+**Ticket form** chooses which of your active Zendesk forms tickets are filed against. After you pick another form, click **Save arrangement** to load its fields.
+
+On the **Arrangement** tab, each field of the form has a place:
+
+| Place | Meaning |
+|---|---|
+| **Card** | Shown on the card. Every user reads these before sending, and can edit them. |
+| **Details** | Under **Review details**, behind one tap. If a required field here is empty, the card opens the section and asks the user to fill it. |
+| **Hidden** | Filed by Moss, but not shown. If Zendesk requires the field and the assistant can't fill it, the user is shown it anyway. |
+| **Backend** | Provided by your backend at filing (Host-brokered). Moss leaves the field out of its draft and never sees the value; your backend adds it to the create call it makes, and Zendesk checks it there. |
+
+By default the title and description are on the card, fields the assistant collects are under **Review details**, and the rest are hidden. The title and description are always written by the assistant, and Moss always sends them, so they can't be placed under **Backend**. The card labels them with your form's own names for them, or **Title** and **Description**; a developer can override the labels with [`chrome.ticketCard`](/en/sdk/support-ticket-handoff#card-copy).
+
+Each other field also says who fills it:
+
+| Filled by | Meaning |
+|---|---|
+| **Collected in chat** (text) or **Classified** (dropdown) | The assistant fills it from the conversation. |
+| **User attributes** | Filled from the signed-in user's attributes (for a role field). In Host-brokered mode it is marked **Host verifies**: your backend checks it against its own session. |
+| **Pinned value** | A fixed value you choose. Save is blocked until every pinned field has a value. |
+| **Left for agent** | Moss leaves it for your support agent. |
+
+When the assistant can't determine a value, a hidden field that Zendesk doesn't require is left out of the ticket; any other field is shown to the user empty, to fill in. In Host-brokered mode, the requester (name and email) is never shown: your backend attaches it at filing.
+
+Not every field can appear on the card. A row that says "Moss binds no role to this field, so it never reaches the card" can't be placed on the card or under **Review details**; it is filed only if you pin a value or your backend supplies it.
+
+The preview on the right, **What the user sees**, is the card as the user will meet it. Click **Save arrangement** to apply your changes, or **Reset to saved**.
+
+In Host-brokered mode, the **Draft quality** tab shows, for each field, how often it reached Zendesk carrying the value the assistant drafted, over confirmed filings in the last 30 days, worst first.
+
+### When your Zendesk form changes
+
+Moss reads your form again every day and when you click **Re-sync** on the Ticket intake page. In Direct mode, it also reads the form again after Zendesk rejects a filing. It compares the new form with the last one it read:
+
+| Change in Zendesk | What Moss does |
+|---|---|
+| New dropdown option, new optional field, new form, renamed field | Nothing to do; the change is picked up at the sync. A renamed field can drop off the card, because Moss matches card fields by their titles; check the arrangement after renaming one. |
+| A field becomes required (or a new required field appears) and the intake doesn't cover it | Shows **Schema changed**, and filing is not paused, but tickets without the field can't be filed. In Direct mode, unless Moss can fill the field, the ticket is not sent, and the assistant tells the user to contact support. In Host-brokered mode no card is shown, unless the field has a row on the card for the user to fill. Fix it on **Ticket intake**: give the field a **Pinned value** or, in Host-brokered mode, place it under **Backend**, then click **Save arrangement**. Or make the field optional in Zendesk. |
+| Options removed from a dropdown, or the options of a collected field change | Shows **Schema changed**. Filing continues. |
+| The selected form is deleted or made inactive | Pauses filing. |
+| A field Moss fills (collected or pinned) is deleted, made inactive or changes type | Pauses filing. |
+| A pinned dropdown value is no longer an option | Pauses filing. |
+| The session reference field is now used by the form or the intake | Pauses filing. |
+| A field your backend supplies now decides which other fields Zendesk requires | Pauses filing. |
+
+A **Schema changed** notice reflects the difference between two reads, so it clears at the next sync whether or not you handled the change. Act on it when you see it.
+
+While filing is paused, the panel shows **Paused** and a banner lists the reasons; nothing is sent. Fix the cause in Zendesk or on the Ticket intake page, then click **Re-sync**. Filing resumes on its own once a sync finds nothing blocking it.
+
+### Session reference field
+
+Optional, in both modes. Create an agent-only custom field in Zendesk and paste its numeric ID into **Session reference field**. Moss stamps the chat session ID into it on every ticket, so agents can trace a ticket back to the chat it came from. Do not add the field to your end-user form: the requester must not see it. Leave it blank to stamp nothing. The ID can't be a field the form or the intake already uses.
+
+### Broker contract
+
+In Host-brokered mode, once the form has synced, the panel links to **Broker contract**. It lists everything your backend receives when a user submits a ticket and everything it still has to add, derived from your form and intake configuration:
+
+- **What you receive**: the callback, the payload keys, the verdict to return, and the timeout.
+- **Deduplicate by handoffId**: why the same handoff can arrive twice, and what to do.
+- **Sample ticket**: the shape of the `ticket` object (**Copy sample JSON**).
+- **What you add**: the fields your backend stamps, such as the requester.
+- **Field reference**: each form field, whether it may be absent, and how it is filled.
+
+**Download contract JSON** saves it as a file. The contract changes when the form or the intake configuration changes. Your backend doesn't need its own copy of the field list: it posts the ticket it is handed as is, and adds only the rows under **What you add**.
+
+### Self-hosted installs
+
+Moss calls Zendesk over HTTPS from the Moss server. If your network sends outbound traffic through a proxy, or resolves `zendesk.com` to an internal address on purpose, your operator configures that; see [Network](/en/self-hosting/network).
+
+## Common questions
+
+**Why doesn't Moss offer to file a ticket?**
+Filing must be **Live**, the connection must not be **Paused**, and a published procedure must allow `zendesk_ticket` (or Zendesk must be the default handoff). In Host-brokered mode the page must also register `onSupportTicket`. The full checklist is in [When Moss offers a ticket](/en/sdk/support-ticket-handoff#when-moss-offers-a-ticket).
+
+**How do I stop Moss from filing tickets?**
+Set **Filing** to **Off** on the Zendesk panel. Moss stops offering tickets in every procedure at once; switching back to **Live** restores them.
+
+**Our Zendesk form changed. What do we need to do?**
+Usually nothing: new options and new optional fields are picked up at the next daily sync. A new required field needs a value before tickets can be filed: pin one on **Ticket intake** (or, in Host-brokered mode, have your backend supply it). If the panel shows changes to review or **Paused**, open **Ticket intake**, fix what it lists, and click **Re-sync**. See [When your Zendesk form changes](#when-your-zendesk-form-changes).
+
+**How can we tell which tickets came through Moss?**
+Every ticket Moss drafts carries the tag `moss-created`. Add a [session reference field](#session-reference-field) to also see which chat a ticket came from.
+
+**How do we let Moss take actions in our product through our MCP server?**
+Connect the server on the [MCP server](#mcp-server) card, choose **Session bridge** if each user must act as themselves and pass `getBridgeCode` from your page, then allow the tools in a published procedure and turn on **Live calls**.
+
+**Which Document360 keys does Moss accept?**
+A v2 API token, or, from 0.17.0, an enhanced (v3) API key. See [Document360](#document360).

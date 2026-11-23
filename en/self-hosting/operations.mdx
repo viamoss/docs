@@ -1,0 +1,222 @@
+---
+title: "Operations"
+description: "Day-two tasks for a self-hosted Moss install: tracing a slow or failed request, health checks, backup and restore, the retention job, and safety filters"
+icon: "screwdriver-wrench"
+---
+
+This page covers the tasks that come after installation: finding out why a
+request was slow or failed, backing up and restoring an install, running the
+retention job, and running a safety filter in your model provider.
+
+## Tracing a slow or failed request
+
+Set `OTEL_EXPORTER_OTLP_ENDPOINT` to your OpenTelemetry collector's base URL on
+`sdk-backend`, which serves chat. Set it on `dashboard-backend` and the worker
+too if you want their spans. Unset, telemetry is off.
+
+| | |
+|---|---|
+| Protocol | OTLP over HTTP. Traces, metrics and logs go to `<endpoint>/v1/traces`, `<endpoint>/v1/metrics` and `<endpoint>/v1/logs`. |
+| `service.name` | `moss-backend` on both backends, `moss-worker` on the worker |
+| Incoming trace context | A W3C `traceparent` header from your gateway is continued, so Moss's spans join your trace. |
+| Ingestion jobs | A job's spans on the worker link back to the request that started it. |
+
+### Useful spans
+
+For a chat question, the request span is `POST /api/v1/query` (or, from
+0.17.0, `POST /api/v1/query/activity` with live loader steps). Under it:
+
+| Span | What it times |
+|---|---|
+| `session.hydrate` | Loading the chat session |
+| `rag.search` | Searching the knowledge base |
+| `llm.respond` | Producing the answer: building the prompt and calling the model |
+| `prompt.build` | Assembling what is sent to the model, inside `llm.respond` |
+| `llm.invoke` | The model calls, with `llm.provider` and `llm.model` attributes. In a turn that calls tools (`llm.tool_loop` is true), it also holds the tool calls between model calls. |
+
+To split `llm.invoke` between the model and the tools, compare it with the
+`model_latency_ms` of that turn's `tool_loop_round` log lines (below). Then see
+[Models and response time](/en/self-hosting/models-and-response-time#where-the-time-goes).
+
+### Logs
+
+- **Format.** The backends write one JSON object per line, with `otelTraceID`
+  and `otelSpanID` on each line, so you can go from a log line to its trace.
+  The chart's worker writes JSON too (`LOG_FORMAT=json` is in its default
+  `env`); `LOG_FORMAT=pretty` gives readable text.
+- **Request fields.** From 0.17.0, every backend log line written during a
+  request carries `request_id`, and `session_id` and `turn_id` once they're
+  known.
+- **The request id in the browser.** From 0.17.0, every backend response has
+  an `X-Request-ID` header with the same `request_id`. Error responses from
+  the SDK routes, and any unhandled server error (`500`), also carry a
+  `reference`: the session and turn ids, or the request id when no turn was
+  written.
+- **Model rounds.** In a turn that can call tools, `sdk-backend` writes a
+  `tool_loop_round` line for each model call, with `session_id`, `round`,
+  `model_latency_ms`, the token `usage`, the `tool_calls` the model asked for
+  and `tool_result_chars`.
+- **Level.** `LOG_LEVEL` (`DEBUG`, `INFO`, `WARNING` or `ERROR`; default
+  `INFO`). Keep it at `INFO` or below if you export logs over OpenTelemetry.
+
+For the browser side of a failed request, see
+[Advanced](/en/sdk/advanced).
+
+### Health checks
+
+| Path | Answers |
+|---|---|
+| `GET /health` | `200` while the process is up. The chart's liveness and readiness probes use it. |
+| `GET /health/ready` | Checks that the database answers and that a running worker replies, over Redis, that it can run every ingestion task, all within 5 seconds. `200` when both pass; otherwise `503`, with each dependency's status, or with `dependency check timed out` when the 5 seconds run out. It doesn't contact object storage: its `storage` entry only says whether storage is configured. |
+
+## Backup, restore and reinstall
+
+### What to back up
+
+| Data | Where it lives | Back it up? |
+|---|---|---|
+| Applications, their settings, procedures, conversations, audit log, and the credentials admins enter for integrations, which are stored encrypted | The application database (`DATABASE_URL`) | Yes. Use `pg_dump` or a database snapshot. |
+| Knowledge sources and their pages | The knowledge-base database (`KNOWLEDGE_BASE_DATABASE_URL`). By default it's the same database. | Yes |
+| Knowledge-base images | Object storage, in the worker's `STORAGE_BUCKET` | Yes. Replies link to them where they're stored. |
+| Screenshots, session recordings and page snapshots | Object storage | Yes, if you want to keep them |
+| `SECRET_ENCRYPTION_KEYS` | The `moss-backend` and `moss-worker` Secrets | **Yes, always.** Without it the stored integration credentials can't be decrypted, and admins must enter them again. |
+| Knowledge-base search vectors | Pinecone | Not needed. They can be rebuilt by refreshing each source. |
+| Ingestion job queue and rate-limit counters | Redis | No. A fresh Redis loses only queued ingestion jobs; start an interrupted refresh again. |
+| Dashboard users and their roles | Your identity provider | Nothing to back up in Moss |
+
+Back up the database before every upgrade. The 0.17.0 migrations can't be
+reversed.
+
+### Restore or reinstall
+
+1. **Restore the database**, both the application and the knowledge-base
+   database if you keep them apart.
+2. **Install the chart version the backup came from, or a later one, with the
+   same settings.** In particular:
+   - the same `SECRET_ENCRYPTION_KEYS` on both backends and the worker;
+   - the same `ON_PREM_ORG_ID`, the organization the applications belong to;
+   - the same bucket names in `global.storageBuckets` and the worker's
+     `STORAGE_BUCKET`;
+   - the same Pinecone key, and the same identity-provider settings.
+3. **Let the migrate Job run.** It runs `alembic upgrade head` on both
+   databases before the new pods start. On a database already at that version
+   it changes nothing. Don't install a chart older than the database: an older
+   migrate Job stops on a database newer than it knows.
+4. **If the Pinecone index was lost,** create it again with the same name and
+   settings (the chart README's Vector Store section has a script), then
+   refresh each source in the Knowledge Base: **Refresh** for websites,
+   Document360 and Intercom, **Refresh URLs** for URL lists, and **Reprocess
+   Markdown** for Markdown.
+5. **Check the install:** `GET /health/ready` on both backends returns `200`;
+   you can sign in to the dashboard and see your applications; sources show
+   Ready; and one question in the chat gets an answer from the knowledge base.
+
+## The retention CronJob
+
+From 0.17.0, an application's admin sets how long Moss keeps each kind of data,
+and turns on **Automatic deletion**, in **Configure > Data & privacy**. See
+[Data retention and deletion](/en/dashboard/data-privacy) for the admin side.
+Automatic deletion is off by default, and saving a period deletes nothing. A
+CronJob that you set up does the deleting, for the applications that have it
+on. The same job finishes the per-user deletions that couldn't run at once, so
+set it up even if no application turns Automatic deletion on.
+
+1. **Create the database roles.** With `roles.enabled: true`, the migrate Job
+   creates `moss_lifecycle` and `moss_lifecycle_monitor`. Otherwise set
+   `lifecycle.provisionRole: true`, which needs `CREATEROLE` on the migration
+   credential. Then give `moss_lifecycle` a credential, such as a password or
+   RDS IAM.
+2. **Create the `moss-lifecycle` Secret** with `LIFECYCLE_DATABASE_URL`,
+   connecting as `moss_lifecycle` (it never falls back to `DATABASE_URL`),
+   `DATABASE_SCHEMA`, `S3_ENDPOINT`, `S3_REGION`, and S3 keys or a workload
+   identity. Set bucket names in `global.storageBuckets`, not in this Secret.
+3. **Set `lifecycle.enabled: true`,** upgrade, then restart `dashboard-backend`
+   (`kubectl rollout restart deploy/<release>-dashboard-backend`) so Data &
+   privacy shows the job as running.
+
+| Value | Default | Meaning |
+|---|---|---|
+| `lifecycle.enabled` | `false` | Creates the CronJob |
+| `lifecycle.schedule` | `*/15 * * * *` | When it runs |
+| `lifecycle.expectedIntervalMinutes` | `15` | Minutes between runs. Data & privacy and the check below report the job as not running after two intervals plus 10 minutes without a run. |
+| `lifecycle.maxApplications` | `25` | Applications per run. Keep it at least the number of applications with Automatic deletion on. |
+| `lifecycle.check.enabled` | `false` | An hourly second CronJob, `run_retention --check`, that fails when an application with Automatic deletion on isn't running, is behind, or failed. It connects as `moss_lifecycle_monitor`: give that role a credential and create a `moss-lifecycle-monitor` Secret with its `LIFECYCLE_DATABASE_URL`. It needs no storage credentials. |
+
+- **A failed Job is a real failure.** Runs that find the job busy, behind or on
+  hold exit 0. The last log line is a JSON summary.
+- **Buckets must match.** Both backends and the CronJob must use the same
+  `RECORDINGS_BUCKET`, `STORAGE_BUCKET` and `DOM_SNAPSHOTS_BUCKET`, or deletion
+  sweeps the wrong bucket. Set them once in `global.storageBuckets`;
+  `helm template` fails when they disagree.
+- **Network.** The Job needs Postgres, object storage and DNS.
+- **Audit events and deletion records** have their own periods, set on
+  `dashboard-backend`, which prunes them daily itself, without the CronJob:
+  - `AUDIT_RETENTION_DAYS` (default `365`). An application's settings can't
+    change it, and an application on legal hold keeps all its events.
+  - `DELETION_PROOF_RETENTION_DAYS`: how long completed per-user deletion
+    requests are kept. Unset keeps them.
+  - `AUDIT_MINIMUM_DAYS` (from 0.17.0; unset is 0): when a user's data is
+    deleted, the application's content-free admin audit events about that
+    user that are younger than this are kept. `dashboard-backend` refuses to
+    start if it's larger than `AUDIT_RETENTION_DAYS` or a set
+    `DELETION_PROOF_RETENTION_DAYS`.
+  - The prune needs a database role with `DELETE` on the audit events. With a
+    single database role for everything, it has one. If `dashboard-backend`
+    runs under a least-privilege role, set `MAINTENANCE_DATABASE_URL` to
+    connect as the `moss_maintenance` role, as the chart README's
+    `MAINTENANCE_DATABASE_URL` row describes. Otherwise the prune fails and the
+    audit log keeps growing.
+- **Not covered:** telemetry you export, database backups, and copies outside
+  Moss. Data deleted in Moss stays in a backup until that backup expires.
+
+The chart README's Data retention section has the sizing rule and the steps.
+Legal holds and minimum retention periods are set by the operator with
+`python -m scripts.retention_operator` in `dashboard-backend`, connected with
+the database owner's credential; ask Moss for the operator guide.
+
+## Running a cloud safety filter alongside Moss
+
+Moss doesn't configure safety filters. You turn on Model Armor, or Gemini's
+safety settings, in your own Google Cloud project, and Moss's requests pass
+through them like any other.
+
+When the filter blocks a request or its reply, from 0.16.24 Moss:
+
+- answers "A safety filter blocked this request, so I can't answer it. If it
+  keeps happening on this page, please contact your administrator.";
+- doesn't retry, since asking again would be blocked again;
+- records the turn as blocked rather than failed, and shows a blocked step in
+  the session;
+- logs the stage (request or reply) and the provider's reason, such as
+  `MODEL_ARMOR` or `SAFETY`, never the blocked content.
+
+Moss reads these block signals from Gemini responses, on Vertex AI and on the
+Gemini API.
+
+For how Moss handles instructions hidden in page text and help articles, see
+[Security overview](/en/security/overview).
+
+## Common questions
+
+**How do we trace a slow request?**
+Set `OTEL_EXPORTER_OTLP_ENDPOINT` on `sdk-backend` and compare the spans under
+`POST /api/v1/query`. From 0.17.0, the `X-Request-ID` response header gives
+the `request_id` to search the logs for.
+
+**What do we need to back up?**
+The database and `SECRET_ENCRYPTION_KEYS`, plus object storage if you want to
+keep screenshots and recordings. Pinecone vectors can be rebuilt, and Redis
+holds nothing durable.
+
+**We restored the database. Do we need to reset anything?**
+No. Install the same chart version, or a later one, with the same settings and
+Secrets; the migrate Job changes nothing on a database that's already current.
+
+**Data & privacy says retention isn't running. Why?**
+The retention CronJob isn't set up, or `dashboard-backend` wasn't restarted
+after you set `lifecycle.enabled: true`. See
+[The retention CronJob](#the-retention-cronjob).
+
+**Is it safe to put Model Armor in blocking mode?**
+Moss answers a blocked request with a clear message, doesn't retry it, and
+records the turn as blocked, so users aren't left without an answer.

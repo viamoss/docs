@@ -1,12 +1,12 @@
 ---
 title: "Types"
-description: "Moss SDK에서 내보내는 TypeScript 인터페이스 및 타입"
+description: "Moss SDK가 내보내는 TypeScript 타입"
 icon: "brackets-curly"
 ---
 
 # TypeScript 타입
 
-Moss SDK는 TypeScript로 작성되었으며 애플리케이션에서 사용할 수 있는 모든 공개 타입을 내보냅니다.
+npm 패키지에는 TypeScript 선언이 들어 있습니다. 타입은 패키지 루트에서 import하세요.
 
 ```tsx
 import type {
@@ -14,9 +14,12 @@ import type {
   AgentState,
   ChatMessage,
   DefaultModalPosition,
-  LogLevel,
+  StabilityConfig,
 } from '@viamoss/moss-sdk';
+import { LogLevel } from '@viamoss/moss-sdk'; // enum이므로 값으로 import합니다
 ```
+
+아래 타입은 0.17.0 기준입니다. 에디터에서도 패키지의 선언에 담긴 같은 설명을 볼 수 있습니다.
 
 ---
 
@@ -24,50 +27,47 @@ import type {
 
 ### AgentState
 
-`useAgent()` Hook의 반환 타입입니다. 어시스턴트를 제어하기 위한 모든 상태와 메서드를 포함합니다.
+`useAgent()`가 반환하는 값입니다. 각 멤버의 동작은 [Hooks](/ko/sdk/api/hooks)를 참고하세요.
 
 ```typescript
 interface AgentState {
-  // 연결 및 채팅 상태
+  // 연결과 채팅
   isConnected: boolean;
   isChatOpen: boolean;
-
-  // 채팅 기능
   messages: ChatMessage[];
-  sendMessage: (text: string) => Promise<void>;
+  sendMessage: (text: string, attachments?: AttachmentRef[]) => Promise<void>; // attachments: 0.17.0부터
   openChat: (defaultPosition?: DefaultModalPosition) => void;
   closeChat: () => void;
   toggleChat: (defaultPosition?: DefaultModalPosition) => void;
   startNewChat: () => Promise<void>;
+  activeChatSessionId: string | null;
 
-  // 로딩 상태
+  // 진행 상태
   isWaitingForResponse: boolean;
+  isRetrievalExpected: boolean;
 
-  // 기능 플래그
+  // 적용 중인 설정
   useVision: boolean;
   debugMode: boolean;
-  isLanguageSelectionEnabled: boolean;
 
-  // 디버그 전용
-  currentApiUrl?: string;
-  captureContext: () => Promise<{
-    screenshotDataUrl: string | null;
-    pageText: string | null;
-  } | null>;
-
-  // 가이드 모드
+  // 가이드
   chatMode: 'chat' | 'guide';
   suggestsGuideMode: boolean;
+  planPhase: 'offered' | 'executing' | null | undefined;
   continueGuide: () => Promise<void>;
   acceptGuideSuggestion: () => Promise<void>;
 }
 ```
 
+<Note>
+    선언된 `AgentState`에는 Moss 자체의 디버그 도구와 개발 중인 기능을 위한 멤버가 몇 가지 더 있습니다. 여기서는 다루지 않으며, 예고 없이 바뀔 수 있습니다. 0.17.0부터 `displayMode`는 없어졌습니다.
+</Note>
+
 ---
 
 ### ChatMessage
 
-대화의 단일 메시지를 나타냅니다.
+채팅의 메시지 하나입니다.
 
 ```typescript
 interface ChatMessage {
@@ -75,37 +75,80 @@ interface ChatMessage {
   sender: 'user' | 'assistant';
   text: string;
   timestamp: number;
+  userFeedback?: 'helpful' | 'unhelpful';
+  sources?: MessageSource[];
+  isHallucinated?: boolean;
+  attachments?: ChatMessageAttachment[]; // 0.17.0부터
+  problem?: MessageProblem;              // 0.17.0부터
+  activity?: MessageActivity;            // 0.17.0부터
 }
 ```
 
-| 필드 | 타입 | 설명 |
-|------|------|------|
-| `id` | `string` | 고유 메시지 식별자 |
-| `sender` | `'user' \| 'assistant'` | 메시지 발신자 |
-| `text` | `string` | 메시지 내용 (Markdown 포함 가능) |
-| `timestamp` | `number` | 밀리초 단위의 Unix 타임스탬프 |
+| 필드 | 타입 | 의미 |
+|-------|------|---------|
+| `id` | `string` | 고유한 메시지 ID |
+| `sender` | `'user' \| 'assistant'` | 보낸 쪽 |
+| `text` | `string` | 텍스트. Markdown이 들어 있을 수 있습니다 |
+| `timestamp` | `number` | 메시지가 추가된 시각. Unix epoch부터의 밀리초입니다 |
+| `userFeedback` | `'helpful' \| 'unhelpful'` | 답변에 대한 사용자의 좋아요 또는 싫어요 |
+| `sources` | `MessageSource[]` | 답변이 인용한 도움말 문서. 답변 아래에 표시됩니다 |
+| `isHallucinated` | `boolean` | 답변이 가리킨 요소를 Moss가 페이지에서 찾지 못하면 `true` |
+| `attachments` | `ChatMessageAttachment[]` | 사용자 메시지와 함께 보낸 파일. 각각 `{ filename: string }`입니다 |
+| `problem` | `MessageProblem` | 턴에 문제가 있었던 답변에 설정됩니다 |
+| `activity` | `MessageActivity` | 백엔드가 알려 준 경우(`streamActivity`), 답변을 만든 턴에서 Moss가 밟은 단계 |
+
+```typescript
+interface MessageSource {
+  title: string;
+  url?: string | null;
+  source?: string | null;
+  readTimeMinutes?: number | null;
+  linkScope?: 'host' | 'prefix' | null;   // 0.17.0부터
+  linkPrefix?: string | null;             // 0.17.0부터
+}
+```
+
+0.17.0부터 다음 타입이 메시지의 문제와 그 뒤의 단계를 나타냅니다.
+
+```typescript
+interface MessageProblem {
+  failed: boolean;                     // 턴이 답변하지 못했고, 텍스트가 실패 내용입니다
+  notes: string[];                     // 무엇이 잘못되었는지, 한 줄에 하나씩
+  fixBy: 'user' | 'admin' | 'moss';    // 해결할 수 있는 쪽
+  action?: 'retry' | 'continue';       // 이 메시지가 마지막인 동안 제안하는 다음 동작
+  reference?: string;                  // 지원팀에 알려 줄 값
+}
+
+interface MessageActivity {
+  steps: MessageActivityStep[];
+}
+
+interface MessageActivityStep {
+  id: string;
+  kind: string;                        // 'retrieval', 도구 이름, 또는 'tool'
+  state: 'ok' | 'error';
+  result?: { count?: number; titles?: string[]; status?: string };
+}
+
+interface ChatMessageAttachment {
+  filename: string;
+}
+```
 
 ---
 
 ### DefaultModalPosition
 
-채팅 모달의 위치 및 크기 설정입니다.
+`openChat()`과 `toggleChat()`이 받는 위치와 크기입니다.
 
 ```typescript
 interface DefaultModalPosition {
-  x: number;
-  y: number;
+  x: number;       // 뷰포트 왼쪽 가장자리로부터의 거리(CSS 픽셀)
+  y: number;       // 뷰포트 위쪽 가장자리로부터의 거리(CSS 픽셀)
   width: number;
   height: number;
 }
 ```
-
-| 필드 | 타입 | 설명 |
-|------|------|------|
-| `x` | `number` | 왼쪽 가장자리로부터의 수평 위치 (픽셀) |
-| `y` | `number` | 상단 가장자리로부터의 수직 위치 (픽셀) |
-| `width` | `number` | 모달 너비 (픽셀) |
-| `height` | `number` | 모달 높이 (픽셀) |
 
 ---
 
@@ -113,87 +156,94 @@ interface DefaultModalPosition {
 
 ### MossSDKConfig
 
-`AgentProvider`에 전달되는 설정 객체입니다.
+`AgentProvider`의 `config` prop이자, CDN 스크립트에서 쓰는 `window.mossSettings`의 형태입니다. 각 옵션의 동작은 [설정](/ko/sdk/configuration)을 참고하세요.
 
 ```typescript
+// 일부 생략: Moss 자체 도구용으로 예약된 옵션은 뺐습니다.
 type MossSDKConfig = {
   // 필수
   apiUrl: string;
   userId: string;
+
+  // 인증
+  jwt?: string;
+  getJwt?: () => Promise<string>;
+  getBridgeCode?: () => Promise<string>;               // 0.17.0부터
+
+  // 페이지 데이터와 개인정보
+  pageContext?: 'full' | 'metadata' | 'none';
+  redactAllInputs?: boolean;
+  redactionSelectors?: string[];
+  useVision?: boolean;
+  screenshotMode?: ScreenshotMode;
+  enableSessionRecording?: boolean;
+  enableScreenHistoryRecording?: boolean;
+  observeTargetSelector?: string;
+  userMetadata?: Record<string, string | number | boolean | string[]>;
+  collectionEnabled?: boolean;                         // 0.17.0부터
+  collectionControl?: MossCollectionControl;           // 0.17.0부터
+  pageSanitizationScript?: (document: Document) => void;
+
+  // 동작
+  language?: 'en' | 'ko';
+  sessionConfig?: {
+    inactivityTimeout?: number;                        // 분
+    maxSessionAge?: number;                            // 시간
+    showNotification?: boolean;
+    onReturnAfterInactivity?: 'new_chat' | 'ask';
+  };
+  stability?: StabilityConfig;
+  closingChatEndsGuide?: boolean;
+  enableProactiveGuides?: boolean;
+  streamActivity?: boolean;                            // 0.17.0부터
+  replyLinks?: { allowedHosts?: string[] };            // 0.17.0부터
+
+  // 외관
+  appearance?: AppearanceInput;
+  pageKey?: string;
+
+  // 콜백
+  onSupportTicket?: (handoff: SupportTicketHandoff) => Promise<SupportTicketOutcome>;
+  onEvent?: (event: MossEvent) => void;
+  eventQueryText?: 'omit' | 'include' | ((text: string) => string);
+  onError?: (error: MossError) => void;                // 0.17.0부터
+
+  // 진단
+  logLevel?: LogLevel;
+  debugMode?: boolean;
 } & (
   | { applicationId: string; applicationName?: string }
   | { applicationName: string; applicationId?: string }
-) & {
-  // 인증
-  getJwt?: () => Promise<string>;
-  jwt?: string;
-
-  // 표시
-  language?: 'en' | 'ko';
-  screenshotMode?: ScreenshotMode;
-  appearance?: AppearanceInput;
-  displayMode?: 'chat' | 'headless';
-  headless?: HeadlessConfig;
-
-  // 동작
-  useVision?: boolean;
-  observeTargetSelector?: string;
-  pageSanitizationScript?: (document: Document) => void;
-  enableSessionRecording?: boolean;
-  enableScreenHistoryRecording?: boolean;
-
-  // 개인정보 및 편집
-  redactAllInputs?: boolean;
-  redactionSelectors?: string[];
-  userMetadata?: Record<string, string | number | boolean | string[]>;
-
-  // 연동
-  onSupportTicket?: (handoff: SupportTicketHandoff) => Promise<SupportTicketOutcome>;
-
-  // 세션
-  sessionConfig?: SessionConfig;
-
-  // 디버그
-  logLevel?: LogLevel;
-  debugMode?: boolean;
-
-  // 안정성
-  stability?: StabilityConfig;
-};
+);
 ```
 
-<Info>
-  `applicationId` 또는 `applicationName` 중 하나는 필수입니다.
-</Info>
+`applicationId`와 `applicationName` 중 하나는 꼭 있어야 하며, `applicationId`를 쓰세요. 0.17.0부터 `displayMode`, `headless`, `forcedActivationFlow`는 없어졌고 TypeScript가 이를 거부합니다. 내보내던 타입 `HeadlessConfig`, `ForcedActivationFlowConfig`, `ForcedActivationFlowDefinition`도 없어졌으므로, 이 타입을 import하는 코드는 더 이상 컴파일되지 않습니다.
+
+`sessionConfig`에는 따로 내보내는 타입이 없습니다. `NonNullable<MossSDKConfig['sessionConfig']>`로 참조하세요. [세션](/ko/sdk/api/session)을 참고하세요.
 
 ---
 
 ### ScreenshotMode
 
-AI 컨텍스트용 스크린샷 캡처 방식입니다.
-
 ```typescript
 type ScreenshotMode = 'fullpage' | 'viewport';
 ```
 
-| 값 | 설명 |
-|----|------|
-| `'fullpage'` | 스크롤 가능한 전체 페이지를 캡처 |
-| `'viewport'` | 보이는 뷰포트만 캡처 |
+0.17.0에서 채팅용 스크린샷에 아무 영향을 주지 않습니다. [페이지 데이터](/ko/sdk/page-data#비전-스크린샷)를 참고하세요.
 
 ---
 
 ### LogLevel
 
-로깅 상세 수준입니다.
+콘솔 로그의 양입니다. enum이므로 문자열 `'DEBUG'`가 아니라 `LogLevel.DEBUG`를 넘기세요.
 
 ```typescript
 enum LogLevel {
   DEBUG = 1,
-  INFO = 2,
+  INFO = 2,    // 기본값
   WARN = 3,
   ERROR = 4,
-  SILENT = 5,  // 모든 로깅 비활성화
+  SILENT = 5,  // 로그를 남기지 않음
 }
 ```
 
@@ -202,152 +252,137 @@ import { LogLevel } from '@viamoss/moss-sdk';
 
 <AgentProvider config={{
   // ...
-  logLevel: LogLevel.DEBUG,
+  logLevel: LogLevel.WARN,
 }}>
-```
-
----
-
-### SessionConfig
-
-세션 관리 동작 설정입니다.
-
-```typescript
-interface SessionConfig {
-  /** 새 세션 시작까지의 비활성 시간 (분, 기본값: 30) */
-  inactivityTimeout?: number;
-  /** 강제 새 세션까지의 시간 (시간, 기본값: 2) */
-  maxSessionAge?: number;
-  /** 자동 세션 시작 시 알림 표시 (기본값: true) */
-  showNotification?: boolean;
-}
 ```
 
 ---
 
 ## 안정성 타입
 
-### StabilityConfig
+기본값과 동작은 [안정성 튜닝](/ko/sdk/advanced#안정성-튜닝)을 참고하세요.
 
-컨텍스트 캡처 전 페이지 안정성 감지 설정입니다.
+### StabilityConfig
 
 ```typescript
 interface StabilityConfig {
-  /** 모든 레이어에 걸친 최대 총 대기 시간 (기본값: 15000ms) */
-  maxTotalWaitMs?: number;
-  /** 네트워크 유휴 타임아웃 (기본값: 10000ms) */
-  networkTimeoutMs?: number;
-  /** 브라우저 유휴 타임아웃 (기본값: 500ms) */
-  browserIdleTimeoutMs?: number;
-  /** 개별 레이어 활성화/비활성화 */
-  layers?: StabilityLayersConfig;
-  /** 로딩 인디케이터 레이어 설정 */
-  loadingIndicators?: LoadingIndicatorsLayerConfig;
-  /** 레이아웃 시프트 레이어 설정 */
-  layoutShift?: LayoutShiftLayerConfig;
-  /** DOM 변경 레이어 설정 */
-  domMutations?: DOMMutationsLayerConfig;
-  /** 프레임 준비 레이어 설정 */
-  frameReadiness?: FrameReadinessLayerConfig;
-  /** 리소스 정적 상태 레이어 설정 */
-  resourceQuiet?: ResourceQuietLayerConfig;
-  /** 페이지 리로드 후 처리 */
   afterReload?: {
-    enabled?: boolean;
-    pendingTTL?: number;
-    storageKey?: string;
+    enabled?: boolean;                  // 기본값 false
+    pendingTTL?: number;                // ms, 기본값 30000
   };
+  maxTotalWaitMs?: number;              // 기본값 15000
+  networkTimeoutMs?: number;            // 기본값 10000
+  browserIdleTimeoutMs?: number;        // 기본값 500
+  layers?: StabilityLayersConfig;
+  loadingIndicators?: LoadingIndicatorsLayerConfig;
+  layoutShift?: LayoutShiftLayerConfig;
+  domMutations?: DOMMutationsLayerConfig;
+  frameReadiness?: FrameReadinessLayerConfig;
+  resourceQuiet?: ResourceQuietLayerConfig;
+  placeholderGuard?: PlaceholderGuardConfig;
 }
 ```
-
----
 
 ### StabilityLayersConfig
 
-개별 안정성 감지 레이어를 토글합니다.
-
 ```typescript
 interface StabilityLayersConfig {
-  /** 네트워크 요청 완료 대기 (기본값: true) */
-  networkIdle?: boolean;
-  /** DOM 변경 중지 대기 (기본값: true) */
-  domMutations?: boolean;
-  /** 로딩 인디케이터 사라짐 대기 (기본값: false) */
-  loadingIndicators?: boolean;
-  /** 동일 출처 프레임 문서가 readyState 'complete'에 도달할 때까지 대기 (기본값: true) */
-  frameReadiness?: boolean;
-  /** Resource Timing 완료가 잠잠해질 때까지 대기 (기본값: true) */
-  resourceQuiet?: boolean;
-  /** 레이아웃 시프트 중지 대기 (기본값: false) */
-  layoutShift?: boolean;
-  /** requestIdleCallback을 통한 브라우저 유휴 대기 (기본값: true) */
-  browserIdle?: boolean;
-  /** 애니메이션 프레임 하나 대기 (기본값: true) */
-  finalFrame?: boolean;
+  networkIdle?: boolean;        // 기본값 true
+  domMutations?: boolean;       // 기본값 true
+  loadingIndicators?: boolean;  // 기본값 false
+  frameReadiness?: boolean;     // 기본값 true
+  resourceQuiet?: boolean;      // 기본값 true
+  layoutShift?: boolean;        // 기본값 false
+  browserIdle?: boolean;        // 기본값 true
+  finalFrame?: boolean;         // 기본값 true
 }
 ```
+
+### 레이어 설정
+
+```typescript
+interface DOMMutationsLayerConfig {
+  enabled?: boolean;                 // false면 레이어를 끕니다
+  quietPeriodMs?: number;            // 기본값 800
+  excludeSelectors?: string[];
+  countQuietBeforeLayer?: boolean;   // 기본값 true, 0.17.0부터
+}
+
+interface LoadingIndicatorsLayerConfig {
+  enabled?: boolean;                 // false면 레이어를 끕니다
+  selectors?: string[];              // 내장 목록을 대체합니다
+  additionalSelectors?: string[];    // 내장 목록에 더합니다
+  excludeSelectors?: string[];
+  timeoutMs?: number;                // 기본값 5000
+}
+
+interface LayoutShiftLayerConfig {
+  enabled?: boolean;                 // false면 레이어를 끕니다
+  quietPeriodMs?: number;            // 기본값 200
+  ignoreThreshold?: number;          // 기본값 0.01
+}
+
+interface FrameReadinessLayerConfig {
+  enabled?: boolean;                 // false면 레이어를 끕니다
+  quietMs?: number;                  // 기본값 200
+  timeoutMs?: number;                // 기본값 10000
+}
+
+interface ResourceQuietLayerConfig {
+  enabled?: boolean;                 // false면 레이어를 끕니다
+  quietMs?: number;                  // 기본값 500
+  timeoutMs?: number;                // 기본값 8000
+}
+
+interface PlaceholderGuardConfig {
+  enabled?: boolean;                 // 기본값 true
+  timeoutMs?: number;                // 기본값 4000. maxTotalWaitMs에 포함되지 않습니다
+  selectors?: string[];
+  additionalSelectors?: string[];
+  excludeSelectors?: string[];
+}
+```
+
+레이어 객체의 `enabled: true`로는 기본으로 꺼진 레이어가 켜지지 않습니다. 켤 때는 `layers`를 쓰세요.
 
 ---
 
 ## 외관 타입
 
-### AppearanceInput
-
-시각적 테마 설정입니다.
+각 부분이 무엇을 정하는지는 [외관](/ko/sdk/appearance)을 참고하세요.
 
 ```typescript
-type AppearanceInput =
-  | 'blue'      // 기본 테마
-  | 'purple'    // 퍼플 테마
-  | DeepPartial<MossAppearance>;  // 커스텀 오버라이드
+type AppearanceInput = 'blue' | 'purple' | DeepPartial<MossAppearance>;
+
+type DeepPartial<T> = {
+  [P in keyof T]?: T[P] extends object ? DeepPartial<T[P]> : T[P];
+};
 ```
 
-```tsx
-// 프리셋 사용
-appearance: 'purple'
+`MossAppearance`는 전체 테마입니다. 최상위 키는 `name`, `colors`, `typography`, `spacing`, `radius`, `shadows`, `effects`, `inputBar`, `progressBar`, `modal`, 그리고 선택 사항인 `layout`, `chrome`, `zeroState`, `fallbackStates`입니다. 바꾸고 싶은 값만 넘기세요.
 
-// 커스텀 오버라이드 (기본값과 병합됨)
-appearance: {
-  colors: {
-    primary: '#FF5722',
-  },
-}
+```tsx
+appearance: 'purple'                              // 프리셋
+
+appearance: { colors: { primary: '#FF5722' } }    // 기본 프리셋 위에 덮어쓸 값
 ```
 
 ---
 
-### MossAppearance
+## 그 밖에 내보내는 타입
 
-전체 외관 설정 객체입니다 (커스텀 테마용).
-
-```typescript
-interface MossAppearance {
-  name: string;
-  colors: {
-    primary: string;
-    primaryLight: string;
-    primaryLighter: string;
-    // ... 더 많은 색상 토큰
-  };
-  typography: {
-    fontFamily: string;
-    fontSize: Record<string, string>;
-    // ... 더 많은 타이포그래피 토큰
-  };
-  spacing: Record<string, string>;
-  radius: Record<string, string>;
-  shadows: Record<string, string>;
-  effects: {
-    glassmorphism: boolean;
-    glassBlur: string;
-  };
-  // ... 더 많은 설정
-}
-```
-
-<Tip>
-  커스텀 오버라이드를 제공할 때는 `DeepPartial<MossAppearance>`를 사용하세요. 변경하려는 값만 지정하면 됩니다.
-</Tip>
+| 타입 또는 값 | 설명 | 문서 |
+|---------------|------------|---------------|
+| `MossEvent`, `MossEventName`, `MossEventCommonProperties`, `MossEventPropertiesByName`, `MOSS_EVENT_NAMES` | `onEvent`가 받는 사용 이벤트 | [이벤트](/ko/sdk/events) |
+| `MossError`, `FeedbackReason` | 0.17.0부터. `onError`가 받는 문제, 싫어요를 누른 이유 | [이벤트](/ko/sdk/events) |
+| `SupportTicketHandoff`, `SupportTicketPayload`, `SupportTicketOutcome` | `onSupportTicket`의 입력과 결과 | [지원 티켓 핸드오프](/ko/sdk/support-ticket-handoff) |
+| `AskMossOptions`, `AskMossResult`, `FloatingActionBarProps` | `askMoss()`와 `FloatingActionBar` | [가이드와 페이지 이동](/ko/sdk/guides-and-navigation) |
+| `ProactiveGuideConfig`, `ProactiveGuideRules`, `ProactiveGuideFrequency`, `ProactiveShoutOutContent`, `ProactiveUserMetadataPredicate`, `ProactiveCtaType` | 대시보드에서 설정한 프로액티브 가이드 | [가이드와 페이지 이동](/ko/sdk/guides-and-navigation) |
+| `MossCollectionControl`, `CollectionIdentity` | 0.17.0부터. 수집 스위치 | [페이지 데이터](/ko/sdk/page-data#collectioncontrol) |
+| `Persona` | 추천 콘텐츠 변형에 쓰는 `'admin' \| 'customer'` | [외관](/ko/sdk/appearance) |
+| `AttachmentRef`, `MAX_ATTACHMENT_FILES`, `TooManyAttachmentsError` | 0.17.0부터. `sendMessage`의 첨부와 그 개수 제한(5개) | [Hooks](/ko/sdk/api/hooks) |
+| `StabilityDiagnostics`, `StabilityLayerResult` | 한 번의 안정성 대기에서 잰 시간 | |
+| `BackendSDKConfig`, `BackendConfigResponse` | `BackendSDKConfig`는 `fetchAppConfig()`가 반환하는 애플리케이션의 대시보드 설정이고, `BackendConfigResponse`는 그것을 감싼 HTTP 응답 `{ config, applicationId }`입니다 | [설정](/ko/sdk/configuration#설정을-읽어-오는-곳) |
 
 ---
 
@@ -360,12 +395,7 @@ import {
   useAgent,
   LogLevel,
 } from '@viamoss/moss-sdk';
-import type {
-  MossSDKConfig,
-  AgentState,
-  ChatMessage,
-  DefaultModalPosition,
-} from '@viamoss/moss-sdk';
+import type { MossSDKConfig, AgentState } from '@viamoss/moss-sdk';
 
 const config: MossSDKConfig = {
   apiUrl: 'https://moss-api.viamoss.ai',
@@ -389,8 +419,8 @@ function ChatStatus() {
 
   return (
     <div>
-      <p>채팅 {isChatOpen ? '열림' : '닫힘'}</p>
-      <p>{messages.length}개의 메시지</p>
+      <p>Chat is {isChatOpen ? 'open' : 'closed'}</p>
+      <p>{messages.length} messages</p>
     </div>
   );
 }

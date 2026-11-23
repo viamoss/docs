@@ -1,0 +1,199 @@
+---
+title: "Improving Answers"
+description: "Use Copilot, Proposals and Monitors to find what goes wrong in conversations and fix it"
+icon: "wand-magic-sparkles"
+---
+
+Three dashboard pages help your team improve the assistant over time:
+
+- **Copilot** answers questions about your conversations and drafts fixes.
+- **Proposals** is the inbox where suggested fixes wait for a person to accept or dismiss them. Nothing changes until someone does.
+- **Monitors** checks conversations against criteria you write in plain English and flags the ones that match.
+
+All three are under **Analyze** in an application's sidebar. Admins and members can use them; only accepting a change to the AI instructions needs an admin.
+
+## Copilot
+
+Copilot is a chat for your team, not for your users. Ask it about this application's conversations, for example "What's driving escalations this period?", "Which topics have no good answer?" or "Review my procedures against recent conversations and suggest fixes." It investigates the sessions and answers with a report.
+
+- **Show investigation** lists the steps it took. **Stop** ends a running answer, **Copy** copies an answer, and **Suggested follow-ups** offers next questions. If an answer fails, **Retry** asks again.
+- A message can be up to 4,000 characters.
+- From 0.17.0, each conversation has its own address you can return to, and you can rename or delete conversations from the list. **New chat** starts another.
+
+### What Copilot can and cannot do
+
+| Copilot can | Copilot cannot |
+|---|---|
+| Read this application's sessions, transcripts, topics, ratings, procedures, monitor flags and AI instructions | Publish or unpublish a procedure |
+| Test a procedure in a sandbox, where no tool runs | Edit a published procedure or the AI instructions directly |
+| Draft a new procedure, saved as a **Draft** | Accept or dismiss a proposal |
+| Open proposals: procedure edits, AI-instruction edits, knowledge gaps and product insights | Change your knowledge base directly |
+| Grade the answers in a session | File a support ticket |
+| Change the Autopilot's settings when you ask it to | |
+
+So everything Copilot suggests reaches your users only after a person accepts it in **Proposals** and, for a new procedure, publishes it.
+
+Copilot's figures on topics and user friction come from insights Moss extracts from recent sessions in a daily background pass. On a busy application they cover part of the sessions, not all of them.
+
+### Who sees a conversation
+
+A Copilot conversation is visible only to the person who started it. Other members and admins of your organization cannot open it. What Copilot creates, such as draft procedures and proposals, is visible to everyone who can open the application.
+
+### Other ways in
+
+- **Improve with AI** in the procedure editor opens Copilot with a request to review that procedure. See [Procedures](/en/dashboard/procedures#improve-a-procedure).
+- **Investigate in Copilot** on a monitor flag opens Copilot with a question about that flag.
+
+## Proposals
+
+A proposal is a suggested change to your setup, laid out for review like a pull request: why the change is needed, the sessions that show the problem, and the change itself shown as old and new values.
+
+Open **Analyze > Proposals**. Tabs show **Open**, **Accepted** and **Dismissed** proposals, and **Party** filters by who the problem belongs to.
+
+### Where proposals come from
+
+The **Source** column shows one of:
+
+- **Copilot**: proposed during a Copilot conversation.
+- **Autopilot**: proposed by the automatic review of recent sessions (see [Automatic runs](#automatic-runs)).
+
+### Kinds of proposal
+
+| Type | What it proposes | What happens when you act on it | Who can act |
+|---|---|---|---|
+| **Procedure edit** | A change to an existing procedure | **Accept** applies it at once. A published procedure stays published, its version goes up by one, and the change is live | Admins and members |
+| **New procedure** | A new procedure (from the Autopilot; Copilot saves new procedures as drafts directly) | **Accept** creates it as a **Draft**. Publishing it is a separate step in [Procedures](/en/dashboard/procedures) | Admins and members |
+| **App instructions** | A change to the application's AI instructions | **Accept** replaces the instructions | Admins only: members see "Only admins can change the app instructions" |
+| **Knowledge gap** | A help article to add or correct | With a written document: **Apply** writes it to your knowledge base (see below). Without one: **Acknowledge** only | Admins and members |
+| **Product insight** | A problem in your product that no assistant setting can fix | **Acknowledge** records that your team reviewed it. Nothing is applied | Admins and members |
+
+**Dismiss** closes any open proposal without applying anything. A dismissed proposal is kept for reference and cannot be reopened. If the procedure a proposal targets was deleted, the proposal can only be dismissed.
+
+### Knowledge gaps
+
+**Apply** on a knowledge gap writes a Markdown document and re-indexes it for search at once:
+
+- A new document goes into a Markdown source named **Moss Suggestions**, created the first time you apply one.
+- An edit replaces the targeted Markdown page. Only pages from Markdown sources can be edited this way; for a page from a website, Document360 or Intercom, update the content at its source and acknowledge or dismiss the proposal.
+- Apply fails if the target source has **Use in AI answers** turned off. Turn it back on first.
+- An applied change can't be undone automatically. Edit or delete the page in the [Knowledge Base](/en/dashboard/knowledge-base) to reverse it.
+
+A proposal that edits a page refers to the page as it was when the proposal was made. If you refresh the source after that, the page is replaced by a new version; make the change by hand instead. **Apply** may still report success for about 48 hours after the new version is ready, but it changes only the replaced copy, which no longer answers.
+
+### Review a proposal
+
+1. Open a proposal from the list.
+2. Read **Why this change** and, for Autopilot proposals, the **Diagnosis**: responsible party, category, user intent and confidence.
+3. Open the **Evidence** sessions to see the conversations behind it. A proposal marked **Has simulation results** shows how the changed procedure answered in a sandbox test.
+4. Check **Proposed changes**, the old and new values of each field.
+5. Select **Accept**, **Apply** or **Acknowledge**, or **Dismiss**, and confirm.
+
+Open proposals for a procedure also appear in that procedure's **Suggestions** panel, where you can apply or dismiss them.
+
+### Party
+
+**Party** says whose problem the proposal addresses:
+
+- **Customer**: something in your setup: a missing or wrong help article, missing or weak AI instructions, or a missing or weak procedure.
+- **Moss**: a problem in Moss itself, such as reading the page wrongly, highlighting the wrong control or an answer not grounded in your content.
+
+### Automatic runs
+
+The Autopilot reviews recent sessions on its own and opens proposals for what it finds. It is **off by default**. Select **Auto-run** on the Proposals page to open **Automatic self-healing**.
+
+| Setting | Values | Default |
+|---|---|---|
+| **Enable automatic runs** | on or off | off |
+| **Run when** | **Sessions pile up** (20, 30 or 50 new sessions, or 1 to 100,000), or **On a schedule** (every day, 7, 14 or 30 days, or 1 to 366 days) | Sessions pile up, 30 new sessions. On a schedule defaults to every 7 days |
+| **Session window** | Last 7, 14 or 30 days. Has no effect on automatic runs (see below) | Last 30 days |
+| **Max suggestions per run** | 1 to 10 | 6 |
+| **Minimum confidence** | **Low — keep every diagnosis**, **Medium and up**, **High only** | Medium and up |
+| **Responsible party** | **All — customer and Moss**, **Customer issues only**, **Moss issues only** | All — customer and Moss |
+| **Signal sources** | **Unresolved outcomes**, **User friction**, **Monitor flags**, **Procedure failures**, **Low ratings** | All five |
+| **Categories to include** | Diagnosis categories; unchecked ones are dropped | All |
+| **Diagnosis focus (optional)** | A short steer, up to 500 characters | Empty |
+
+How a run works:
+
+1. Moss checks every few minutes whether a run is due. When one is, the dialog says "Due now — the next run starts within a few minutes."
+2. It looks at sessions started since the previous automatic run (for the first run, since **Auto-run** was first opened) that carry one of the chosen signals, takes the 80 most recent of them, and diagnoses each with an AI model. A session is never diagnosed twice by automatic runs. Each session is considered only by the first automatic run after it starts: signal sessions beyond the 80, and sessions whose signal appears only after that run (insights are extracted once a day, and monitors score closed sessions at least 30 minutes old), are not picked up by later runs.
+3. It groups the diagnoses by cause, drops those below the minimum confidence or outside the chosen party and categories, and skips causes that an open proposal already covers.
+4. It opens at most **Max suggestions per run** new proposals, each with its evidence sessions.
+
+Each run uses the AI model, so on a self-hosted install it adds to your model bill. Nothing a run produces is applied without a person accepting it. The dashboard has no button for a one-off run.
+
+The same dialog holds **Score monitors automatically**; see [When sessions are scored](#when-sessions-are-scored).
+
+## Monitors
+
+A monitor is a criterion, written as one plain-English sentence, that an AI model checks conversations against, for example "the user asks about refunds and the assistant gives contradictory or incomplete steps". When a conversation matches, the monitor raises a **flag** in the review queue with the model's reasoning.
+
+Open **Analyze > Monitors**.
+
+### Stock monitors
+
+Every application gets four stock monitors, all turned on, the first time someone opens the page:
+
+| Monitor | Flags a conversation when |
+|---|---|
+| **Frustration** | The user expresses clear frustration or anger, or asks for a human agent |
+| **Looping** | The assistant repeats substantially the same answer or question more than once without progress |
+| **Unnecessary escalation** | The assistant offers or creates a support ticket when knowledge-base content shown in the conversation could have answered the question |
+| **Procedure failure** | A procedure was active, but the conversation ended without the procedure's final action and without resolving the user's request. Only sessions where a procedure ran are checked |
+
+You can turn stock monitors off, but not delete them.
+
+### Create a monitor
+
+1. Select **New monitor**.
+2. Enter a **Name** and the **Criteria**: one sentence describing the conversations to flag.
+3. Optionally, add **Rubric** fields (up to 10), each with a maximum number of points, to get a point score with every flag.
+4. Select **Create monitor**.
+
+The dashboard has no editor for a monitor's criteria. To change a custom monitor, create a new one and turn off or delete the old one. Deleting a monitor also deletes all its flags.
+
+### When sessions are scored
+
+<Warning>
+Monitors do not score conversations on their own by default. Until you select **Run now** or turn on automatic scoring, the review queue stays empty.
+</Warning>
+
+| How | What it scores |
+|---|---|
+| **Run now** on the Monitors page | Up to 100 sessions from the last 7 days |
+| **Score monitors automatically** in **Proposals > Auto-run** (off by default) | Closed sessions that started at least 30 minutes and at most 14 days ago, oldest first, up to 50 sessions per run |
+
+For automatic scoring, **How often to score** is **Same as Auto-run** or every day, 7, 14 or 30 days, or 1 to 366 days. With **Same as Auto-run** and automatic runs on, monitors score right before each Autopilot run, so its **Monitor flags** signal is current. Automatic scoring also works with automatic runs off; **Same as Auto-run** then means the **Time between runs** value (every 7 days by default). The dialog shows when monitors last scored, how many sessions and flags that produced, and any errors.
+
+Each monitor checks each session once. Sessions a monitor has already checked are skipped on later runs, so a run costs model calls only for new sessions and new monitors. Scoring uses the AI model.
+
+### Read the results
+
+- Each monitor card shows its counts of open, reviewed and dismissed flags.
+- The **Review queue** has **Open**, **Reviewed** and **Dismissed** tabs. Each flag shows the monitor, a link to the session, the model's reasoning and, with a rubric, the score.
+- **Review** marks a flag as handled. **Dismiss** sets it aside; dismissing trains nothing, so if a monitor keeps flagging the wrong sessions, replace it with one whose criteria are more precise.
+- **Investigate in Copilot** asks Copilot to look into the flagged session.
+
+Open and reviewed flags are one of the Autopilot's signal sources; dismissed flags are not.
+
+## Common questions
+
+### Will the Autopilot or Copilot change anything without us?
+
+No. Both only open proposals and save drafts. A change reaches your users after someone accepts it, and a new procedure only after someone publishes it.
+
+### How do I get Moss to suggest fixes automatically?
+
+Turn on **Enable automatic runs** in **Proposals > Auto-run**. By default a run starts after every 30 new sessions and opens up to 6 proposals. See [Automatic runs](#automatic-runs).
+
+### Our monitors never flag anything. Why?
+
+Scoring is not automatic by default. Select **Run now**, or turn on **Score monitors automatically** in **Proposals > Auto-run**. See [When sessions are scored](#when-sessions-are-scored).
+
+### Can my colleague see my Copilot conversations?
+
+No. Each conversation is visible only to the person who started it.
+
+### Why can't I accept an App instructions proposal?
+
+Only admins can change the AI instructions, including through a proposal. Ask an admin to accept it.

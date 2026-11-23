@@ -1,0 +1,206 @@
+---
+title: "Self-hosting overview"
+description: "What a self-hosted Moss install runs, what it needs, how it is delivered and upgraded, and how dashboard sign-in works"
+icon: "server"
+---
+
+A self-hosted install runs the Moss server on your own Kubernetes cluster,
+from a Helm chart. Your web app embeds the SDK, and your users' browsers talk
+to your install. Your admins use the Moss dashboard on your install, and sign
+in through your own identity provider.
+
+This page is an orientation. The full operator reference is the README that
+ships with the chart: see [The full operator reference](#the-full-operator-reference).
+
+## What an install runs
+
+| Workload | What it does |
+|---|---|
+| `sdk-backend` | The API the SDK calls: chat turns, guide steps, session recordings, and the configuration the SDK loads when it starts. |
+| `dashboard-backend` | The API behind the dashboard: settings, the knowledge base, analytics and Copilot. It also runs the scheduled background work, such as knowledge-source auto-refresh, monitors and conversation insights. |
+| `worker` | The knowledge-base pipeline: it finds and fetches pages, describes their images, then splits and indexes them. |
+| `dashboard` | The web dashboard for admins and content owners. |
+| Migrate Job | Runs the database migrations before each install and upgrade. |
+| Retention CronJob | Optional, from 0.17.0. Deletes data for applications that turned on Automatic deletion. See [Operations](/en/self-hosting/operations#the-retention-cronjob). |
+
+The two backends run the same image with a different `SERVICE_MODE` (`sdk` or
+`dashboard`), so each can scale on its own. The chart runs one replica of each
+by default.
+
+## The services it needs
+
+| Service | Used for | Notes |
+|---|---|---|
+| PostgreSQL | Everything Moss stores, apart from the items below | A separate knowledge-base database is optional (`KNOWLEDGE_BASE_DATABASE_URL`). |
+| Redis | The ingestion job queue, and the counters for the SDK request limits | The backends and the worker must use the same instance. |
+| S3-compatible object storage | Screenshots, session recordings, page snapshots and knowledge-base images | Such as Amazon S3, MinIO or SeaweedFS |
+| Pinecone | Knowledge-base search | One index for each embedding model your applications use. In production, both backends refuse to start without `PINECONE_API_KEY`. |
+| A model provider | Chat answers and the dashboard's AI features | See [Models and response time](/en/self-hosting/models-and-response-time). |
+| An embedding provider | Knowledge-base search | Chosen per application when it's created |
+| An OIDC identity provider | Dashboard sign-in | Such as Okta, Microsoft Entra ID or Keycloak |
+
+The chart can run PostgreSQL, Redis and an S3-compatible store (SeaweedFS) in
+the cluster, and does by default. Turn each off to use your own managed service
+instead.
+
+Optional services: Firecrawl, for website knowledge sources; an OpenTelemetry
+collector, for tracing; and a Slack webhook, for alerts. [Network](/en/self-hosting/network)
+lists every outbound connection and which can stay private.
+
+Credentials go in three Kubernetes Secrets, one each for the backends
+(`moss-backend`), the worker (`moss-worker`) and the dashboard
+(`moss-dashboard`). `SECRET_ENCRYPTION_KEYS`, which encrypts the credentials
+admins enter in the dashboard, must be the same in `moss-backend` and
+`moss-worker`. Keep a copy: there is no way to recover those credentials
+without it.
+
+## Delivery: the Helm chart and images
+
+- **The chart** is an OCI artifact, `oci://ghcr.io/viamoss/charts/moss`, in a
+  private registry. Moss gives you a read-only token to pull it and the images;
+  ask your Moss contact. You can mirror the chart and images into your own
+  registry.
+- **The images:** `moss-backend` (both backends, the migrate Job and the
+  retention CronJob), `moss-worker`, and the dashboard. Use the
+  `moss-dashboard-oidc` image, which signs in through OIDC: the sign-in method
+  is built into the dashboard image, so it can't be switched at runtime, and
+  the chart's default dashboard image is the hosted service's.
+- **Versions.** Image tags default to the chart's version, so one chart version
+  brings matching images. If you pin image tags, set them all to the chart's
+  version.
+- **Signatures.** The chart and images are signed with cosign. The chart README
+  shows how to verify them before you install, and how to enforce signatures in
+  the cluster.
+- **The SDK** is the npm package `@viamoss/moss-sdk`, released with the same
+  version number as the server. See [Versioning](/en/versioning).
+
+## Upgrading
+
+1. **Read the release's notes** in the [changelog](/en/changelog), and back up
+   the database. Migrations can't always be reversed.
+2. **Check that the chart renders** with your values:
+   `helm template <release> oci://ghcr.io/viamoss/charts/moss --version <version> -f values.override.yaml`.
+3. **Upgrade the server** with `helm upgrade`, passing your values file. The
+   migrate Job runs the migrations before the new pods start. If a migration
+   fails, the upgrade stops, and the failed Job stays so you can read its logs.
+4. **Upgrade the SDK** to the same version, after the server. A newer SDK can
+   use features an older server refuses: for example, a 0.16.25 server refuses
+   the 1–5 star rating that SDK 0.17.0 can send.
+
+<Warning>
+  Each workload's `env` in the chart is a list, and Helm replaces a list
+  wholesale. An `env` in your values file drops every default entry the chart
+  ships for that workload, such as `SERVICE_MODE`. When you set `env`, repeat
+  the chart's defaults. The chart README's Environment Variables section shows
+  how.
+</Warning>
+
+## Dashboard sign-in and roles
+
+A self-hosted dashboard signs in through your OIDC identity provider, and every
+install is one organization, named by `ON_PREM_ORG_ID`. Set:
+
+| Where | Settings |
+|---|---|
+| Both backends | `AUTH_PROVIDER=oidc`, `OIDC_ISSUER`, `OIDC_AUDIENCE`, `ON_PREM_ORG_ID`, `OIDC_ADMIN_GROUPS`, and optionally `OIDC_MEMBER_GROUPS` and `OIDC_ROLE_CLAIM` |
+| Dashboard | `AUTH_SECRET`, `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, `ON_PREM_ORG_ID`, `OIDC_ADMIN_GROUPS`, and optionally `OIDC_MEMBER_GROUPS`, `OIDC_ROLE_CLAIM` and `OIDC_REFRESH_TOKENS` |
+
+`OIDC_AUDIENCE` takes a comma-separated list. It must include the dashboard's
+OIDC client ID, or users go back to sign-in after every sign-in.
+
+Behind an ingress or reverse proxy, the usual layout, the dashboard may also
+need `AUTH_TRUST_HOST=true` and `AUTH_URL` set to its public URL.
+
+The dashboard has two roles, **Admin** and **Member**. Moss reads the user's
+groups from the token's `groups` claim (`OIDC_ROLE_CLAIM` changes the claim) at
+each sign-in, and stores no roles of its own:
+
+| The user's groups | Role |
+|---|---|
+| Any group in `OIDC_ADMIN_GROUPS` | Admin |
+| Otherwise, with `OIDC_MEMBER_GROUPS` unset | Member: anyone who can sign in |
+| Otherwise, any group in `OIDC_MEMBER_GROUPS` | Member |
+| None of these | Refused, with an Access Denied page |
+
+Set the same group lists on the backends and the dashboard. A role applies to
+every application on the install. Members can't open the **Configure** pages
+or **API logs**; see [Dashboard overview](/en/dashboard/overview) for what each
+role can do.
+
+Dashboard sessions last as long as the identity provider's ID token, such as
+60 minutes on Okta. With `OIDC_REFRESH_TOKENS=true` on the dashboard, from
+0.16.19, the dashboard renews the token with a refresh token. Allow the
+refresh-token grant for Moss in your identity provider first, or every sign-in
+fails.
+
+## SDK request limits
+
+From 0.17.0, `sdk-backend` limits how fast each SDK user can send requests,
+counted in Redis. `SDK_RATE_LIMITS_ENABLED` defaults to `true`, and the chart
+sets it on `sdk-backend`; on 0.16.x the limits were off by default.
+
+| Limit | Per |
+|---|---|
+| 30 session starts a minute | User, per application |
+| 60 questions a minute | User, per application |
+| 120 guided-step completions a minute | Chat |
+| 10 recording uploads a minute | Session |
+
+A request over a limit gets 429 with `Retry-After`. What the user sees
+depends on the request:
+
+- **A question or a guided step:** the chat shows "Too many requests. Try
+  again shortly." with a retry.
+- **Starting a new chat:** the SDK retries for about 30 seconds, then shows
+  the connection error, "Unable to connect", with **Retry**.
+- **A recording upload:** nothing in the chat. The browser console logs the
+  failed upload.
+
+Set `SDK_RATE_LIMITS_ENABLED=false` on `sdk-backend` to turn all four off, for
+example when many users share one token subject.
+
+## The full operator reference
+
+The chart's README is the reference for every setting, with its default and
+the chart values. Print the one for your version with:
+
+```bash
+helm show readme oci://ghcr.io/viamoss/charts/moss --version <version>
+```
+
+The chart also contains `docs/sse.md` (passing live loader steps through
+proxies) and `docs/cosign-verification.md` (verifying signatures). Run
+`helm pull oci://ghcr.io/viamoss/charts/moss --version <version> --untar` to
+get them.
+
+The other self-hosting pages answer the common questions:
+
+<CardGroup cols={3}>
+  <Card title="Models and response time" icon="gauge" href="/en/self-hosting/models-and-response-time">
+    Providers, regions, and what decides how long an answer takes
+  </Card>
+  <Card title="Network and egress" icon="network-wired" href="/en/self-hosting/network">
+    What the install reaches, and what browsers need from it
+  </Card>
+  <Card title="Operations" icon="screwdriver-wrench" href="/en/self-hosting/operations">
+    Tracing, backup and restore, retention, safety filters
+  </Card>
+</CardGroup>
+
+## Common questions
+
+**Who can do what in the dashboard, and where do roles come from?**
+Roles come from your identity provider's groups: `OIDC_ADMIN_GROUPS` makes
+Admins, and `OIDC_MEMBER_GROUPS`, or anyone who can sign in when it's unset,
+makes Members. See [Dashboard sign-in and roles](#dashboard-sign-in-and-roles).
+
+**Do we upgrade the server or the SDK first?**
+The server, then the SDK to the same version. See [Upgrading](#upgrading).
+
+**Where is the list of every setting?**
+In the README that ships with the chart: `helm show readme` prints it for your
+version.
+
+**Why did our pods lose `SERVICE_MODE` after we added one setting?**
+An `env` list in your values file replaces the chart's whole list for that
+workload. Repeat the chart's default entries in it.

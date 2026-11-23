@@ -1,0 +1,112 @@
+---
+title: "Suggested Content"
+description: "The suggested questions and recommended articles on the chat's start screen, and the messages shown when something goes wrong"
+icon: "sparkles"
+---
+
+**Content > Suggested Content** sets what users see when they open an empty chat: a few suggested questions, and a list of recommended articles. It also sets the messages the widget shows when Moss is unavailable or points at something it cannot find on the page.
+
+Anyone in your organization can open the page. Only Admins can save changes; for Members the save button is disabled, with the note "Only admins can save the zero state."
+
+## Change the suggested questions and articles
+
+1. Open the application and go to **Content > Suggested Content**.
+2. In the **Zero state** card, under **Suggested queries**, click **Add query**. Choose an icon and type the question. Use the arrows to reorder and the remove button to delete.
+3. Under **Recommended articles**, type a **Section label** if you want one. Then click **Add article** and fill in **Title**, **URL**, **Source** and **Min read**, or click **Search knowledge base** to pick a page or paste a URL.
+4. Check the preview beside the editor. It shows the layout; colors and fonts follow your appearance settings.
+5. Click **Save** in the bar that appears at the bottom of the card. **Discard** drops your changes.
+
+The change reaches every install type the next time a page with the widget loads or the user starts a new chat, unless your app's code sets its own list (see [When your code overrides the dashboard](#when-your-code-overrides-the-dashboard)).
+
+### Limits
+
+| Item | Limit |
+|------|-------|
+| Suggested queries | Up to 5. Each has an icon (**Document**, **Compass**, **Megaphone**, **Search** or **People**) and a question. A row with no question is not saved. |
+| Recommended articles | No fixed limit, but the start screen fits about 4. The editor warns you above that. An article needs a **Title** and a **URL**; a row missing either is not saved. |
+| **Search knowledge base** | Searches the first 10 knowledge sources, up to 50 pages from each. Keep typing to narrow the list. |
+| Scope | One set for the whole application. For a page or a role, see [Different content on a page or for a role](#different-content-on-a-page-or-for-a-role). |
+
+### What users see
+
+- Clicking a suggested question sends it to Moss as the user's message.
+- Each question shows the icon you chose.
+- An article opens its URL in a new tab. Its card shows the source (**Help center** if you leave **Source** blank) and the reading time, if you set one.
+- The articles' heading is your **Section label**, or **Recommended articles** if you leave it blank.
+- If **Let users reopen their earlier chats** is on, the user's recent chats appear above the suggested questions. See [Sessions](/en/sdk/api/session#earlier-chats).
+
+## Fallback states
+
+The **Fallback states** card sets the copy and buttons the widget shows in two situations. Save with **Save fallback states**; only Admins can save.
+
+| State | When the widget shows it | Fields |
+|-------|--------------------------|--------|
+| **Unavailable (full takeover)** | The widget cannot reach Moss after retrying. The message replaces the whole chat panel and hides the input bar. | **Title**, **Body**, **Primary CTA (label + URL)**, **Secondary CTA (optional, label + URL)**. Title and the primary CTA are required; without them the state is cleared on save. |
+| **Hallucination (inline bubble)** | Moss's reply pointed at an element it could not find on the page. The message replaces that reply; the user can keep typing. | **Body**, and optional **Call-to-action buttons**. Body is required; without it the state is cleared on save. |
+
+When a state is not set, the widget shows its default instead: a connection error panel for Unavailable, and the reply as written for Hallucination.
+
+<Warning>
+    Fallback states reach apps that use the **CDN script**, unless the page sets `window.mossSettings.appearance`: that object replaces the dashboard's fallback states, even if it sets only colors. Then set `appearance.fallbackStates` there as well. An app that uses the **npm package** does not receive them from the dashboard; set `appearance.fallbackStates` in your `AgentProvider` config instead. See [Fallback states](/en/sdk/appearance#fallback-states) in the Appearance reference.
+</Warning>
+
+## When your code overrides the dashboard
+
+If your app sets `appearance.zeroState` in its Moss config, the widget uses that value and ignores the dashboard's suggested questions and articles entirely, even when your value is empty. This applies to `AgentProvider` config with the npm package, and to `window.mossSettings.appearance.zeroState` with the CDN script.
+
+To let the dashboard drive the start screen, remove `appearance.zeroState` from your code.
+
+## Different content on a page or for a role
+
+The dashboard holds one set for the whole application. To show different questions or articles on a particular page, or to admins and other users, set them in your app's code:
+
+- Give the page a stable name with the `pageKey` option, such as `'billing-settings'`.
+- Under `appearance.zeroState.variants`, add an entry for that name with an `admin` list, a `customer` list, or both. A `default` entry applies to pages without their own.
+- Moss treats a user as `admin` when `userMetadata.role` is `'admin'`, and as `customer` otherwise.
+- If the chosen list has fewer than 3 items, Moss tops it up from the other role's list for the same page, then from the top-level lists.
+
+Because your code's `zeroState` replaces the dashboard's, include your application-wide questions and articles in its top-level lists as well.
+
+```tsx
+import { AgentProvider, AssistantButton } from '@viamoss/moss-sdk';
+
+<AgentProvider
+  config={{
+    apiUrl: 'https://moss-api.viamoss.ai',
+    applicationId: 'YOUR_APP_ID',
+    userId: currentUser.id,
+    getJwt: fetchMossToken,
+    pageKey: 'billing-settings',
+    userMetadata: { role: currentUser.isAdmin ? 'admin' : 'member' },
+    appearance: {
+      zeroState: {
+        suggestedQueries: [{ question: 'How do I invite a teammate?' }],
+        variants: {
+          'billing-settings': {
+            customer: { suggestedQueries: [{ question: 'Where can I download my invoices?' }] },
+            admin: { suggestedQueries: [{ question: 'How do I change our billing plan?' }] },
+          },
+        },
+      },
+    },
+  }}
+>
+  <AssistantButton />
+</AgentProvider>
+```
+
+The full set of options, including icons and articles in each list, is in [Per page and per role](/en/sdk/appearance#per-page-and-per-role) in the Appearance reference.
+
+## Common questions
+
+**How do I change the recommended article on one specific page?**
+The dashboard can't do that: it holds one set per application. Pass `pageKey` and set `appearance.zeroState.variants` in your code, as shown in [Different content on a page or for a role](#different-content-on-a-page-or-for-a-role).
+
+**I changed the suggested questions in the dashboard, and the widget still shows the old ones.**
+Reload the page first: the widget picks up the change when it loads or when the user starts a new chat. If the old questions stay, your app's code sets `appearance.zeroState`, which replaces the dashboard's list. Remove it from your code, or edit the questions there.
+
+**Why can't I save?**
+Saving is for Admins only. Ask an Admin in your organization, or see [Roles](/en/dashboard/overview#roles).
+
+**I set an Unavailable message, but our app shows the default error.**
+Apps on the npm package don't receive fallback states from the dashboard, and neither does a CDN page that sets `window.mossSettings.appearance`. Set `appearance.fallbackStates` in your `AgentProvider` config or in `window.mossSettings.appearance`.

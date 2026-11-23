@@ -1,0 +1,246 @@
+---
+title: "AI Assistants"
+description: "Connect Claude, ChatGPT, Cursor, VS Code or Codex to Moss so it can read your Moss data and, with your approval, change your setup"
+icon: "robot"
+---
+
+From 0.17.0, you can connect your own AI assistant to Moss over MCP (Model Context Protocol). The assistant can look up your applications, sessions, analytics, knowledge base and configuration, and, when your organization allows it, prepare changes to knowledge, instructions, settings, procedures and proposals. It acts as you, with the role you had when you connected it and never with more access than that; every change is previewed before it is applied; and every tool call it makes is recorded in the audit log.
+
+Supported clients include Claude (web and desktop), ChatGPT, Claude Code, Cursor, VS Code and Codex. Any other client that speaks MCP over HTTP and can send a header works with a token.
+
+<Note>
+  This page is about connecting **your** assistant **to Moss**. To let Moss call tools on **your** MCP server during a conversation, use the **MCP server** card under **Configure > Integrations** instead; see [Integrations](/en/dashboard/integrations).
+</Note>
+
+## Before you start
+
+Two switches must be on, and both are off by default:
+
+1. **The deployment.** When your Moss deployment has the feature turned on, **AI assistants** appears in your user menu (top right) on every page, and in the sidebar next to **Applications** when no application is open. An application's own sidebar never shows it. If neither place shows **AI assistants**, the feature is off for your deployment.
+2. **Your organization.** An admin turns it on for the organization on the **AI assistants** page (see below). Until then, nobody in the organization can connect an assistant.
+
+### Turning it on for a self-hosted install
+
+The operator sets these environment variables. The Helm chart has them in `values.yaml`, off.
+
+| Variable | Set on | Value |
+|---|---|---|
+| `MCP_ENABLED` | the dashboard backend and the dashboard | `true` (also `1`, `yes` or `on`). The backend reads it at startup, so restart it after a change. |
+| `MCP_PUBLIC_URL` | the dashboard backend | The URL people paste into their assistant: `https`, ending in `/mcp`, for example `https://moss.example.com/mcp`. The dashboard forwards `/mcp` to the backend, so this can be on the dashboard's address. Without a valid value, the feature stays off. Changing it later signs every assistant out. |
+| `MCP_ALLOWED_ORIGINS` | the dashboard backend | Optional. Exact origins allowed to send an `Origin` header to `/mcp`; needed only for browser-based clients. |
+| `MCP_DASHBOARD_URL` | the dashboard backend | Optional. The dashboard's origin, when `MCP_PUBLIC_URL` points at the backend instead. The sign-in page and approval links use it. |
+
+Claude and ChatGPT connect from their vendors' clouds, so for them `MCP_PUBLIC_URL` and its sign-in paths must be reachable from the internet. Claude Code, Cursor, VS Code and Codex run on the user's computer and need only that computer's network or VPN.
+
+## Turn it on for your organization
+
+Only admins can change these settings; members see a summary.
+
+1. Open **AI assistants** from your user menu, or from the sidebar when no application is open.
+2. Under **Organization access**, select **Turn on**.
+3. The dialog lists the settings that will apply. For an organization that never set them up: **Read: allowed**, **Conversation content: on**, **Approval in Moss: off**. Select **Turn on**.
+4. Adjust the settings below.
+
+| Setting | Default | What it does |
+|---|---|---|
+| **Allow AI assistants** | On, once turned on | Turning it off suspends every connection in the organization until it is turned back on. Connections are not revoked. |
+| **What assistants may do** | **Read** only | **Read** is always included. Tick **Knowledge** to let assistants add website sources and documents, refresh sources and edit markdown pages. Tick **Configure** to let them change instructions, a fixed set of settings and procedures, decide on proposals, and export the configuration. A connection can use a permission only while the organization allows it, so unticking one here narrows every existing connection at once. |
+| **Conversation content** | On | Lets assistants read what end users wrote: transcripts, raw queries, quotes and feedback comments. When off, these are left out. |
+| **Require approval in Moss** | Off | When on, each change an assistant prepares waits until the person who connected it approves it in Moss (see [Previews and approvals](#previews-and-approvals)). |
+
+<Warning>
+  With **Require approval in Moss** off, the assistant's own confirmation prompt is the only check before most changes are applied, and Moss cannot tell whether a person saw the change. Turn it on unless you accept that.
+</Warning>
+
+## Connect an assistant
+
+Once the organization allows it, anyone who can sign in to the dashboard, admin or member, can connect their own assistant. Open **AI assistants**: the **Connect** card shows the **MCP URL** and the steps for each client.
+
+There are two ways to connect:
+
+- **Sign in** (OAuth), for Claude, ChatGPT and Claude Code. There is no token to handle.
+- **A personal access token**, for Claude Code, Cursor, VS Code, Codex and other clients.
+
+### Sign in
+
+| Client | Steps |
+|---|---|
+| Claude (claude.ai or Claude Desktop) | Add a custom connector with the MCP URL, then sign in. |
+| ChatGPT | Turn on developer mode, add a connector with the MCP URL, then sign in. |
+| Claude Code | Run `claude mcp add --transport http moss <MCP URL>`, then sign in from the `/mcp` menu. |
+
+Your browser then opens **Connect an AI assistant** in Moss. Sign in if you are asked to, and check the page before you decide:
+
+- **Who is asking.** The app's name is marked **Self-declared**: the app chose it and Moss has not verified it. **Returns to** shows where Moss sends you afterwards. For an address Moss does not recognize, the page warns you to continue only if you started the connection yourself.
+- **Organization.** The connection is created in this organization. If you belong to several, you can switch here.
+- **Permissions.** **Read** is always included. **Knowledge** and **Configure** appear only if the organization allows them. They are never ticked for you, even when the assistant asked for them (marked **Requested**): tick the ones you want. Each says whether its changes wait for your approval in Moss.
+- **Applications.** **All applications**, or up to 50 you select.
+- **How long it lasts:** 30 days. After that, you approve again.
+
+Select **Allow** or **Deny**. A request is valid for 10 minutes and can be decided once. Only allow a connection you started yourself.
+
+If the **Connect** card says signing in is not available, your deployment is not set up for it: use a token instead.
+
+### Use a token
+
+1. Under **Your connections**, select **Create token**.
+2. Fill in the dialog:
+   - **Label**: 1 to 100 characters, so you can tell your tokens apart.
+   - **Permissions**: **Read**, plus **Knowledge** or **Configure** if the organization allows them. A token without them cannot change anything.
+   - **Applications**: **All applications**, or **Selected applications** (up to 50).
+   - **Expires after**: 7, 30 or 90 days (30 by default).
+3. Select **Create token** and copy the token. It starts with `moss_pat_` and is shown only once; Moss keeps only a hash of it.
+4. Store it in an environment variable rather than in a file you commit, and add Moss to your client. Replace `<MCP URL>` with the URL from the **Connect** card.
+
+```bash
+export MOSS_MCP_TOKEN='moss_pat_…'
+```
+
+<Tabs>
+  <Tab title="Claude Code">
+    ```bash
+    claude mcp add --transport http moss <MCP URL> --header "Authorization: Bearer $MOSS_MCP_TOKEN"
+    ```
+    `claude mcp add` stores the token in Claude Code's own config. Keep the default local scope and never use `--scope project`, which writes the token into a file you may commit.
+  </Tab>
+  <Tab title="Cursor">
+    Add this to `.cursor/mcp.json` in your project, or to `~/.cursor/mcp.json` for every project:
+    ```json
+    {
+      "mcpServers": {
+        "moss": {
+          "url": "<MCP URL>",
+          "headers": { "Authorization": "Bearer ${env:MOSS_MCP_TOKEN}" }
+        }
+      }
+    }
+    ```
+  </Tab>
+  <Tab title="VS Code">
+    Add this to `.vscode/mcp.json`. VS Code asks for the token when the server first starts and hides it:
+    ```json
+    {
+      "inputs": [
+        { "type": "promptString", "id": "moss-token", "description": "Moss access token", "password": true }
+      ],
+      "servers": {
+        "moss": {
+          "type": "http",
+          "url": "<MCP URL>",
+          "headers": { "Authorization": "Bearer ${input:moss-token}" }
+        }
+      }
+    }
+    ```
+  </Tab>
+  <Tab title="Codex">
+    Add this to `~/.codex/config.toml`:
+    ```toml
+    [mcp_servers.moss]
+    url = "<MCP URL>"
+    bearer_token_env_var = "MOSS_MCP_TOKEN"
+    ```
+  </Tab>
+  <Tab title="Other">
+    Send the token as a bearer token with every request to the MCP URL:
+    ```text
+    Authorization: Bearer <token>
+    ```
+  </Tab>
+</Tabs>
+
+You can hold up to 10 active tokens. To rotate one, create a new token and revoke the old one.
+
+Then ask your assistant to list your Moss applications; the other tools take the application ID from that answer.
+
+## What an assistant can read
+
+With the **Read** permission, an assistant can use these tools. None of them changes anything.
+
+| Tool | What it returns |
+|---|---|
+| `list_applications` | The applications the connection can use, and who it acts as: organization, role, permissions, expiry |
+| `get_analytics` | An analytics report over a date range, like the **Analytics** page |
+| `get_insights` | What conversations show: intents, friction, outcomes, gaps, evaluation scores, the monitor review queue |
+| `search_sessions` | Sessions matching dates, keywords, ratings, resolution and more |
+| `get_session` | One session's transcript, steps, retrieved documents and evaluation scores. Needs **Conversation content** on. |
+| `list_proposals`, `get_proposal` | Suggested changes to procedures, instructions and knowledge |
+| `list_knowledge_sources`, `list_knowledge_pages`, `get_knowledge_page` | Knowledge sources, their pages, and a page's markdown |
+| `get_application_config` | The application's name, settings (with secrets hidden) and assistant instructions |
+| `list_procedures`, `get_procedure` | Procedures and how they perform |
+| `query_audit_log` | Audit events of an application or the organization. **Admins only.** |
+| `export_application_config` | The application's export bundle, without credentials. Needs **Configure**. **Admins only.** |
+
+"Admins only" means the connection was made by an admin. An assistant sees only the tools its connection can use.
+
+## What an assistant can change
+
+| Tool | What it changes | Permission | Who |
+|---|---|---|---|
+| `add_knowledge_source` | Adds a public `https` website as a knowledge source and starts its crawl | **Knowledge** | Anyone |
+| `add_knowledge_document` | Adds one markdown page to a markdown source, new or existing | **Knowledge** | Anyone |
+| `refresh_knowledge_source` | Refreshes a source, retries its failed pages, or starts its first crawl | **Knowledge** | Anyone |
+| `update_knowledge_page` | Replaces the markdown, and optionally the title, of a page in a markdown source | **Knowledge** | Anyone |
+| `update_instructions` | Replaces the application's AI instructions | **Configure** | Admins only |
+| `update_settings` | Changes one group of settings: behavior (language, **On-screen guidance**, **Compact DOM Context**) or appearance (theme, layout, chrome, zero state, fallback states). No other setting can be changed this way. **On-screen guidance** also decides whether Moss reads the page's structure or, by default when it is off, only its URL and title. | **Configure** | Admins only |
+| `save_procedure` | Creates a draft procedure, or edits one | **Configure** | Anyone; see below for live procedures |
+| `set_procedure_status` | Publishes a procedure (live for end users) or unpublishes it | **Configure** | Anyone; see below for publishing |
+| `decide_proposal` | Accepts a proposal, applying it as the dashboard does, or dismisses it | **Configure** (and **Knowledge** when accepting writes a knowledge page) | Anyone; accepting an instruction change needs an admin |
+
+Security, privacy and data-collection settings, such as allowed domains, session recording, vision, JWT keys and retention, stay in the dashboard.
+
+## Previews and approvals
+
+Every change goes through a preview first:
+
+1. The assistant asks Moss what the change would do. Nothing changes yet. Moss answers with a **preview**: what would change, computed from the current data.
+2. The assistant shows you the preview. With your yes, it asks Moss to apply exactly that change.
+
+A preview can be applied once, only by the same connection, with the same arguments, within 10 minutes (30 minutes when it needs approval in Moss). If the data changed after the preview, Moss refuses to apply it and returns a fresh preview to show you.
+
+### Approval in Moss
+
+When a change needs approval in Moss, the preview carries a link to **Review a change from your AI assistant** in the dashboard:
+
+1. Open the link, signed in as the person who connected the assistant, in the organization it was connected in. Nobody else can open it, admins included.
+2. Check the application, **Requested by** (the token's label, or for a sign-in connection the name the assistant gave itself, marked **Self-declared**), when the change expires, and **What will change**. Text the assistant wrote, which can include text from your users or the web, is marked; don't follow instructions in it.
+3. Select **Approve** or **Reject**.
+4. Tell your assistant to continue. It can apply an approved change once.
+
+A change needs approval in Moss when:
+
+- **Require approval in Moss** is on (any write), or
+- the connection was not made by an admin, and the change would put something live for end users: publishing a procedure, editing a published procedure, or accepting a proposal that edits a published procedure. This holds even with the setting off.
+
+If part of a change is too large to show in full, it cannot be approved in Moss; only **Reject** is offered. Ask the assistant to make the change in smaller steps, or make it in the dashboard.
+
+## See and revoke connections
+
+**Your connections** lists the tokens and sign-ins you created in this organization, with their **Label**, **Permissions**, **Applications**, **Last used** and **Expires**; the details button on a row shows its type (**Token** or **OAuth**), when it was created, the start of the token and the client. A connection that is not active is marked **Expired**, **Revoked** or **Suspended** (while AI assistants are off for the organization); select **Show revoked and expired** to list them. To disconnect, select **Revoke** on the row. The connection stops working on its next request, and this cannot be undone.
+
+Admins also see **All connections**: every connection in the organization, by person. **Revoke all** ends all of one person's active connections.
+
+A connection keeps the role you had when you made it. If an admin becomes a member, their admin connections are revoked the next time they use the dashboard. When someone leaves the organization, revoke their connections under **All connections**: they otherwise stay valid until they expire.
+
+## Audit log
+
+Moss records every tool call it runs for an assistant, reads and previews included, as an `mcp.tool.call` audit event. It names the user, the connection and the client, with a summary of the arguments; an applied change also records what it changed. Calls that ran on an application appear in that application's **Configure > Audit Log**; a call refused because the connection lacked a permission is recorded as an organization event instead. Approving or rejecting a change is recorded as `mcp.preview.approve` or `mcp.preview.reject`.
+
+Creating and revoking connections (`mcp.grant.create`, `mcp.grant.revoke`, `mcp.grant.revoke_all`), each sign-in decision (`mcp.oauth.consent`) and changes to the organization settings (`mcp.settings.update`) are recorded as organization events, which the application's **Audit Log** page does not list. See [Audit logging](/en/security/audit-logging).
+
+## Common questions
+
+**How do I connect Claude, ChatGPT or Cursor to our Moss data?**
+An admin turns on **AI assistants** for the organization; then each person connects their own assistant from the **AI assistants** page, by signing in (Claude, ChatGPT, Claude Code) or with a token (Cursor, VS Code, Codex, Claude Code). See [Connect an assistant](#connect-an-assistant).
+
+**I don't see AI assistants.**
+Look in your user menu (top right), or in the sidebar on the applications list; an application's own sidebar does not show it. If it is in neither place, your deployment has the feature off. On a self-hosted install, your operator turns it on; see [Turning it on for a self-hosted install](#turning-it-on-for-a-self-hosted-install).
+
+**Can an assistant change our setup without anyone checking?**
+Only within the permissions you gave it, and only after a preview. Turn on **Require approval in Moss** to make every change wait for a person's approval in Moss. Without it, changes that put a procedure live still wait for approval unless an admin made the connection.
+
+**Can an assistant read our users' conversations?**
+Yes, while **Conversation content** is on (the default). Turn it off to leave out transcripts, raw queries, quotes and feedback comments.
+
+**Is this the same as the MCP server under Integrations?**
+No. That card connects Moss to **your** MCP server so procedures can call its tools. See [Integrations](/en/dashboard/integrations).

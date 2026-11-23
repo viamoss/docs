@@ -1,166 +1,128 @@
 ---
 title: "Hooks"
-description: "React hooks for programmatic control of the Moss assistant"
+description: "The useAgent hook: control the Moss assistant from your React code"
 icon: "code"
 ---
 
 # React Hooks
 
-The Moss SDK exports React hooks for programmatic control of the assistant UI. Use these when you need more control than the declarative `data-moss-trigger` attribute provides.
+`useAgent()` lets your React components open and close the chat, send messages and follow its state. Use it when the declarative `data-moss-trigger` attribute isn't enough. It is in the npm package only.
 
 ## useAgent
 
-The primary hook for interacting with the Moss assistant. Must be used within an `AgentProvider`.
+Call it in a component rendered inside `AgentProvider`. Outside a provider it throws `useAgent must be used within an AgentProvider`.
 
 ```tsx
 import { useAgent } from '@viamoss/moss-sdk';
 
-function MyComponent() {
-  const {
-    isChatOpen,
-    openChat,
-    closeChat,
-    toggleChat,
-    messages,
-    sendMessage,
-    isConnected,
-    isWaitingForResponse,
-  } = useAgent();
+function HelpButton() {
+  const { isChatOpen, openChat, closeChat } = useAgent();
 
   return (
-    <button onClick={() => openChat()}>
-      Open Assistant
+    <button onClick={() => (isChatOpen ? closeChat() : openChat())}>
+      {isChatOpen ? 'Close help' : 'Open help'}
     </button>
   );
 }
 ```
 
+To open Moss with a question from anywhere, including code outside the provider, use `askMoss()`; see [Guides and navigation](/en/sdk/guides-and-navigation).
+
 ---
 
 ## Return Value
 
-`useAgent()` returns an `AgentState` object with the following properties and methods:
+`useAgent()` returns an `AgentState` object. See [Types](/en/sdk/api/types#agentstate) for its full definition.
 
-### State Properties
+### State
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `isConnected` | `boolean` | Whether the SDK is connected to the backend |
-| `isChatOpen` | `boolean` | Whether the chat modal is currently open |
-| `messages` | `ChatMessage[]` | Array of messages in the current conversation |
-| `isWaitingForResponse` | `boolean` | Whether the assistant is processing a response |
-| `chatMode` | `'chat' \| 'guide'` | Current conversation mode |
-| `suggestsGuideMode` | `boolean` | Whether the assistant has suggested switching to guide mode |
-| `useVision` | `boolean` | Whether vision (screenshot analysis) is enabled |
-| `debugMode` | `boolean` | Whether debug mode is enabled |
+| Property | Type | Meaning |
+|----------|------|---------|
+| `isConnected` | `boolean` | A chat session is connected. The SDK starts one when the chat opens, or on page load when there is a session to resume |
+| `isChatOpen` | `boolean` | The chat panel is open, including minimized (from 0.17.0, with `appearance.chrome.guide.minimize`) |
+| `messages` | `ChatMessage[]` | The messages in the current chat |
+| `isWaitingForResponse` | `boolean` | A turn is in progress, or the session is connecting |
+| `isRetrievalExpected` | `boolean` | The current turn is a typed question, which searches your help articles; `false` for guide steps |
+| `activeChatSessionId` | `string \| null` | The current Moss session ID, the same `sessionId` events carry; `null` before a session exists |
+| `chatMode` | `'chat' \| 'guide'` | Whether a guide is running |
+| `suggestsGuideMode` | `boolean` | The latest answer offers a guide (the **Start guide** button, or your `chrome.guideOffer.label`) |
+| `planPhase` | `'offered' \| 'executing' \| null \| undefined` | The guide's phase after the last turn: offered, running, or `null` for no guide. `undefined` when the backend reported none |
+| `useVision` | `boolean` | Vision screenshots are on for this session |
+| `debugMode` | `boolean` | The `debugMode` you configured |
 
-### Chat Control Methods
+### openChat(position?)
 
-#### `openChat(position?)`
-
-Opens the chat modal. No-op if already open.
+Opens the chat panel.
 
 ```tsx
 const { openChat } = useAgent();
 
-// Open with default position
-openChat();
-
-// Open with custom position
-openChat({ x: 100, y: 100, width: 400, height: 600 });
+openChat();                                           // where it was last
+openChat({ x: 24, y: 80, width: 420, height: 600 });  // this open only
 ```
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `position` | `DefaultModalPosition` | Optional. Initial position and size |
+| Parameter | Type | Meaning |
+|-----------|------|---------|
+| `position` | `DefaultModalPosition` | Optional. Position and size in CSS pixels from the viewport's top-left corner |
 
----
+- If the chat is already open, nothing happens, except that a minimized panel comes back.
+- A `position` applies to that open only and isn't saved. Moss keeps the panel inside the viewport: a panel that fits moves inside, one that doesn't shrinks to fit. If the user drags or resizes the panel during that open, their placement is kept.
+- A docked layout (`appearance.layout.mode: 'docked'`) ignores `position`. See [Appearance](/en/sdk/appearance).
 
-#### `closeChat()`
+### closeChat()
 
-Closes the chat modal. No-op if already closed.
+Closes the chat panel.
 
-```tsx
-const { closeChat } = useAgent();
+- A question asked with `askMoss()` that hasn't been sent yet is cancelled. If the chat is already closed, that is all it does.
+- With `closingChatEndsGuide: true`, a running guide ends. See [Guides and navigation](/en/sdk/guides-and-navigation).
 
-closeChat();
-```
+### toggleChat(position?)
 
----
+Closes the chat if it is open, and opens it, with the optional `position`, if it is closed. A minimized panel is restored instead of closed.
 
-#### `toggleChat(position?)`
+### sendMessage(text, attachments?)
 
-Toggles the chat modal open/closed.
-
-```tsx
-const { toggleChat } = useAgent();
-
-// Toggle with default position
-toggleChat();
-
-// Toggle with custom position (applied when opening)
-toggleChat({ x: 100, y: 100, width: 400, height: 600 });
-```
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `position` | `DefaultModalPosition` | Optional. Position when opening |
-
----
-
-#### `sendMessage(text)`
-
-Sends a message to the assistant programmatically.
+Sends a message as the user, into the current chat.
 
 ```tsx
-const { sendMessage } = useAgent();
+const { sendMessage, isConnected } = useAgent();
 
-await sendMessage('How do I create a new project?');
-```
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `text` | `string` | The message to send |
-
-**Returns:** `Promise<void>`
-
----
-
-#### `startNewChat()`
-
-Clears the current conversation and starts a new chat session.
-
-```tsx
-const { startNewChat } = useAgent();
-
-await startNewChat();
-```
-
-**Returns:** `Promise<void>`
-
----
-
-### Guide Mode Methods
-
-#### `continueGuide()`
-
-Advances to the next step in guide mode. Equivalent to clicking the "Next" button.
-
-```tsx
-const { continueGuide, chatMode } = useAgent();
-
-if (chatMode === 'guide') {
-  await continueGuide();
+if (isConnected) {
+  await sendMessage('How do I create a new project?');
 }
 ```
 
+| Parameter | Type | Meaning |
+|-----------|------|---------|
+| `text` | `string` | The message |
+| `attachments` | `AttachmentRef[]` | Optional, from 0.17.0. Up to 5 (`MAX_ATTACHMENT_FILES`). The SDK exports no upload API, so integrations leave this out |
+
 **Returns:** `Promise<void>`
 
----
+- The chat must have a session. Called before one exists, the message is not sent and the SDK logs `Cannot send message: activeChatSessionId is not set`. The one exception: while Moss is starting a new chat after a user returns from inactivity, it holds one message and sends it once the new chat connects. See [Sessions](/en/sdk/api/session).
+- With more than 5 attachments, the promise rejects with `TooManyAttachmentsError` before any request is made.
+- The message appears in the chat whether or not the panel is open.
 
-#### `acceptGuideSuggestion()`
+### startNewChat()
 
-Accepts the assistant's suggestion to switch to guide mode. Equivalent to clicking "Start Guide".
+Ends the current chat and starts a new one, as the **New AI chat** button in the chat header does.
+
+**Returns:** `Promise<void>`
+
+- If the current chat has at least one exchange and hasn't been rated, the rating card appears first; the new chat starts once the user rates it or skips. In that case the promise resolves before the new chat starts, so a `sendMessage()` right after it goes into the old chat.
+- A question asked with `askMoss()` that hasn't been sent yet is cancelled.
+
+### continueGuide()
+
+Moves a running guide to its next step, as **Next** does.
+
+**Returns:** `Promise<void>`
+
+### acceptGuideSuggestion()
+
+Starts the guide the latest answer offered, as the **Start guide** button does.
+
+**Returns:** `Promise<void>`
 
 ```tsx
 const { acceptGuideSuggestion, suggestsGuideMode } = useAgent();
@@ -170,27 +132,9 @@ if (suggestsGuideMode) {
 }
 ```
 
-**Returns:** `Promise<void>`
-
----
-
-### Debug Methods
-
-#### `captureContext()`
-
-Manually captures the current page context (screenshot and DOM). Only useful for debugging.
-
-```tsx
-const { captureContext, debugMode } = useAgent();
-
-if (debugMode) {
-  const context = await captureContext();
-  console.log(context?.screenshotDataUrl);
-  console.log(context?.pageText);
-}
-```
-
-**Returns:** `Promise<{ screenshotDataUrl: string | null; pageText: string | null } | null>`
+<Note>
+    `AgentState` also declares a few members for Moss's own debug tools and for features in development. They are not covered here and can change without notice.
+</Note>
 
 ---
 
@@ -205,11 +149,8 @@ function HelpButton() {
   const { openChat, isChatOpen } = useAgent();
 
   return (
-    <button
-      onClick={() => openChat()}
-      disabled={isChatOpen}
-    >
-      {isChatOpen ? 'Chat Open' : 'Need Help?'}
+    <button onClick={() => openChat()} disabled={isChatOpen}>
+      {isChatOpen ? 'Chat open' : 'Need help?'}
     </button>
   );
 }
@@ -226,7 +167,7 @@ function KeyboardShortcut() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Cmd/Ctrl + K to toggle chat
+      // Cmd/Ctrl + K toggles the chat
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
         toggleChat();
@@ -241,39 +182,37 @@ function KeyboardShortcut() {
 }
 ```
 
-### Message Counter Badge
+### Answer Count Badge
 
 ```tsx
 import { useAgent } from '@viamoss/moss-sdk';
 
-function MessageBadge() {
+function AnswerCount() {
   const { messages, openChat } = useAgent();
-  const unreadCount = messages.filter(m => m.sender === 'assistant').length;
+  const answers = messages.filter(m => m.sender === 'assistant').length;
 
   return (
-    <button onClick={() => openChat()} className="relative">
+    <button onClick={() => openChat()}>
       Help
-      {unreadCount > 0 && (
-        <span className="badge">{unreadCount}</span>
-      )}
+      {answers > 0 && <span className="badge">{answers}</span>}
     </button>
   );
 }
 ```
 
-### Conditional Send with Loading State
+### Ask From Your Own Input
 
 ```tsx
 import { useState } from 'react';
 import { useAgent } from '@viamoss/moss-sdk';
 
 function QuickQuestion() {
-  const { sendMessage, openChat, isWaitingForResponse } = useAgent();
+  const { sendMessage, isConnected, isWaitingForResponse } = useAgent();
   const [question, setQuestion] = useState('');
+  const ready = isConnected && !isWaitingForResponse;
 
   const handleSubmit = async () => {
     if (!question.trim()) return;
-    openChat();
     await sendMessage(question);
     setQuestion('');
   };
@@ -284,12 +223,9 @@ function QuickQuestion() {
         value={question}
         onChange={(e) => setQuestion(e.target.value)}
         placeholder="Ask a quick question..."
-        disabled={isWaitingForResponse}
+        disabled={!ready}
       />
-      <button
-        onClick={handleSubmit}
-        disabled={isWaitingForResponse || !question.trim()}
-      >
+      <button onClick={handleSubmit} disabled={!ready || !question.trim()}>
         {isWaitingForResponse ? 'Sending...' : 'Ask'}
       </button>
     </div>
@@ -297,14 +233,16 @@ function QuickQuestion() {
 }
 ```
 
+`isConnected` is `false` until the chat has been opened once (or a session is being resumed). To open the chat and ask in one step, use `askMoss()`; see [Guides and navigation](/en/sdk/guides-and-navigation).
+
 ---
 
 ## Notes
 
 <Warning>
-  `useAgent()` must be called within an `AgentProvider`. Calling it outside will throw an error.
+    `useAgent()` must be called within an `AgentProvider`. Outside one, it throws.
 </Warning>
 
 <Info>
-  The hook returns stable function references. You can safely include them in dependency arrays without causing unnecessary re-renders.
+    The functions `useAgent()` returns are memoized, but some change when the chat's state changes. List them in effect dependency arrays as usual, as `toggleChat` is in the keyboard example above.
 </Info>

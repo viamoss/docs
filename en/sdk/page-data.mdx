@@ -1,0 +1,369 @@
+---
+title: "Page data and privacy controls"
+description: "What the Moss SDK reads from your page and sends, and every control you have over it"
+icon: "shield-halved"
+---
+
+This page lists what the Moss SDK reads from your page, what it sends to your Moss backend, and each control you have over it. For most apps the essentials are:
+
+1. Mark regions Moss must never read with `data-moss-redact`.
+2. Leave `redactAllInputs` on (the default), so the values of native form fields (`input`, `textarea`, `select` and editable regions) stay out of page text, recordings and screen history. Custom controls built from other elements, such as a dropdown made of `div`s, are read as ordinary page text: mark them with `data-moss-redact`.
+3. Decide whether to turn on vision screenshots and session recording. Both send more than page text, and redaction does not cover vision screenshots.
+
+## At a glance
+
+| Data | Sent when | On by default | Your controls |
+|------|-----------|---------------|---------------|
+| [Page text](#page-text) | With each question and guide step | Yes | `pageContext`, `observeTargetSelector`, [redaction](#redaction) |
+| Page URL | With each question and guide step | Yes | `pageContext: 'none'` |
+| Page title | With each question and guide step, under `pageContext: 'metadata'` only | No | `pageContext` |
+| [Vision screenshots](#vision-screenshots) | With each question and guide step, once the user allows screen capture | Only if vision is on | `useVision`, **Enable Vision**, `pageContext` |
+| [Session recording](#session-recording) | Every 30 seconds while the chat is open | No | `enableSessionRecording`, **Enable Session Replay**, [redaction](#redaction), `data-recording-block` |
+| [Screen history](#screen-history) | With each question and guide step | No | `enableScreenHistoryRecording`, [redaction](#redaction) |
+| [Guide step reports](#guide-step-reports) | When the user completes a guide step | Yes, during guides | [redaction](#redaction) |
+| [User metadata](#user-metadata) | When a session starts | Only what you pass | `userMetadata`, your token's `metadata` claim |
+| [Messages](#messages-and-files) | When the user sends one | Yes | Backend PII filtering |
+
+To stop collection altogether until your own policy allows it, see [Turning collection on and off](#turning-collection-on-and-off).
+
+<Info>
+    From 0.17.0, the dashboard's **Configure > Data & privacy** page summarizes what an application collects. How long Moss keeps each kind of data is set there too; see [Data & privacy](/en/dashboard/data-privacy).
+</Info>
+
+## Page text
+
+With each question and each guide step, the SDK serializes the page into text for the model. It reads the element that `observeTargetSelector` matches (`'body'` by default) and everything inside it, including content below the fold and inside scrollable areas.
+
+**What the text contains:**
+
+- Each visible element's tag and a fixed set of attributes, including `id`, `class`, `role`, `name`, `value`, `placeholder`, `href`, `title`, `alt`, `src`, `type`, `for`, common `aria-*` attributes, form attributes such as `checked`, `disabled`, `required`, `min` and `max`, `data-testid` and `data-id`.
+- For a `select` that isn't redacted, its selected option and its first few options.
+- Text. For a button, link or other interactive element, all the text inside it. For any other element, only its own text, not its children's. Text is cut at 100 characters per element.
+- The text an element's `aria-describedby` points to, up to 200 characters, even when that text is hidden (for example a tooltip shown on hover).
+- Content inside open shadow roots and same-origin iframes.
+- A short summary at the top: counts of links, buttons and form fields, and any visible alerts, invalid fields and empty required fields.
+
+**What it leaves out:**
+
+- Elements hidden with `display: none`, `visibility: hidden` or `opacity: 0`, elements inside an `inert` subtree, and elements the user can't scroll to.
+- `<script>`, `<style>`, `<head>`, `<meta>`, `<link>` and `<noscript>`.
+- Closed shadow roots, and cross-origin or sandboxed iframes, which the browser does not let the SDK read.
+- Moss's own interface.
+- After 10 consecutive siblings of the same tag, the rest are summarized as a count.
+
+### How much page context to send: `pageContext`
+
+| Value | Page text | Vision screenshot | URL | Page title |
+|-------|-----------|-------------------|-----|------------|
+| `'full'` (default) | Yes | If vision is on | Yes | No |
+| `'metadata'` | No | No | Yes | Yes |
+| `'none'` | No | No | No | No |
+
+```tsx
+<AgentProvider config={{
+  // ...
+  pageContext: 'metadata', // Moss answers from your knowledge base; it doesn't read the page
+}}>
+```
+
+- The URL is the page's full address (`window.location.href`), query string and fragment included.
+- With `'metadata'` or `'none'`, Moss doesn't see the page's elements, so it can't guide the user through them.
+- `pageContext` does not turn off [session recording](#session-recording) or [screen history](#screen-history). They have their own switches.
+- **npm package:** the value in your config applies, `'full'` when unset.
+- **CDN script:** the application's setting applies unless `window.mossSettings.pageContext` sets one. With **On-screen guidance** turned off under **Configure > Behavior > Core Features**, the application normally collects at `'metadata'`.
+
+### Limiting the area Moss reads: `observeTargetSelector`
+
+Set `observeTargetSelector` to a CSS selector, and Moss reads page text only from the first element that matches it and its contents. The default is `'body'`. If no element matches, the SDK logs `Could not find target element` and has no page to read.
+
+It limits page text only (and part of the [stability wait](/en/sdk/advanced#dom-observation-scope)). Vision screenshots, session recordings and screen history still cover the whole page; use `data-recording-block` or redaction for recordings and screen history.
+
+## Redaction
+
+Redaction hides parts of the page from what Moss reads. There are four markers, and each covers different outputs.
+
+### `data-moss-redact`
+
+Put `data-moss-redact` on any element. The element and everything inside it, at any depth, are redacted, including content in its shadow roots and in same-origin iframes inside it.
+
+```html
+<section data-moss-redact>
+  <p>Account balance: $12,340.56</p>
+  <input type="text" name="card-number" />
+</section>
+```
+
+In the page text, a redacted element keeps its tag, so Moss knows something is there, but:
+
+- its text becomes `[REDACTED]`;
+- these attribute values become `[REDACTED]`: `value`, `placeholder`, `title`, `alt`, `aria-label`, `aria-labelledby`, `aria-describedby`, `name`, `data-testid`, `data-id`, `href`, `src` and `id`;
+- an `iframe` inside it is not read at all.
+
+Moss also refuses to highlight any element inside a `data-moss-redact` region.
+
+### Form fields: `redactAllInputs` and `data-moss-unredact`
+
+`redactAllInputs` is `true` by default. The values of every `input`, `textarea`, `select` and editable (`contenteditable`) element are redacted the same way, as is anything inside an editable region.
+
+Only those native fields count. A custom control that shows its value as ordinary text, such as a dropdown, combobox or date picker built from `div`s, is not a form field to Moss: its text is read like any other text. Mark such controls with `data-moss-redact`.
+
+What input redaction keeps out, with `redactAllInputs` on:
+
+| Output | Native fields (`input`, `textarea`, `select`, editable regions) | Custom controls built from other elements |
+|--------|------------------------------------------------------------------|-------------------------------------------|
+| Page text and guide step reports | Values redacted | Text read |
+| Session recordings (from 0.17.0) | Blocked: shown as blank boxes | Recorded |
+| Screen history (from 0.17.0) | Their input is not recorded | Recorded |
+| Vision screenshots | Visible | Visible |
+
+To let Moss read one field, for example a search box, mark it, or a container around it, with `data-moss-unredact`:
+
+```html
+<input type="search" data-moss-unredact placeholder="Search products…" />
+```
+
+`data-moss-unredact` only lifts input redaction. It does not override `data-moss-redact` or `redactionSelectors`, and it has no effect on session recordings.
+
+To turn input redaction off entirely, set `redactAllInputs: false`.
+
+<Warning>
+    With `redactAllInputs: false`, what users enter in form fields can reach Moss in page text, guide step reports, screen history and session recordings. Recordings and screen history still mask `type="password"` fields; page text and guide step reports have no password rule. If you turn it off, mark password and other sensitive fields with `data-moss-redact`.
+</Warning>
+
+### Your own selectors: `redactionSelectors`
+
+If your app already marks sensitive elements for another tool, such as FullStory's `.fs-exclude`, list those selectors instead of adding `data-moss-redact` everywhere:
+
+```tsx
+<AgentProvider config={{
+  // ...
+  redactionSelectors: ['.fs-exclude', '.fs-mask', '[data-private]'],
+}}>
+```
+
+Matching elements are redacted in the page text and in recordings as `data-moss-redact` elements are. Two differences: Moss can still highlight controls inside them, and it reads their shadow roots, redacted.
+
+- `data-moss-redact` always applies, whatever this list holds.
+- An invalid selector is skipped for page text. For session recording and screen history, it stops that session from being recorded, with an error in the console.
+
+### `data-recording-block`
+
+`data-recording-block` keeps an element out of session recordings and screen history only. It does not affect page text.
+
+### What each marker covers
+
+| Marker | Page text and guide step reports | Vision screenshots | Session recording and screen history | Moss can highlight inside |
+|--------|----------------------------------|--------------------|--------------------------------------|---------------------------|
+| `data-moss-redact` | Redacted | Not covered | Blocked (from 0.17.0) | No |
+| `redactionSelectors` | Redacted | Not covered | Blocked (from 0.17.0) | Yes |
+| `redactAllInputs` (on by default) | Values redacted | Not covered | Blocked (from 0.17.0) | Yes |
+| `data-moss-unredact` | Lifts input redaction | Not covered | No effect | Yes |
+| `data-recording-block` | No effect | Not covered | Blocked | Yes |
+
+"Blocked" means the replay shows the element as a blank box of the same size. Before 0.17.0, recordings blocked only `data-recording-block` (and the `rr-block` class below) and did not mask form fields other than password fields.
+
+<Note>
+    Moss reads `redactionSelectors` and `redactAllInputs` for the page text once, when `AgentProvider` mounts. Set them in the config you mount with.
+</Note>
+
+### Programmatic changes: `pageSanitizationScript`
+
+`pageSanitizationScript` is not a redaction tool. It runs on your live page, when the SDK starts watching it and again whenever the function's identity or `observeTargetSelector` changes, so it changes what the user sees too. See [Advanced > Programmatic page changes](/en/sdk/advanced#programmatic-page-changes).
+
+## Vision screenshots
+
+Moss sends a screenshot of what the user shares, normally this tab, with a question or guide step only when all three hold:
+
+1. **Vision is on**, through the application's **Enable Vision** switch under **Configure > Behavior > Core Features**, or through `useVision: true` in your config.
+2. **`pageContext` is `'full'`** (the default).
+3. **The user allows the browser's screen-capture prompt.**
+
+**Who decides whether vision is on:**
+
+- `useVision` in your config overrides the application's setting in both directions. `useVision: true` takes screenshots even when **Enable Vision** is off, and `useVision: false` stops them even when it is on.
+- Leave `useVision` unset and the application's setting applies, delivered with each session. **Enable Vision** is off by default for a new application.
+- On the CDN script, set the same option as `window.mossSettings.useVision`.
+
+**How the screenshot is taken:**
+
+1. On the first question, Moss asks the browser for screen sharing, stating a preference for a browser tab and for the current tab. The browser's prompt still lets the user pick another tab, a window or the whole screen.
+2. Moss checks only that what was shared is about the size of this tab's viewport (within about 100 pixels in width and 200 in height). If it isn't, Moss asks again; after two wrong choices it stops asking.
+3. Another tab of about the same size, or the whole browser window, passes that check. Moss then sends frames of what the user shared: another tab, or the whole window, including its tab strip and address bar.
+4. Once sharing is accepted, that question and each later one, and each guide step, sends a frame: a JPEG up to 1,920 pixels wide, uploaded to your Moss deployment's storage through a signed upload URL, or sent inline with the request if that upload fails.
+5. If the user cancels, Moss sends no screenshots and doesn't ask again until the page reloads. When the user stops sharing, screenshots stop.
+
+<Warning>
+    A vision screenshot is the raw frame of what the tab shows, with no redaction. `data-moss-redact`, `redactionSelectors` and `redactAllInputs` do not change what is in it. (Session recordings are different: see [Session recording](#session-recording).) The controls are turning vision off (`useVision: false`, or **Enable Vision** off with `useVision` unset), lowering `pageContext` to `'metadata'` or `'none'`, or sending a `Permissions-Policy` header that doesn't allow `display-capture`, which makes the browser refuse screen capture.
+</Warning>
+
+`screenshotMode` (`'fullpage'` or `'viewport'`) has no effect on these screenshots in 0.17.0.
+
+## Session recording
+
+Session recording captures the page for replay in the dashboard (**Session Replay**). It is off unless you turn it on.
+
+<Info>
+    **Changed in 0.17.0.** Moss now records only for an application that has saved **Enable Session Replay** on, and the server refuses recordings otherwise, so an npm app that sets `enableSessionRecording: true` needs the switch on as well. In 0.16.x, the CDN script recorded for an application that had never saved the switch, and the server accepted a recording from any SDK that sent one. On the npm package, `enableSessionRecording` was already off unless you set it.
+</Info>
+
+**Moss records only when all of these hold:**
+
+1. **The application allows it.** **Enable Session Replay** is on under **Configure > Behavior > Core Features**. From 0.17.0, the server refuses recordings for an application where it is off.
+2. **The SDK records.**
+   - **npm package:** set `enableSessionRecording: true`.
+   - **CDN script:** the application's setting applies, unless `window.mossSettings.enableSessionRecording` is set.
+3. **The chat is open and a session exists.** Recording starts when the chat opens. It stops, and the rest is uploaded, when the chat closes or after 15 minutes without mouse, keyboard, scroll or touch activity.
+
+```tsx
+<AgentProvider config={{
+  // ...
+  enableSessionRecording: true, // the application's Enable Session Replay must be on too
+}}>
+```
+
+**What is recorded:** the page's structure and its changes, mouse movement, clicks, scrolling and form input, captured with the rrweb library. The SDK uploads it to your Moss backend every 30 seconds. Canvas content is not recorded, and images are referenced by URL rather than copied. The recording marks where each chat turn starts, with the first 120 characters of the user's message.
+
+**What is masked:** see [What each marker covers](#what-each-marker-covers). The recorder also honors the rrweb class names `rr-block` (the element becomes a blank box), `rr-mask` (its text is masked) and `rr-ignore` (its input events are not recorded).
+
+## Screen history
+
+Screen history gives the model a short timeline of what the user did on the page since the previous question or guide step: clicks, form input, scrolling, navigation and significant page changes, with the current path. It is off by default.
+
+- **npm package:** set `enableScreenHistoryRecording: true`.
+- **CDN script:** the application's **Enable Screen History for AI** setting under **Configure > Behavior > Core Features** applies, unless `window.mossSettings` sets it.
+
+Screen history uses the same recorder as session recording, in the browser, and only while the chat is open. It applies the same masking, and it uploads no recording unless session recording is on too. Typed values appear in it, up to 50 characters each, unless input redaction masks them.
+
+## Guide step reports
+
+When the user completes a guide step, for example by clicking the highlighted button, the SDK reports the element they acted on: its text, label and markup. Redacted parts are replaced as in the page text. If the element itself is redacted, none of it is sent.
+
+With `stability.afterReload` on, the SDK also writes this report to `localStorage` as the user clicks, so that if the click loads another page, that page can send it. The record is valid for `pendingTTL` (30 seconds by default).
+
+## User metadata
+
+`userMetadata` describes the user to Moss, for example their role or plan:
+
+```tsx
+<AgentProvider config={{
+  // ...
+  userMetadata: { role: 'admin', plan: 'enterprise', permissions: ['billing:read'] },
+}}>
+```
+
+- It is sent when a session starts and kept with the session.
+- Moss gives it to the model as data, to word its answers. Values from your config are self-reported: they unlock nothing.
+- Limits: up to 20 keys; keys up to 100 characters; values are strings up to 200 characters, numbers, booleans, or arrays of strings up to 500 characters in all.
+- A key that also appears in your token's `metadata` claim takes the token's value. See [Authentication](/en/sdk/authentication).
+- Only a `role` signed into the token can open procedures restricted to certain roles. A `role` that only your config supplies does not.
+- Use roles and categories, not names, email addresses or phone numbers.
+
+## Messages and files
+
+What the user types is sent as written. Redaction does not apply to chat messages.
+
+From 0.17.0, **Backend PII filtering** under **Configure > Security** replaces common personal-data patterns (email addresses, US phone numbers, payment card numbers, US Social Security numbers, and patterns you add) with `[REDACTED]` before Moss stores a request or sends it to the model. It is off unless the application or the deployment turns it on. It applies to text: page text, the screen history timeline, the page title, guide step reports and, if you choose, chat messages. It does not change screenshots or recordings.
+
+From 0.17.0, files a user attaches (a beta feature, off by default) are uploaded to your Moss deployment's storage. See [Appearance](/en/sdk/appearance).
+
+## Turning collection on and off
+
+From 0.17.0, two options let your own policy decide whether Moss runs at all.
+
+### `collectionEnabled`
+
+Set `collectionEnabled: false` and Moss does not start.
+
+- **npm package:** `AgentProvider` renders nothing, including its children. Keep your own UI outside the provider.
+- **CDN script:** set `window.mossSettings = { collectionEnabled: false }` before the script loads, and the script doesn't boot: it sends no request until you call `window.MossSDK.boot({ collectionEnabled: true })`. As it loads, it still writes one value to `localStorage`: the widget's interface language, under `mossLng`. Importing the npm package writes the same key.
+
+### `collectionControl`
+
+`MossCollectionControl` is a switch your code holds. Moss mounts only while it is enabled.
+
+```tsx
+import { AgentProvider, AssistantButton, MossCollectionControl } from '@viamoss/moss-sdk';
+
+// After your own backend has decided this user may use Moss:
+const control = new MossCollectionControl({
+  applicationId: policy.applicationId,
+  userId: policy.userId,
+  companyKey: policy.companyKey, // your own identifier for the user's company
+});
+if (policy.enabled) control.enable();
+
+root.render(
+  <AgentProvider config={{
+    apiUrl: 'https://moss-api.viamoss.ai',
+    applicationId: policy.applicationId,
+    userId: policy.userId,
+    getJwt: () => fetchMossToken(),
+    collectionControl: control,
+  }}>
+    <AssistantButton />
+  </AgentProvider>
+);
+
+// Before the user switches account or company:
+control.disable();
+```
+
+- The control starts disabled. Call `enable()` to mount Moss, and `disable()` to unmount it.
+- `disable()` cancels Moss's requests in flight and discards an unsent recording without a final upload.
+- Each time Moss mounts or unmounts under a control, it clears its own browser state, so no chat resumes across mounts. It never clears your storage.
+- The control's `applicationId` and `userId` must match the provider's config, or the provider throws an error. All three identity fields are required.
+- For a different user or company, disable the old control, then create a new control and a new config with its own token function.
+- A control decides only whether the browser collects. It authorizes nothing on the server; your tokens still do.
+- While the control is disabled, the provider renders none of its children.
+
+**CDN script:**
+
+```html
+<script>window.mossSettings = { collectionEnabled: false };</script>
+<script
+  src="https://cdn.viamoss.ai/moss-sdk@latest.min.js?applicationId=YOUR_APP_ID"
+  data-api-base="https://moss-api.viamoss.ai"
+></script>
+<script>
+  // After your policy check:
+  const control = new window.MossSDK.CollectionControl({
+    applicationId: 'YOUR_APP_ID',
+    userId: policy.userId,
+    companyKey: policy.companyKey,
+  });
+  control.enable();
+  window.MossSDK.boot({
+    collectionEnabled: true,
+    collectionControl: control,
+    userId: policy.userId,
+    getJwt: () => fetchMossToken(),
+  });
+
+  // To turn it off:
+  control.disable();
+  window.MossSDK.shutdown();
+</script>
+```
+
+## What the SDK does not read
+
+- **Your cookies and storage.** The SDK keeps its own state under keys that start with `moss`; see [What is stored in the browser](/en/sdk/overview#what-is-stored-in-the-browser). The one exception is language detection: to pick its interface language, it checks the `lng` query parameter, an `i18next` cookie and an `i18nextLng` `sessionStorage` entry.
+- **Content the browser keeps from it:** closed shadow roots and cross-origin iframes.
+- **Pages where it isn't mounted.**
+
+## Common questions
+
+**Does `data-moss-redact` hide content from screenshots?**
+No. A vision screenshot is the raw frame of what the user shared. Turn vision off (`useVision: false`) on those pages, or lower `pageContext` to `'metadata'` or `'none'`. Redaction does cover page text, guide step reports, and, from 0.17.0, session recordings and screen history.
+
+**Why are no sessions recorded?**
+Check all three conditions in [Session recording](#session-recording): **Enable Session Replay** on for the application, `enableSessionRecording: true` in an npm integration, and an open chat. From 0.17.0, an application that never saved the setting does not record.
+
+**Can I keep Moss from reading a page at all?**
+Use `pageContext: 'none'` and leave vision, session recording and screen history off; Moss then has only the conversation and your `userMetadata`. To keep Moss off a page entirely, don't mount it there, or set `collectionEnabled: false`.
+
+**Does Moss read password fields?**
+Not in page text, guide step reports, recordings or screen history while `redactAllInputs` is on, the default. A vision screenshot shows the page as the user sees it. With `redactAllInputs: false`, recordings and screen history still mask `type="password"` fields, but page text and guide step reports don't; mark password fields with `data-moss-redact`.
+
+**Who receives this data?**
+The SDK sends it only to the `apiUrl` you configure, and uploads screenshots and attachments to the storage your Moss deployment names. What the backend then sends to a model provider depends on how Moss is deployed; see [Data protection](/en/security/data-protection).

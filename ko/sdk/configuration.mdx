@@ -1,223 +1,192 @@
 ---
 title: "설정"
-description: "전체 SDK 설정 참조"
+description: "지원하는 모든 SDK 옵션과 그 타입, 기본값, 자세한 설명이 있는 곳"
 icon: "gear"
 ---
 
 # 설정
 
-모든 SDK 옵션과 기본값입니다.
+SDK는 `AgentProvider`의 `config` prop(npm 패키지)이나 `window.mossSettings`(CDN 스크립트)로 설정합니다. 타입은 `MossSDKConfig`입니다. 이 페이지는 0.17.0에서 지원하는 모든 옵션을 나열하며, Moss 자체 도구용으로 예약된 몇 가지 옵션은 뺐습니다. 각 옵션의 자세한 설명은 링크된 페이지에 있습니다.
 
 ## 필수 필드
 
-모든 SDK 초기화에는 다음 필드가 필요합니다:
-
 ```tsx
 <AgentProvider config={{
-  apiUrl: 'https://moss-api.viamoss.ai',   // Moss 백엔드 URL
-  applicationId: 'YOUR_APP_ID',               // 대시보드에서 확인
-  userId: 'user-123',                          // 현재 사용자의 식별자
-  getJwt: () => fetchMossToken(),              // JWT 토큰 제공 함수
+  apiUrl: 'https://moss-api.viamoss.ai',   // Moss 백엔드
+  applicationId: 'YOUR_APP_ID',            // 구성 > 일반 > 애플리케이션 ID
+  userId: currentUser.id,                  // 사용자의 변하지 않는 식별자
+  getJwt: () => fetchMossToken(),          // 서명된 토큰을 반환합니다
 }}>
 ```
 
-| 필드 | 타입 | 설명 |
-|------|------|------|
-| `apiUrl` | `string` | Moss 백엔드 API URL |
-| `applicationId` | `string` | 대시보드의 애플리케이션 UUID |
-| `userId` | `string` | 현재 사용자의 고유 식별자 |
-| `getJwt` | `() => Promise<string>` | 새 JWT 토큰을 반환하는 함수 |
+| 필드 | 타입 | 의미 |
+|-------|------|---------|
+| `apiUrl` | `string` | Moss 백엔드의 기본 URL. 0.17.0부터 끝의 `/`는 무시합니다. |
+| `applicationId` | `string` | 애플리케이션의 ID. **구성 > 일반**에 **애플리케이션 ID**로 표시됩니다. |
+| `userId` | `string` | 현재 사용자를 가리키는 변하지 않는 식별자. |
+| `getJwt` 또는 `jwt` | 아래 참고 | SDK의 인증 방식. [인증](/ko/sdk/authentication)을 참고하세요. |
 
 <Info>
-    `applicationId` 대신 `applicationName`을 제공할 수도 있습니다. 둘 중 하나는 필수입니다.
+    예전 연동을 위해 타입은 `applicationId` 대신 `applicationName`도 받습니다. `applicationId`를 쓰세요. 이 값이 없으면 SDK가 토큰의 `app` 클레임이 같은 애플리케이션을 가리키는지 확인할 수 없어 경고를 남깁니다.
 </Info>
 
-## 일반 옵션
+## 설정을 읽어 오는 곳
 
-설정할 가능성이 높은 옵션입니다.
+**npm 패키지.** SDK는 넘겨받은 `config`에서만 옵션을 읽습니다. 대시보드에서 바꾼 설정 가운데 다음 항목은 새 세션마다 백엔드가 보내 주므로 반영됩니다.
 
-| 옵션 | 타입 | 기본값 | 설명 |
-|------|------|--------|------|
-| `language` | `'en' \| 'ko'` | 자동 감지 | UI 언어 |
-| `debugMode` | `boolean` | `false` | 디버그 로깅 및 UI 활성화 |
-| `screenshotMode` | `'fullpage' \| 'viewport'` | `'fullpage'` | 스크린샷 캡처 모드 |
+- 애플리케이션의 **비전 사용** 설정. `useVision`을 설정하지 않았을 때 씁니다.
+- 대시보드의 테마와 크롬. `appearance` 위에 값 단위로 적용됩니다.
+- 대시보드의 추천 콘텐츠. `appearance`에 `zeroState`가 없을 때 씁니다.
+- 비활성 후 돌아온 사용자를 어떻게 맞을지 정한 대시보드 설정. `sessionConfig.onReturnAfterInactivity`를 설정하지 않았을 때 씁니다.
+- 애플리케이션의 답변 링크 호스트. [`replyLinks`](#replylinks)에 더해집니다.
+- 애플리케이션의 프로액티브 가이드. 첫 세션 전에는 SDK가 애플리케이션의 공개 설정에서도 읽어 옵니다.
+
+언어, 세션 시간 초과, 화면 기록, 페이지 컨텍스트, 로그, 관찰 영역, 예외 상태(**콘텐츠 > 추천 콘텐츠 > 예외 상태**)의 대시보드 값은 그것만으로는 npm 설치에 반영되지 않습니다. **세션 리플레이 활성화**는 다릅니다. 0.17.0부터는 이 스위치가 꺼져 있으면 서버가 녹화를 거부하므로, `enableSessionRecording: true`인 npm 앱이라도 대시보드 스위치로 녹화가 멈춥니다. 대시보드의 **DOM 안정성** 설정과 **스크린샷** 설정은 0.17.0에서 두 설치 방식 모두에 아무 영향을 주지 않습니다. [대시보드 설정](/ko/configurations/dashboard-settings#고급-설정)을 참고하세요. 그 밖의 대시보드 값을 쓰려면 대시보드 설정으로 config를 만드세요.
 
 ```tsx
-<AgentProvider config={{
-  apiUrl: 'https://moss-api.viamoss.ai',
-  applicationId: 'YOUR_APP_ID',
-  userId: 'user-123',
+import { fetchAppConfig, convertBackendConfig } from '@viamoss/moss-sdk';
+
+// 요청이 실패하면 예외를 던집니다. 그때는 직접 만든 config로 대신하세요.
+const dashboard = await fetchAppConfig('YOUR_APP_ID', 'https://moss-api.viamoss.ai');
+const config = {
+  ...convertBackendConfig(dashboard, currentUser.id, 'YOUR_APP_ID', 'https://moss-api.viamoss.ai'),
   getJwt: () => fetchMossToken(),
-  language: 'ko',
-  debugMode: false,
-  screenshotMode: 'fullpage',
-}}>
+};
 ```
+
+`convertBackendConfig()`는 언어, 세션 설정, 녹화 스위치, 페이지 컨텍스트, 관찰 영역, 로그 레벨, 외관(예외 상태 포함)을 대시보드에서 가져옵니다. `debugMode`는 항상 `false`로 설정합니다. 위의 `getJwt`처럼 필요한 옵션을 그 위에 더하세요.
+
+**CDN 스크립트.** 스크립트는 애플리케이션의 대시보드 설정에서 시작해, 그 위에 `window.mossSettings`를 키 단위로 덮어씁니다. `appearance`나 `sessionConfig`처럼 객체를 설정하면 그 키에 해당하는 대시보드 객체 전체를 대체합니다. `applicationId`는 항상 스크립트 URL에서 가져옵니다. 설정 요청이 실패하면 스크립트는 내장 기본값을 씁니다.
+
+대시보드 쪽 설정은 [설정 개요](/ko/configurations/overview)를 참고하세요.
+
+### 한 번만 읽는 값
+
+SDK는 `apiUrl`, `jwt`, `getJwt`, `getBridgeCode`, `applicationId`를 `AgentProvider`가 마운트될 때 한 번만 읽습니다. 페이지 텍스트에 쓰는 `redactionSelectors`와 `redactAllInputs`도 마찬가지입니다. 다른 사용자가 로그인할 때처럼 이 값을 바꾸려면 프로바이더를 다시 마운트하세요. 예를 들어 사용자에 따라 바뀌는 `key`를 `AgentProvider`에 넘기면 됩니다.
 
 ## 전체 옵션
 
-### 인증
+### 식별과 인증
 
-| 옵션 | 타입 | 기본값 | 설명 |
-|------|------|--------|------|
-| `getJwt` | `() => Promise<string>` | — | 새 JWT를 가져오는 함수 (권장) |
-| `jwt` | `string` | — | 고정 JWT 토큰 (자동 갱신 없음) |
+| 옵션 | 타입 | 기본값 | 의미 | 참고 |
+|--------|------|---------|---------|------|
+| `apiUrl` | `string` | 필수 | Moss 백엔드의 기본 URL | [설치](/ko/sdk/installation) |
+| `applicationId` | `string` | 필수 | 대시보드에 표시된 애플리케이션 ID | |
+| `applicationName` | `string` | — | `applicationId`를 대신하던 예전 옵션 | |
+| `userId` | `string` | 필수 | 현재 사용자의 변하지 않는 식별자 | |
+| `getJwt` | `() => Promise<string>` | — | 서명된 토큰을 반환합니다. 토큰이 없을 때, 현재 토큰이 60초 안에 만료될 때, 그리고 `401` 응답 뒤에 한 번 호출됩니다. `exp` 클레임이 없는 토큰은 요청마다 새로 가져옵니다 | [인증](/ko/sdk/authentication) |
+| `jwt` | `string` | — | 이미 가지고 있는 토큰. 갱신되지 않으므로 `getJwt`를 쓰세요 | [인증](/ko/sdk/authentication) |
+| `getBridgeCode` | `() => Promise<string>` | — | 0.17.0부터. MCP 서버가 여러분의 사이트를 통해 사용자를 로그인시키는 애플리케이션에서, 백엔드가 발급한 일회용 세션 브리지 코드를 반환합니다 | [연동](/ko/dashboard/integrations) |
 
-### 표시
+### 페이지 데이터와 개인정보
 
-| 옵션 | 타입 | 기본값 | 설명 |
-|------|------|--------|------|
-| `language` | `'en' \| 'ko'` | 자동 감지 | UI 언어 |
-| `screenshotMode` | `'fullpage' \| 'viewport'` | `'fullpage'` | 스크린샷 캡처 방식 |
-| `appearance` | `AppearanceInput` | `'blue'` | 비주얼 테마 (프리셋 이름 또는 커스텀 객체) |
-| `displayMode` | `'chat' \| 'headless'` | `'chat'` | 가이드 표시 방식: 전체 채팅 모달 또는 하이라이트된 요소 옆의 툴팁 버블 |
-| `headless` | `HeadlessConfig` | — | 헤드리스 모드에 적용되는 옵션: 스포트라이트 딤 오버레이, 애니메이션 커서, 완료 토스트 |
+| 옵션 | 타입 | 기본값 | 의미 | 참고 |
+|--------|------|---------|---------|------|
+| `pageContext` | `'full' \| 'metadata' \| 'none'` | `'full'` | 턴마다 페이지를 얼마나 보낼지 | [페이지 데이터](/ko/sdk/page-data#보낼-페이지-컨텍스트의-양-pagecontext) |
+| `redactAllInputs` | `boolean` | `true` | 모든 폼 필드의 값을 마스킹합니다. 필드 하나를 다시 읽게 하려면 `data-moss-unredact`를 붙이세요 | [페이지 데이터](/ko/sdk/page-data#폼-필드-redactallinputs와-data-moss-unredact) |
+| `redactionSelectors` | `string[]` | — | `data-moss-redact`처럼 마스킹할 선택자를 더합니다 | [페이지 데이터](/ko/sdk/page-data#직접-지정한-선택자-redactionselectors) |
+| `useVision` | `boolean` | 애플리케이션의 **비전 사용** 설정(새 애플리케이션에서는 꺼짐) | 사용자가 브라우저의 화면 캡처 요청을 허용한 뒤 `pageContext`가 `'full'`인 동안, 사용자가 공유한 화면(보통 이 탭)을 마스킹 없이 그대로 담은 프레임을 턴마다 보냅니다. **비전 사용** 설정을 양쪽 방향으로 덮어씁니다. `true`는 스크린샷을 켜고 `false`는 끕니다 | [페이지 데이터](/ko/sdk/page-data#비전-스크린샷) |
+| `screenshotMode` | `'fullpage' \| 'viewport'` | `'fullpage'` | 0.17.0에서 채팅용 스크린샷에 아무 영향을 주지 않습니다 | |
+| `enableSessionRecording` | `boolean` | `false` | **세션 리플레이**용으로 세션을 녹화합니다. **0.17.0부터** 애플리케이션의 **세션 리플레이 활성화** 스위치가 켜져 있지 않으면 서버가 녹화를 거부하며, 스위치를 한 번도 저장하지 않은 애플리케이션은 꺼진 것으로 봅니다. npm 앱에는 스위치와 이 옵션이 모두 필요합니다 | [페이지 데이터](/ko/sdk/page-data#세션-녹화) |
+| `enableScreenHistoryRecording` | `boolean` | `false` | 사용자의 최근 동작 타임라인을 턴마다 보냅니다 | [페이지 데이터](/ko/sdk/page-data#화면-기록) |
+| `observeTargetSelector` | `string` | `'body'` | Moss가 페이지 텍스트를 읽는 요소 | [페이지 데이터](/ko/sdk/page-data#moss가-읽는-영역-제한하기-observetargetselector) |
+| `userMetadata` | `Record<string, string \| number \| boolean \| string[]>` | — | 세션이 시작될 때 보내는 사용자의 역할, 요금제 같은 속성 | [페이지 데이터](/ko/sdk/page-data#사용자-메타데이터) |
+| `collectionEnabled` | `boolean` | `true` | 0.17.0부터. `false`로 두면 Moss가 마운트되지 않습니다 | [페이지 데이터](/ko/sdk/page-data#collectionenabled) |
+| `collectionControl` | `MossCollectionControl` | — | 0.17.0부터. 앱 코드가 쥐고 있는 스위치로, 켜져 있는 동안에만 Moss가 마운트됩니다 | [페이지 데이터](/ko/sdk/page-data#collectioncontrol) |
+| `pageSanitizationScript` | `(document: Document) => void` | — | SDK가 페이지를 관찰하기 시작할 때, 그리고 함수 자체나 `observeTargetSelector`가 바뀔 때마다 실제 페이지에서 실행됩니다. 함수는 컴포넌트 밖에서 정의하세요. 개인정보 보호 수단이 아닙니다 | [고급](/ko/sdk/advanced#프로그래밍-방식의-페이지-변경) |
 
 ### 동작
 
-| 옵션 | 타입 | 기본값 | 설명 |
-|------|------|--------|------|
-| `useVision` | `boolean` | 백엔드 설정 | 비전(스크린샷 분석) 재정의 |
-| `observeTargetSelector` | `string` | `'body'` | DOM 관찰 범위의 CSS 선택자 |
-| `pageSanitizationScript` | `(doc: Document) => void` | — | 컨텍스트 캡처 전 DOM 정리 |
-| `enableSessionRecording` | `boolean` | `true` | 대시보드에 세션 기록 업로드 |
-| `enableScreenHistoryRecording` | `boolean` | `false` | AI 컨텍스트에 화면 히스토리 포함 |
+| 옵션 | 타입 | 기본값 | 의미 | 참고 |
+|--------|------|---------|---------|------|
+| `language` | `'en' \| 'ko'` | 자동 감지 | 인터페이스 언어. 설정하면 채팅의 언어 메뉴가 숨겨집니다 | [아래](#언어) |
+| `sessionConfig` | `{ inactivityTimeout?, maxSessionAge?, showNotification?, onReturnAfterInactivity? }` | 30분, 2시간, `true`, 대시보드 선택(없으면 `'ask'`) | 채팅이 언제 시간 초과되는지, 돌아온 사용자가 무엇을 보는지 | [세션](/ko/sdk/api/session) |
+| `stability` | `StabilityConfig` | 고급 페이지 참고 | 페이지를 읽기 전에 페이지가 안정되기를 얼마나 기다릴지 | [고급](/ko/sdk/advanced#안정성-튜닝) |
+| `closingChatEndsGuide` | `boolean` | `false` | 채팅을 닫으면 진행 중인 가이드도 끝납니다 | [가이드와 페이지 이동](/ko/sdk/guides-and-navigation) |
+| `enableProactiveGuides` | `boolean` | `true` | `false`로 두면 대시보드에서 설정한 공지와 트리거 규칙이 꺼집니다 | [가이드와 페이지 이동](/ko/sdk/guides-and-navigation) |
+| `streamActivity` | `boolean` | `false` | 0.17.0부터. `appearance.chrome.loader: 'steps'`와 함께 쓰면, 백엔드가 밟는 단계를 진행되는 대로 Server-Sent Events로 보여 줍니다 | [외관](/ko/sdk/appearance) |
+| `replyLinks` | `{ allowedHosts?: string[] }` | — | 0.17.0부터. 답변이 링크하고 이미지를 불러올 수 있는 호스트를 더합니다 | [아래](#replylinks) |
 
-### 개인정보 및 편집
+### 외관
 
-| 옵션 | 타입 | 기본값 | 설명 |
-|------|------|--------|------|
-| `redactAllInputs` | `boolean` | `true` | 모든 입력 요소의 값을 편집. 필드별 제외는 `data-moss-unredact` 사용 |
-| `redactionSelectors` | `string[]` | — | `data-moss-redact`와 동일하게 편집할 추가 CSS 선택자 |
-| `userMetadata` | `Record<string, string \| number \| boolean \| string[]>` | — | 맞춤 가이드를 위한 사용자 속성(역할, 등급). 원본 PII는 전달하지 마세요 |
+| 옵션 | 타입 | 기본값 | 의미 | 참고 |
+|--------|------|---------|---------|------|
+| `appearance` | `'blue' \| 'purple' \| DeepPartial<MossAppearance>` | `'blue'` | 테마 프리셋, 또는 프리셋 위에 덮어쓸 값 | [외관](/ko/sdk/appearance) |
+| `pageKey` | `string` | — | 현재 페이지의 이름. 추천 콘텐츠의 변형을 고르는 데 쓰며, 이벤트에도 함께 실립니다 | [외관](/ko/sdk/appearance) |
 
-자세한 내용은 [고급 > 민감 콘텐츠 편집](/ko/sdk/advanced#민감-콘텐츠-편집)을 참조하세요.
+### 콜백
 
-### 연동
+| 옵션 | 타입 | 기본값 | 의미 | 참고 |
+|--------|------|---------|---------|------|
+| `onSupportTicket` | `(handoff: SupportTicketHandoff) => Promise<SupportTicketOutcome>` | — | 여러분의 백엔드를 통해 지원 티켓을 접수하고 결과를 알립니다 | [지원 티켓 핸드오프](/ko/sdk/support-ticket-handoff) |
+| `onEvent` | `(event: MossEvent) => void` | — | 분석에 쓸 사용 이벤트를 받습니다 | [이벤트](/ko/sdk/events) |
+| `eventQueryText` | `'omit' \| 'include' \| ((text: string) => string)` | `'omit'` | 질문 이벤트에 질문 텍스트를 실을지 | [이벤트](/ko/sdk/events) |
+| `onError` | `(error: MossError) => void` | — | 0.17.0부터. 채팅이 사용자에게 보여 주는 모든 문제를 받습니다 | [이벤트](/ko/sdk/events) |
 
-| 옵션 | 타입 | 기본값 | 설명 |
-|------|------|--------|------|
-| `onSupportTicket` | `(handoff) => Promise<SupportTicketOutcome>` | — | 중개된 지원 티켓 등록을 위한 호스트 콜백. [지원 티켓 핸드오프](/ko/sdk/support-ticket-handoff) 참조 |
+### 진단
 
-### 세션 관리
+| 옵션 | 타입 | 기본값 | 의미 | 참고 |
+|--------|------|---------|---------|------|
+| `logLevel` | `LogLevel` | `LogLevel.INFO` | 콘솔 로그의 양: `LogLevel.DEBUG`, `INFO`, `WARN`, `ERROR`, `SILENT`. 문자열이 아니라 enum을 넘기세요. `LogLevel`이 없는 CDN 스크립트에서는 숫자를 넘깁니다. `1`(debug)부터 `5`(silent)까지입니다 | [고급](/ko/sdk/advanced#디버그-모드) |
+| `debugMode` | `boolean` | `false` | 채팅 안에서 사용자에게 디버그 컨트롤을 보여 줍니다. 개발용으로만 쓰세요 | [고급](/ko/sdk/advanced#디버그-모드) |
+
+### 0.17.0에서 제거된 옵션
+
+`displayMode`, `headless`, `forcedActivationFlow`는 더 이상 없으며, `useAgent()`의 `displayMode`도 없어졌습니다. TypeScript는 이 옵션들을 거부하고, 런타임에서는 무시되어 채팅이 평소처럼 동작합니다. 내보내던 타입 `HeadlessConfig`, `ForcedActivationFlowConfig`, `ForcedActivationFlowDefinition`도 없어졌습니다.
+
+## 언어
+
+`language`를 설정하지 않으면 SDK는 다음 순서로 `'en'`이나 `'ko'`를 고릅니다. `lng` 쿼리 매개변수, 이 브라우저에서 채팅이 마지막으로 쓴 언어(`localStorage` 키 `mossLng`), `i18next` 쿠키, `sessionStorage`의 `i18nextLng` 항목, 페이지의 `<html lang>`, 브라우저 언어입니다. 그 밖의 언어는 영어로 돌아갑니다. 채팅에는 언어 메뉴가 표시됩니다.
+
+`language`를 설정하면 SDK는 그 언어를 쓰고 언어 메뉴를 숨깁니다.
+
+## replyLinks
+
+0.17.0부터 답변은 주소가 허용된 호스트에 있을 때만 링크를 렌더링하거나 이미지를 불러옵니다. 허용된 호스트는 다음과 같습니다.
+
+- 페이지 자체의 출처
+- 답변이 인용한 지식 베이스 문서
+- 세션마다 전달되는 애플리케이션의 허용 도메인과 지식 베이스 호스트
+- `replyLinks.allowedHosts`에 나열한 호스트
+
+그 밖의 링크는 텍스트로, 그 밖의 이미지는 대체 텍스트로 보여 주므로 요청이 일어나지 않습니다.
 
 ```tsx
-sessionConfig: {
-  inactivityTimeout: 30,    // 새 세션까지의 비활동 시간(분) (기본값: 30)
-  maxSessionAge: 2,         // 강제 새 세션까지의 시간 (기본값: 2)
-  showNotification: true,   // 자동 세션 시작 시 알림 (기본값: true)
-}
+<AgentProvider config={{
+  // ...
+  replyLinks: { allowedHosts: ['help.example.com', '*.example.org'] },
+}}>
 ```
 
-### 디버그
+항목은 호스트(`help.example.com`), 하위 도메인을 뜻하는 `*.example.com`(`example.com` 자체는 포함하지 않음), 이 둘에 `:port`를 붙인 형태, 또는 호스트를 뜻하는 `http(s)` URL입니다. 애플리케이션 자체의 목록과 달리, 이 항목은 여러 소유자가 함께 쓰는 호스트(`*.github.io` 등)인지 확인하지 않으므로 정확한 호스트를 쓰는 편이 좋습니다.
 
-| 옵션 | 타입 | 기본값 | 설명 |
-|------|------|--------|------|
-| `logLevel` | `LogLevel` | `LogLevel.INFO` | 로깅 상세도: `DEBUG`, `INFO`, `WARN`, `ERROR`, `SILENT` |
-| `debugMode` | `boolean` | `false` | 디버그 UI 및 상세 로깅 활성화 |
+## AssistantButton props
 
-### 안정성
-
-SDK는 컨텍스트를 캡처하기 전에 페이지가 안정화될 때까지 대기합니다. `stability` 필드를 통해 설정합니다. 자세한 내용은 [고급 > 안정성 튜닝](/ko/sdk/advanced#안정성-튜닝)을 참조하세요.
-
-```tsx
-stability: {
-  layers: {
-    networkIdle: true,        // 네트워크 요청 완료 대기 (기본값: true)
-    domMutations: true,       // DOM 변경 중지 대기 (기본값: true)
-    loadingIndicators: false, // 스피너/스켈레톤 대기 (기본값: false)
-    frameReadiness: true,     // 동일 출처 프레임 로딩 완료 대기 (기본값: true)
-    resourceQuiet: true,      // 리소스 로딩이 잠잠해질 때까지 대기 (기본값: true)
-    layoutShift: false,       // 레이아웃 변경 대기 (기본값: false)
-    browserIdle: true,        // 브라우저 유휴 대기 (기본값: true)
-    finalFrame: true,         // 애니메이션 프레임 대기 (기본값: true)
-  },
-}
-```
-
----
-
-## 전체 TypeScript 인터페이스
-
-```typescript
-interface MossSDKConfig {
-  // 필수
-  apiUrl: string;
-  userId: string;
-  applicationId?: string;     // applicationId 또는
-  applicationName?: string;   // applicationName 중 하나 필수
-
-  // 인증
-  getJwt?: () => Promise<string>;   // 권장
-  jwt?: string;
-
-  // 표시
-  language?: 'en' | 'ko';
-  screenshotMode?: 'fullpage' | 'viewport';
-  appearance?: AppearanceInput;  // 'blue' | 'purple' | 커스텀 객체
-  displayMode?: 'chat' | 'headless';
-  headless?: HeadlessConfig;
-
-  // 동작
-  useVision?: boolean;
-  observeTargetSelector?: string;
-  pageSanitizationScript?: (document: Document) => void;
-  enableSessionRecording?: boolean;
-  enableScreenHistoryRecording?: boolean;
-
-  // 개인정보 및 편집
-  redactAllInputs?: boolean;
-  redactionSelectors?: string[];
-  userMetadata?: Record<string, string | number | boolean | string[]>;
-
-  // 연동
-  onSupportTicket?: (handoff: SupportTicketHandoff) => Promise<SupportTicketOutcome>;
-
-  // 세션
-  sessionConfig?: {
-    inactivityTimeout?: number;
-    maxSessionAge?: number;
-    showNotification?: boolean;
-  };
-
-  // 디버그
-  logLevel?: LogLevel;
-  debugMode?: boolean;
-
-  // 안정성
-  stability?: StabilityConfig;
-}
-```
-
----
-
-## AssistantButton Props
-
-`AssistantButton` 컴포넌트는 커스터마이징을 위한 선택적 props를 받습니다:
+`AssistantButton`은 채팅을 열고 닫는 플로팅 버튼입니다. 섀도 루트 밖, 페이지 안에 `position: fixed`로 렌더링됩니다.
 
 ```tsx
 <AssistantButton
-  iconVariant="question"        // 'default' (Moss 로고) 또는 'question' (? 아이콘)
-  iconUrl="/custom-icon.svg"    // 커스텀 아이콘 URL (iconVariant 재정의)
-  position={{ bottom: 20, right: 80 }}  // 버튼 위치 (픽셀)
-  onButtonClick={() => {}}      // 클릭 시 콜백
+  iconVariant="question"                 // 'question'(기본값) 또는 'default'(Moss 로고)
+  iconUrl="/custom-icon.svg"             // iconVariant보다 우선합니다
+  position={{ bottom: 20, right: 80 }}   // 뷰포트 가장자리로부터의 픽셀 거리
+  onButtonClick={() => {}}               // 채팅이 열리거나 닫힌 뒤 실행됩니다
 />
 ```
 
-| Prop | 타입 | 기본값 | 설명 |
-|------|------|--------|------|
-| `iconVariant` | `'default' \| 'question'` | `'question'` | 내장 아이콘 스타일 |
-| `iconUrl` | `string` | — | 커스텀 아이콘 이미지 URL |
-| `position` | `{ bottom?, right?, top?, left? }` | `{ bottom: 20, right: 80 }` | 버튼 위치 |
-| `onButtonClick` | `() => void` | — | 클릭 콜백 |
+| Prop | 타입 | 기본값 | 의미 |
+|------|------|---------|---------|
+| `iconVariant` | `'default' \| 'question'` | `'question'` | 내장 아이콘. `'default'`는 Moss 로고, `'question'`은 물음표입니다 |
+| `iconUrl` | `string` | — | 직접 만든 아이콘 이미지의 URL. `iconVariant`보다 우선합니다. 이미지는 흰색 실루엣으로 그려집니다 |
+| `position` | `{ bottom?, right?, top?, left? }` | `{ bottom: 20, right: 80 }` | 뷰포트 가장자리로부터의 거리(픽셀). 넘긴 값이 기본값 전체를 대체하므로, `{ bottom: 40 }`만 넘기면 가로 위치는 정해지지 않습니다 |
+| `onButtonClick` | `() => void` | — | 클릭으로 채팅이 열리거나 닫힌 뒤 호출됩니다 |
 
 ## 다음 단계
 
 <CardGroup cols={2}>
-    <Card title="고급" icon="sliders" href="/ko/sdk/advanced">
-        안정성 튜닝, Shadow DOM, CSP 헤더
+    <Card title="페이지 데이터와 개인정보" icon="shield-halved" href="/ko/sdk/page-data">
+        Moss가 읽는 것과 그 범위를 제한하는 방법
     </Card>
-    <Card title="SDK 옵션" icon="list" href="/ko/configurations/sdk-options">
-        전체 SDK 설정 옵션
+    <Card title="Types" icon="brackets-curly" href="/ko/sdk/api/types">
+        `MossSDKConfig` 타입과 관련 타입
     </Card>
 </CardGroup>

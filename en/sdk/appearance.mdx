@@ -1,0 +1,621 @@
+---
+title: "Appearance"
+description: "Theme the Moss widget: presets, tokens, the chat window, header and footer, the start screen and fallback states, and how dashboard values combine with yours"
+icon: "palette"
+---
+
+The `appearance` option sets how the Moss widget looks: colors, fonts, the chat window's layout and position, the header, input bar, footer, guide controls, the start screen and the messages shown when Moss can't answer. This page is the full reference for it.
+
+The most common change is a brand color, a header title and the highlight color for guides:
+
+```tsx
+import { AgentProvider, AssistantButton } from '@viamoss/moss-sdk';
+
+<AgentProvider config={{
+  apiUrl: 'https://moss-api.viamoss.ai',
+  applicationId: 'YOUR_APP_ID',
+  userId: currentUser.id,
+  getJwt: () => fetchMossToken(),
+  appearance: {
+    colors: {
+      primary: '#0F766E',
+      highlight: '#0F766E',
+    },
+    chrome: {
+      title: 'Help',
+      header: { showStatusDot: true },
+    },
+  },
+}}>
+  <AssistantButton />
+</AgentProvider>
+```
+
+<Note>
+    `chrome.title` shows only when `chrome.header` is set, even as `{}`. Without `chrome.header`, the widget keeps its original header, which has no title. This applies to a **Header title** saved in the dashboard too: set `chrome.header` in your code, or turn on **Show status dot** or choose a **New chat icon** in the dashboard.
+</Note>
+
+## How an appearance is built
+
+`appearance` takes a preset name or an object.
+
+| Value | Result |
+|-------|--------|
+| unset | The `'blue'` preset |
+| `'blue'` | The default preset: blue accent, translucent panel |
+| `'purple'` | Purple accent, solid panel, rounded top on the input area |
+| an object | Your keys merged onto `'blue'`, or onto `'purple'` when the object has `name: 'purple'` |
+| any other string | The `'blue'` preset |
+
+How an object merges:
+
+- **Key by key.** Each key you set replaces that one value. Every key you leave out keeps the preset's value.
+- **Arrays replace.** A list, such as `zeroState.suggestedQueries` or a fallback's `ctas`, replaces the preset's list whole.
+- **`null` and `undefined` change nothing.** You can't blank a token; set it to the value you want instead.
+- **CSS variables work in values.** A value such as `'var(--brand-primary)'` or `'var(--brand-primary, #0F766E)'` is read from your page's root element (`:root`) when Moss builds the appearance. If the variable isn't defined there and has no fallback, the preset's value is used.
+
+Sizes are strings, so any CSS length works (`'12px'`, `'0.75rem'`). Spacing and radius tokens are in `px`. Text sizes are in `rem`, so the widget's text scales with your page's root font size.
+
+The SDK also exports `mergeAppearance(base, overrides)`, which deep-merges overrides onto a complete `MossAppearance` object you hold.
+
+## Where values come from
+
+Your code, the dashboard and the preset can all set the same key. Which one shows depends on the kind of value and on how Moss is installed.
+
+| What | npm package (`AgentProvider`) | CDN script |
+|------|-------------------------------|------------|
+| **Theme and branding keys** (the list below) | Preset, then your `appearance`, then the dashboard. The dashboard wins for each key it has a value for. | The same. |
+| **Zero state** (`zeroState`) | Your `appearance.zeroState` if you set one, whole. Otherwise the dashboard's. | The dashboard's, unless `window.mossSettings.appearance` sets `zeroState`. |
+| **`layout` and `fallbackStates`** | Your code only. The dashboard's values are not applied. | The application's saved values, unless you set `window.mossSettings.appearance`, which replaces them. |
+| **Every other key** (spacing, radius, effects, `modal`, fonts, `colors.highlight`, the other `chrome` groups) | Your code only. | `window.mossSettings.appearance` only. |
+
+An admin sets these keys under **Configure > Appearance**:
+
+| Form | Field | Key |
+|------|-------|-----|
+| **Branding** | **Header title** | `chrome.title` |
+| **Branding** | **Show status dot** | `chrome.header.showStatusDot` |
+| **Branding** | **New chat icon** | `chrome.header.newChatIcon` |
+| **Branding** | Input bar **Background tint (hex)** | `chrome.inputBar.backgroundTint` |
+| **Branding** | **Show footer**, the help center and ticket labels and URLs, footer **Background color (hex)** | `chrome.footer.enabled`, `helpCenter`, `openTicket`, `backgroundTint` |
+| **Theme** | **Border color (hex)** | `colors.border` |
+| **Theme** | **Panel shadow** | `shadows.md` |
+| **Theme** | **Title font size (px)** | `typography.fontSize.lg` |
+| **Theme** | **Button color (hex)**, **Hover color (hex)** | `colors.actionButton`, `colors.actionButtonHover` |
+| **Theme** | **Primary text**, **Secondary text**, **Tertiary text and icons** (hex) | `colors.text.primary`, `colors.text.secondary`, `colors.text.tertiary` |
+
+A few more theme and branding keys can be saved for the application through the API, with no field in these forms: `colors.primary`, `colors.primaryLight`, `colors.primaryLighter`, `shadows.sm`, `shadows.lg`, `chrome.header.statusDotColor`, `chrome.header.newChatStyle` and `chrome.inputBar.placeholder`. Once saved, they are applied the same way and win over your code.
+
+A field left blank in the dashboard leaves your value or the preset's in place. To let your code decide a key that the dashboard has a field for, clear that field.
+
+The zero state is under **Content > Suggested Content**. See [Suggested content](/en/dashboard/suggested-content) for the dashboard side.
+
+### When dashboard values arrive
+
+- **npm package:** theme, branding and zero state arrive with the chat session, when the chat first opens on a page or when a page loads with a session to resume. Until then, the widget shows the preset and your values, so a first open can change look a moment after it appears. A dashboard change reaches a user at their next page load or new chat.
+- **CDN script:** the script reads the application's settings once as it loads, and the session brings theme, branding and zero state again as above.
+
+With the CDN script, `window.mossSettings` is merged shallowly: an `appearance` object there replaces the dashboard's whole appearance object, including its `layout` and `fallbackStates`. Theme, branding and zero state from the dashboard still arrive with the session.
+
+## When a setting doesn't show
+
+A key at the wrong level is ignored, with no error or console warning. For example, `appearance.title` does nothing; the title is `appearance.chrome.title`. To check a setting that has no effect:
+
+1. **Let TypeScript check the keys.** An object literal written inside the `config` prop is checked against the SDK's types, and an unknown key is a compile error. If you build the appearance as a separate variable, type it so the check still runs:
+
+    ```tsx
+    import type { AppearanceInput } from '@viamoss/moss-sdk';
+
+    const appearance: AppearanceInput = {
+      colors: { primary: '#0F766E' },
+      chrome: { title: 'Help', header: {} },
+    };
+    ```
+
+2. **Check the SDK version.** With `logLevel` at `LogLevel.INFO` (the default) or `LogLevel.DEBUG`, the browser console shows `[MossSDK] v0.17.0 initialized` when Moss mounts. A key added in 0.17.0 does nothing on an older SDK.
+3. **Check the dashboard.** For the theme and branding keys listed above, a saved dashboard value wins over yours.
+4. **Check the companion key.** `chrome.title` needs `chrome.header`, the `streamActivity` option needs `chrome.loader: 'steps'`, and `chrome.guide.minimize` has no effect in a docked layout.
+5. **Check for a saved position.** Moss keeps the window's position and size for the browser tab, so a new `modal.defaultPosition` or `modal.defaultSize` shows in a new tab, or after **Reset Chat Position** in the original header. See [What the user can do](#what-the-user-can-do).
+
+## Page CSS can't style the widget
+
+The chat window renders inside a shadow root that Moss adds to your page. Your page's stylesheets don't apply inside it, and Moss sets its styles inline from the appearance. Use `appearance` for every visual change.
+
+Two components render in your page's own DOM instead, where your CSS does apply: `AssistantButton` and `FloatingActionBar`.
+
+## Presets
+
+The two presets share the type scale, spacing, radius and shadows. They differ in these values:
+
+| Token | `'blue'` | `'purple'` |
+|-------|----------|------------|
+| `colors.primary` | `#3b82f6` | `#7A28F3` |
+| `colors.primaryLight` | `#93c5fd` | `#C29DFE` |
+| `colors.primaryLighter` | `#f0f9ff` | `#F1E7FF` |
+| `colors.userMessage` | `#3b82f6` | `#914DFE` |
+| `colors.assistantMessage` | `rgba(243, 244, 246, 0.6)` | `#FFFFFF` |
+| `colors.headerBackground` | `rgba(255, 255, 255, 0.95)` | `#7A28F3` |
+| `colors.inputAreaBackground` | `rgba(249, 250, 251, 0.9)` | `#F1E7FF` |
+| `colors.modalBackground` | `rgba(255, 255, 255, 0.15)` | `rgba(255, 255, 255, 0.9)` |
+| `colors.text.primary` | `#111827` | `#19191A` |
+| `colors.text.secondary` | `#374151` | `#252527` |
+| `colors.border` | `#e5e7eb` | `#D2D2D4` |
+| `colors.actionButton` | `#3b82f6` | `#19191A` |
+| `colors.actionButtonHover` | `#93c5fd` | `#252527` |
+| `effects.glassmorphism` | `true` | `false` |
+| `effects.glassBlur` | `'blur(8px) saturate(120%)'` | `'none'` |
+| `inputBar.roundedTop` | `false` | `true` |
+
+## Tokens
+
+### Colors
+
+| Key | Default (`'blue'`) | What it colors |
+|-----|--------------------|----------------|
+| `primary` | `#3b82f6` | The main accent |
+| `primaryLight` | `#93c5fd` | Hover states and indicators |
+| `primaryLighter` | `#f0f9ff` | Light accent backgrounds |
+| `primaryBorder` | unset: `border` | The outline of the input pill |
+| `userMessage` | `#3b82f6` | The user's message bubbles |
+| `userMessageText` | unset: `text.onPrimary` | Text in the user's bubbles. Set it when `userMessage` is a light color. |
+| `assistantMessage` | `rgba(243, 244, 246, 0.6)` | Moss's message bubbles |
+| `headerBackground` | `rgba(255, 255, 255, 0.95)` | The header |
+| `inputAreaBackground` | `rgba(249, 250, 251, 0.9)` | The area around the input |
+| `modalBackground` | `rgba(255, 255, 255, 0.15)` | The panel |
+| `text.primary` | `#111827` | Main text |
+| `text.secondary` | `#374151` | Secondary text |
+| `text.tertiary` | `#6b7280` | Muted text and icons |
+| `text.onPrimary` | `#ffffff` | Text on accent-colored surfaces |
+| `border` | `#e5e7eb` | Every hairline: header and footer dividers, card outlines |
+| `success` | `#22c55e` | Completed states in the guide bar |
+| `error` | `#ef4444` | Errors and negative ratings |
+| `highlight` | unset: `#FF4444` | The outline, fill and badges on page elements a guide points at |
+| `actionButton` | `#3b82f6` | Start guide and Next buttons |
+| `actionButtonHover` | `#93c5fd` | The same buttons on hover |
+
+`colors.highlight` takes a hex color, `#RGB` or `#RRGGBB`; Moss derives the translucent fill from it. It is read once, when `AgentProvider` mounts, so a change needs a remount. It can't be set from the dashboard.
+
+`colors.categoryTitle`, `effects.glassOpacity`, `progressBar.height`, `typography.lineHeight.lg` and `spacing['2xl']` are kept for compatibility and have no visible effect in 0.17.0.
+
+### Typography
+
+| Key | Default | Notes |
+|-----|---------|-------|
+| `fontFamily` | `'Inter', system-ui, -apple-system, sans-serif` | Any CSS `font-family` value |
+| `fontFaceUrl` | unset | URL of a stylesheet with `@font-face` rules for a custom font. See below. |
+| `fontSize.xs` / `sm` / `md` / `lg` | `0.833rem` / `1rem` / `1.167rem` / `2rem` | `lg` sizes the header title |
+| `lineHeight.xs` / `sm` / `md` / `lg` | `1.167rem` / `1.333rem` / `1.833rem` / `2.833rem` | |
+
+The `rem` defaults are designed for a 12px root font size, where they give 10, 12, 14 and 24px text. On a page with a 16px root, the same values give larger text; set the sizes in `px` if you need exact sizes.
+
+**Custom fonts.** Browsers don't load `@font-face` rules declared inside a shadow root, so set `fontFaceUrl` to a stylesheet that declares your font, and name the font in `fontFamily`:
+
+```tsx
+appearance: {
+  typography: {
+    fontFaceUrl: 'https://fonts.example.com/brand-sans.css',
+    fontFamily: "'Brand Sans', system-ui, sans-serif",
+  },
+}
+```
+
+Moss adds a `<link rel="stylesheet">` with that URL to your page's `<head>`, once per URL, and never removes it. If your Content Security Policy blocks the stylesheet, the next font in `fontFamily` is used.
+
+### Spacing, radius and shadows
+
+| Group | Keys and defaults |
+|-------|-------------------|
+| `spacing` | `3xs` `4px`, `2xs` `8px`, `set2` `10px`, `xs` `12px`, `sm` `16px`, `md` `20px`; optional `lg` and `xl`, used by the `unavailable` fallback's padding |
+| `radius` | `sm` `6px`, `md` `12px`, `lg` `16px`, `xl` `20px` |
+| `shadows` | `sm` `0 2px 2px rgba(0, 0, 0, 0.05)`, `md` `0 4px 4px rgba(0, 0, 0, 0.1)`, `lg` `0 8px 32px rgba(0, 0, 0, 0.1)` |
+
+### Effects and input area
+
+| Key | Type | Default (`'blue'`) | What it does |
+|-----|------|--------------------|--------------|
+| `effects.glassmorphism` | `boolean` | `true` | Translucent, blurred surfaces. `false` gives solid surfaces and treats the header as dark: its icons turn white, the original header's New chat button uses `colors.text.onPrimary`, and the header loses its bottom border. Set a dark `colors.headerBackground` with it, as the `'purple'` preset does. |
+| `effects.glassBlur` | `string` | `'blur(8px) saturate(120%)'` | The CSS `backdrop-filter` for those surfaces |
+| `inputBar.roundedTop` | `boolean` | `false` | Rounds the top corners of the input area |
+| `inputBar.topShadow` | `boolean` | `true` | A shadow above the input area |
+
+## The chat window
+
+### Floating or docked
+
+`layout` chooses between a floating window and a panel docked to one edge of the browser window.
+
+| Key | Type | Default | What it does |
+|-----|------|---------|--------------|
+| `layout.mode` | `'floating' \| 'docked'` | `'floating'` | Floating: a window the user can move and resize. Docked: a full-height panel fixed to one edge. |
+| `layout.anchor` | `'left' \| 'right'` | `'right'` | The edge a docked panel sits on |
+| `layout.width` | `number` (px) | `420` | The docked panel's width |
+
+`mode` is required when you set `layout`.
+
+```tsx
+appearance: {
+  layout: { mode: 'docked', anchor: 'right', width: 400 },
+}
+```
+
+A docked panel sits over your page; it doesn't resize your layout. It can't be dragged, resized or minimized, it doesn't move aside from highlighted elements, and it ignores `modal.defaultPosition`, `modal.defaultSize` and any position passed to `openChat()`.
+
+### Default position and size
+
+`modal` sets where the floating window first opens and how big it is.
+
+| Key | Type | Default | What it does |
+|-----|------|---------|--------------|
+| `modal.defaultPosition.left` / `right` | `number` (px) | `right: 20` | Distance from that edge of the browser window. `left` wins when both are set. |
+| `modal.defaultPosition.top` / `bottom` | `number` (px) | `bottom: 20` | Distance from that edge. `top` wins when both are set. |
+| `modal.defaultSize.width` | `number` (px) | `420` | |
+| `modal.defaultSize.height` | `number` (px) | `650` | |
+
+```tsx
+appearance: {
+  modal: {
+    defaultPosition: { left: 24, top: 80 },
+    defaultSize: { width: 400, height: 560 },
+  },
+}
+```
+
+The window stays anchored to the edges you name, so a window placed with `right` and `bottom` keeps its distance from the bottom-right corner when the browser window is resized.
+
+### What the user can do
+
+- **Move:** drag the header, or an empty part of the message list or input area. Buttons don't start a drag.
+- **Resize:** drag the left, right or bottom edge, or a bottom corner. The top edge doesn't resize. There is no visible handle.
+- **Minimum size:** 360 × 400 px.
+- **Stays inside the browser window.** A window that fits keeps its size and moves inside. One that doesn't fit shrinks to the window less 20 px on each side, but not below its minimum size.
+- **Reset:** the original header has a **Reset Chat Position** button that puts the window back at `modal.defaultPosition` and `modal.defaultSize`. The header you get with `chrome.header` has no reset button.
+
+Moss saves the window's position and size for the browser tab as soon as it loads, and uses the saved values for the rest of the tab's life, across reloads, whether or not the user moved the window. A change to `modal.defaultPosition` or `modal.defaultSize` therefore shows in a new tab, or after **Reset Chat Position**, not on a reload of a tab where Moss already loaded.
+
+When Moss highlights an element, the floating window steps aside from it. When it can't, a strip says "Highlighted item is behind this panel." with a **Move panel** action.
+
+### Opening at a position from code
+
+`openChat(position)` and `toggleChat(position)` from [`useAgent()`](/en/sdk/api/hooks) take an optional position for that one open: `{ x, y, width, height }`, in CSS pixels from the top-left corner of the browser window.
+
+```tsx
+const { openChat } = useAgent();
+
+openChat({ x: 24, y: 80, width: 420, height: 600 });
+```
+
+- The position applies to that open only and isn't saved. The next open without a position puts the window back where it was.
+- Moss keeps the window inside the browser window, as above.
+- If the user moves, resizes or resets the window during that open, their placement is kept.
+- If the chat is already open, the position is ignored.
+- A docked layout ignores it.
+- `AssistantButton` and `data-moss-trigger` elements open with no position.
+
+### Minimizing during a guide
+
+From 0.17.0, `chrome.guide.minimize: true` lets the user minimize the floating window while a guide runs, so it stops covering the page. See [Guide offer and guide](#guide-offer-and-guide) below.
+
+### Native modal dialogs
+
+A `<dialog>` opened with `showModal()` sits above every other element on the page, including Moss. See [Native modal dialogs](/en/sdk/advanced#native-modal-dialogs).
+
+## Chrome
+
+`chrome` groups the parts of the widget around the conversation. Every key is optional, except that `chrome.footer.enabled` is required once you set `chrome.footer`.
+
+### Header
+
+| Key | Type | Default | What it does |
+|-----|------|---------|--------------|
+| `chrome.title` | `string` | "New AI chat", in the user's language | The header title. Needs `chrome.header`. |
+| `chrome.header` | object | unset | Set it, even as `{}`, to use the header with a title. Unset, the widget keeps its original header: a **New AI chat** button, **Reset Chat Position**, a language menu when `language` isn't set, and close. |
+| `chrome.header.showStatusDot` | `boolean` | `false` | A small dot before the title |
+| `chrome.header.statusDotColor` | `string` | `colors.primary` | The dot's color |
+| `chrome.header.newChatIcon` | `'plus' \| 'refresh' \| 'new-chat'` | `'plus'` | The New chat button's icon |
+| `chrome.header.newChatStyle` | `'icon' \| 'outline'` | `'icon'` | From 0.17.0. `'outline'` adds a "New AI chat" label beside the icon, in a pill with a 1px border. See below. |
+
+With `newChatStyle: 'outline'`, the pill uses `colors.primary`, or the header's text color when `colors.primary` has less than 4.5:1 contrast with `colors.headerBackground`. Where the label would leave the title less than 120px, the button shows the icon alone.
+
+The header with a title has no **Reset Chat Position** button and no language menu.
+
+### Input bar
+
+| Key | Type | Default | What it does |
+|-----|------|---------|--------------|
+| `chrome.inputBar` | object | unset | Set it, even as `{}`, to draw the input and send button inside one bordered pill. Unset, the original input and separate send button stay. |
+| `chrome.inputBar.placeholder` | `string` | "Type a message...", in the user's language | Placeholder text |
+| `chrome.inputBar.backgroundTint` | `string` | unset | A color band behind the input bar |
+| `chrome.inputBar.paddingY` | `string` | `spacing['2xs']` | Top and bottom padding of the text in the pill |
+| `chrome.inputBar.lineHeight` | `string` | `typography.lineHeight.sm` | A number (`'1.5'`), a length (`'20px'`) or a percentage |
+| `chrome.inputBar.focusBorder` | `string` | unset: the border keeps its color | The pill's border color while the input has focus |
+
+### Footer
+
+The footer is a strip under the input with up to two links. It is off unless `enabled` is `true`.
+
+| Key | Type | Default | What it does |
+|-----|------|---------|--------------|
+| `chrome.footer.enabled` | `boolean` | unset: off | `true` shows the footer. Without it, the links below are not shown. |
+| `chrome.footer.helpCenter` | `LinkConfig` | unset | The first link |
+| `chrome.footer.openTicket` | `LinkConfig` | unset | The second link |
+| `chrome.footer.backgroundTint` | `string` | `colors.modalBackground` | The footer's background |
+
+`enabled` is required when you set `chrome.footer`.
+
+A `LinkConfig` is `{ label: string, url: string, icon?: ... }`. Links open in a new tab.
+
+`icon` is `'external-link'`, `'ticket'`, `'none'`, or your own React element, such as an inline SVG, which is shown as decoration and hidden from screen readers. The help center icon follows its label; the ticket icon comes before it. Unset, the help center link shows "↗" and the ticket link shows no icon. An element can be set only in your code: an icon name saved in the dashboard replaces it.
+
+```tsx
+appearance: {
+  chrome: {
+    footer: {
+      enabled: true,
+      helpCenter: { label: 'Help center', url: 'https://help.example.com' },
+      openTicket: { label: 'Contact support', url: 'https://help.example.com/contact', icon: 'ticket' },
+    },
+  },
+}
+```
+
+### Support ticket card
+
+`chrome.ticketCard` changes the copy on the card Moss shows when it drafts a support ticket. Every field is a plain string shown to all users whatever their language; leave a field unset to keep the translated default.
+
+| Key | Where it appears |
+|-----|------------------|
+| `titleLabel` | Names the summary's headline row. Wins over the field title from your support form. |
+| `descriptionLabel` | Names the summary's body row, on the same terms |
+| `privacyNote` | Under the card's header: who the ticket is filed with |
+| `submittingNote` | Under "Submitting your ticket…" |
+| `confirmedNote` | Beside the success message: what happens next |
+| `cancelledNote` | In the "No ticket was sent" row |
+| `failedNote` | In the "We couldn't submit your ticket" row |
+
+See [Support ticket handoff](/en/sdk/support-ticket-handoff) for how filing works.
+
+### Answers
+
+| Key | Type | Default | What it does |
+|-----|------|---------|--------------|
+| `chrome.message.paragraphGap` | `string` | unset: no gap | Space between paragraphs, lists and other blocks in an answer |
+| `chrome.relatedArticles.variant` | `'cards' \| 'list'` | `'cards'` | The related-articles list under an answer: bordered cards, or plain rows with a document icon |
+| `chrome.loader` | `'line' \| 'steps'` | `'line'` | What shows while Moss works: one line of changing status text, or a short list of what Moss is doing. From 0.17.0, the `AgentProvider` option `streamActivity: true` (off by default) adds the backend's live steps to `'steps'`; it needs proxies that pass Server-Sent Events, or the loader shows its fixed rows. |
+
+### Guide offer and guide
+
+These keys change how a guide is offered and how a running guide looks. [Guides and navigation](/en/sdk/guides-and-navigation) explains the guide itself.
+
+| Key | Type | Default | What it does |
+|-----|------|---------|--------------|
+| `chrome.guideOffer.label` | `string` | "Start guide", in the user's language | Text of the button that starts a guide |
+| `chrome.guideOffer.icon` | `'emoji' \| 'outline' \| 'none'` | `'emoji'` | 🚀, an outline rocket in the button's text color, or no icon |
+| `chrome.guide.pageTint` | `boolean \| { color?, opacity? }` | unset: no tint | Dims the page around the current step's targets. `true` uses `rgb(31, 34, 46)` at `0.36`. |
+| `chrome.guide.targetBadges` | `'within-step' \| 'step'` | `'within-step'` | What the badge on a highlighted element shows. See below. |
+| `chrome.guide.nextBesideInput` | `boolean` | `true` | A Next button beside the input on steps with nothing to click |
+| `chrome.guide.nextInBar` | `boolean` | `true` | `false` moves the guide bar's Next beside the input |
+| `chrome.guide.minimize` | `boolean` | `false` | From 0.17.0. Lets the user minimize the floating window while a guide runs. See below. |
+
+**`pageTint`.** The chat panel never dims, and clicks still reach the page. The tint stays up while Moss works on the next step and lifts on a step with nothing highlighted. Give `color` as an opaque color: its alpha would multiply with `opacity`.
+
+**`targetBadges`.** With `'within-step'`, a step with several targets numbers them 1, 2, 3, and a single target has no badge. With `'step'`, the badge shows the guide's step number, as in the guide bar: once on a group of targets, and on each of several scattered targets, which are options for the same step. `'step'` also asks Moss to name several targets in words instead of numbering them 1, 2, 3.
+
+**`nextBesideInput` and `nextInBar`.** With `nextInBar: false`, the guide bar shows only the plan and its progress, and Next sits beside the input on every step where the bar would have shown it. With both set to `false` there is no Next at all, and a development build logs a warning.
+
+**`minimize`.** The header gets a Minimize button, and the "Highlighted item is behind this panel." strip gets a **Minimize** action. A minimized window shows only its header and the guide bar, with Next in the bar even under `nextInBar: false`. It keeps its width and the edge it is anchored to, steps aside from highlights, and can be dragged. These bring the full window back:
+
+- the header's Expand button;
+- `openChat()`, `toggleChat()` or a `data-moss-trigger` element;
+- the guide ending;
+- a card in the chat that needs an answer, such as a rating or a ticket draft.
+
+A reload during the same guide keeps the window minimized. `closeChat()` closes it. Floating windows only: a docked panel has no Minimize.
+
+### Start screen
+
+The start screen is what the chat shows before the first message: recent chats, suggested questions and recommended articles. Its content comes from [`zeroState`](#zero-state); these keys set its look.
+
+| Key | Type | Default | What it does |
+|-----|------|---------|--------------|
+| `chrome.startScreen.queryIcons` | object of React nodes | unset | Your own icon for each built-in icon name (`document`, `compass`, `megaphone`, `search`, `people`). Code only. |
+| `chrome.startScreen.queryFontWeight` | `number \| string` | `400` | Weight of the suggested-question text |
+| `chrome.startScreen.queryGap` | `string` | `spacing['3xs']` | Gap between suggested questions |
+| `chrome.startScreen.articlesPaddingX` | `string` | header `spacing.sm`, rows `spacing.xs` | Left and right padding of the recommended articles |
+| `chrome.startScreen.articlesRowGap` | `string` | unset: none | Gap between recommended-article rows |
+| `chrome.startScreen.recentChats` | `false \| { limit?: number }` | `{ limit: 3 }` | From 0.17.0. How many recent chats the start screen lists, 1 to 5, or `false` to hide the list |
+
+`recentChats` can hide the list but can't turn it on. The list shows only when the application lets users reopen earlier chats; see [Earlier chats](/en/sdk/api/session#earlier-chats).
+
+### Feedback
+
+From 0.17.0. Both keys are off when unset.
+
+| Key | Type | Default | What it does |
+|-----|------|---------|--------------|
+| `chrome.feedback.askWhatWentWrong` | `boolean` | `false` | After a thumbs-down on an answer, ask what went wrong: a short list of reasons, an optional comment and Skip |
+| `chrome.feedback.sessionRating` | `'thumbs' \| 'stars'` | `'thumbs'` | How the end-of-session card asks for a rating. `'stars'` asks for 1 to 5, with an optional comment at any score. |
+
+With `'stars'`, 4 and 5 count as helpful and 1 and 2 as not helpful.
+
+A reason the user picks after a thumbs-down reaches your [`onEvent`](/en/sdk/events) handler on `Moss Feedback Given`; the comment never does. The session rating, thumbs or stars, isn't sent to `onEvent`: it is stored with the session and shown in the dashboard under **Sessions**, in the list and in the session's details.
+
+### Attachments (beta)
+
+From 0.17.0. Beta: may change.
+
+| Key | Type | Default | What it does |
+|-----|------|---------|--------------|
+| `chrome.attachments` | `boolean` | `false` | `true` adds a paperclip button beside the input, and lets users drop files on the input |
+
+Users can attach PDF, PNG and JPEG files, up to 5 per message and 10 MB each. A file is uploaded to your Moss deployment's attachment storage and kept with the session. The model never reads it: only a step the user confirms, whose API action or MCP tool takes a file, receives it. Unset or `false`, there is no attach button and nothing is uploaded.
+
+## Zero state
+
+`zeroState` is the content of the start screen: suggested questions and recommended articles.
+
+```tsx
+appearance: {
+  zeroState: {
+    suggestedQueries: [
+      { question: 'How do I invite a teammate?', icon: 'people' },
+      { question: 'Where do I change my billing plan?', icon: 'document' },
+    ],
+    recommendedArticles: {
+      label: 'Popular articles',
+      items: [
+        { title: 'Getting started', url: 'https://help.example.com/start', readTimeMinutes: 3 },
+      ],
+    },
+    suggestedQueryIcons: 'per-query',
+  },
+}
+```
+
+| Key | Type | What it does |
+|-----|------|--------------|
+| `suggestedQueries` | `{ question: string, icon?: ... }[]` | Questions shown on the start screen. Clicking one sends it as the user's message. |
+| `recommendedArticles.label` | `string` | The section heading. Unset: "Recommended articles". |
+| `recommendedArticles.items` | `{ title, url?, source?, readTimeMinutes? }[]` | Article links. An item without a `url` is shown but can't be clicked. |
+| `suggestedQueryIcons` | `'uniform' \| 'per-query'` | `'uniform'` (default) shows the document icon on every question. `'per-query'` uses each question's `icon`. |
+| `variants` | object | Different content per page and per user role. See below. |
+
+`icon` is `'document'`, `'compass'`, `'megaphone'`, `'search'` or `'people'`.
+
+**Your code or the dashboard.** If you set `appearance.zeroState` at all, even as `{}`, it is used whole and the dashboard's suggested content is not shown. Leave it unset to use the content saved under **Content > Suggested Content**. See [Suggested content](/en/dashboard/suggested-content).
+
+### Per page and per role
+
+The dashboard holds one set of suggested content for the whole application. To show different content on different pages, or to admins and to other users, set `variants` in your code and pass `pageKey`:
+
+```tsx
+<AgentProvider config={{
+  // ...
+  pageKey: 'billing-settings',
+  userMetadata: { role: currentUser.isAdmin ? 'admin' : 'member' },
+  appearance: {
+    zeroState: {
+      suggestedQueries: [{ question: 'What can Moss help me with?' }],
+      variants: {
+        'billing-settings': {
+          admin: {
+            suggestedQueries: [
+              { question: 'How do I change the plan for my team?' },
+              { question: 'How do I add a seat?' },
+              { question: 'Where do I update the billing contact?' },
+            ],
+          },
+          customer: {
+            suggestedQueries: [
+              { question: 'Where can I download my invoices?' },
+              { question: 'How do I update my card?' },
+              { question: 'When will I be charged?' },
+            ],
+          },
+        },
+        default: {
+          admin: {
+            suggestedQueries: [
+              { question: 'How do I add a user?' },
+              { question: 'How do I change a user\'s role?' },
+              { question: 'Where are the audit logs?' },
+            ],
+          },
+          customer: {
+            suggestedQueries: [
+              { question: 'How do I find my invoices?' },
+              { question: 'How do I reset my password?' },
+              { question: 'How do I contact support?' },
+            ],
+          },
+        },
+      },
+    },
+  },
+}}>
+  <AssistantButton />
+</AgentProvider>
+```
+
+Each set here has three questions, so admins and other users each see only their own.
+
+- **`pageKey`** is a stable name you choose for the page, such as `'billing-settings'`; it is not a URL. Pass a new value when the user moves to another page, and the start screen updates.
+- **Role:** `userMetadata.role` equal to `'admin'` (in any letter case) selects `admin`. Anything else, or no role, selects `customer`.
+- **Which set shows:** the entry for `pageKey`, else the `default` entry, else the top-level `suggestedQueries` and `recommendedArticles`. A page entry wins even if it only has content for the other role.
+- **Topping up:** when the chosen set has fewer than 3 questions, or fewer than 3 articles, Moss adds items from the other role's set at the same level, then from the top-level lists, until there are 3. A set with more than 3 is never cut.
+- `suggestedQueryIcons` is read from the top level only; set it there, not inside a variant.
+
+## Fallback states
+
+`fallbackStates` replaces two of Moss's built-in messages with your own copy and links.
+
+| Key | Shown when | Shape |
+|-----|-----------|-------|
+| `hallucination` | An answer points at a page element Moss can't find. Your message replaces that answer's bubble; the input stays usable. | `{ variant: 'inline', body: string, ctas: LinkConfig[] }` |
+| `unavailable` | The chat can't connect after its retries. Your message fills the panel and the input is hidden. | `{ variant: 'takeover', title: string, body?: string, icon?: string, primaryCta: LinkConfig, secondaryCta?: LinkConfig }` |
+| `noAnswer` | Not shown in 0.17.0. The key is reserved. | `{ variant: 'inline', body, ctas }` |
+
+```tsx
+appearance: {
+  fallbackStates: {
+    unavailable: {
+      variant: 'takeover',
+      title: 'Help is temporarily unavailable',
+      body: 'You can still browse the help center.',
+      primaryCta: { label: 'Open help center', url: 'https://help.example.com' },
+    },
+  },
+}
+```
+
+Without `unavailable`, a connection failure shows Moss's built-in error message.
+
+With the npm package, the fallback states saved under **Content > Suggested Content** in the dashboard are not applied. Set them in your code.
+
+## What's new in 0.17.0
+
+- `chrome.header.newChatStyle`
+- `chrome.guide.minimize`
+- `chrome.startScreen.recentChats`
+- `chrome.feedback` (`askWhatWentWrong`, `sessionRating`)
+- `chrome.attachments` (beta)
+- The `AgentProvider` option `streamActivity`, which adds live steps to `chrome.loader: 'steps'`
+- The New chat button and the default header title read "New AI chat" (previously "New chat").
+
+## Common questions
+
+**I set a title or a color and nothing changed.**
+Check that the key is at the right level (`chrome.title`, not `title`) and that `chrome.header` is set. Then check the dashboard: a saved **Branding** or **Theme** value wins over yours. See [When a setting doesn't show](#when-a-setting-doesnt-show).
+
+**Can I style the widget with my own CSS?**
+No. The chat renders in a shadow root, so page CSS doesn't reach it. Use `appearance`. Only `AssistantButton` and `FloatingActionBar` render in your page's DOM.
+
+**How do I change the red outline on highlighted elements?**
+Set `appearance.colors.highlight` to a hex color.
+
+**How do I make the text bigger?**
+Set `appearance.typography.fontSize` (and `lineHeight`). The defaults are `rem`, so they also follow your page's root font size.
+
+**Can users resize or move the chat window?**
+Yes, in the floating layout: drag the header to move it, and the left, right or bottom edge or a bottom corner to resize it, down to 360 × 400 px. See [The chat window](#the-chat-window).
+
+**The chat opens too tall for some screens.**
+Set `modal.defaultSize.height`. Moss also shrinks a window that doesn't fit the browser window, keeping 20 px from each edge.
+
+**The chat shows under our modal dialog.**
+A `<dialog>` opened with `showModal()` sits above everything else on the page. Mount Moss in its own element and call `installModalDialogEscape()`; see [Native modal dialogs](/en/sdk/advanced#native-modal-dialogs).
+
+**How do we collect more feedback than thumbs up and down?**
+From 0.17.0, set `chrome.feedback.askWhatWentWrong: true` to ask for a reason after a thumbs-down, and `chrome.feedback.sessionRating: 'stars'` for a 1 to 5 session rating. See [Feedback](#feedback).
+
+**How do I show different suggested questions on different pages?**
+Pass `pageKey` and set `appearance.zeroState.variants` in your code. The dashboard holds one set for the whole application. See [Per page and per role](#per-page-and-per-role).
+
+**I edited suggested questions in the dashboard and the widget still shows the old ones.**
+Your code sets `appearance.zeroState`, which replaces the dashboard's content whole. Remove it from your code to use the dashboard's.
+
+## Related
+
+- [Guides and navigation](/en/sdk/guides-and-navigation)
+- [Events and errors](/en/sdk/events)
+- [Configuration overview](/en/configurations/overview): where each kind of setting is read from
+- [Types](/en/sdk/api/types)

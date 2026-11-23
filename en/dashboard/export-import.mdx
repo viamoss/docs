@@ -1,0 +1,140 @@
+---
+title: "Export and Import"
+description: "Move an application's setup to another environment or region with Export bundle and Import bundle"
+icon: "arrow-right-arrow-left"
+---
+
+**Export bundle** saves an application's setup as a file. **Import bundle** turns that file into a new application on another Moss install: staging to production, the hosted service to a self-hosted install, or one region to a second install in another region.
+
+Import always creates a **new** application with a new application ID. It never updates or overwrites an existing one.
+
+## Before you start
+
+- **You need the Admin role** on both installs. See [Roles](/en/dashboard/overview#roles).
+- **Both installs must run the same major and minor version**, for example 0.17.x and 0.17.x. Patch versions may differ. A bundle exported from 0.16.x cannot be imported into 0.17.x: upgrade the source, then export again.
+- **A bundle can be at most 10 MiB.** An API connection with a large OpenAPI spec is the usual reason for a large bundle.
+
+## Export an application
+
+1. Open the application on the source install and go to **Configure > General**.
+2. In the **Export application** card, click **Export bundle**.
+
+The browser downloads a JSON file. If the bundle would be over 10 MiB, the export is refused, and the message names the largest section so you know what to trim.
+
+## Import a bundle
+
+1. On the target install, go to **Applications**, the list you see before you open an application.
+2. Click **Import bundle**.
+3. Under **Bundle file**, choose the JSON file. Moss checks it and shows a report. Nothing is created yet.
+4. Under **Application name**, leave the field blank to use the name in the bundle, or type a new one. Names are unique within an organization; if the name is taken, the report says so and you must choose another.
+5. Decide on **Keep published and enabled states**, off by default:
+    - **Off**: procedures arrive as drafts and monitors arrive off, so nothing runs on the new install until you have checked it.
+    - **On**: procedures keep their published or draft state, and monitors stay on or off as they were.
+6. Read the report, then click **Create application**.
+
+The import is all or nothing: if any part fails, nothing is created, and you can fix the problem and run it again. When it succeeds, the dashboard opens the new application at **Configure > General**.
+
+### What the report shows
+
+| Section | What it tells you |
+|---------|-------------------|
+| **Version check** | The version the bundle came from and the version of this install. |
+| **N configuration settings will be applied** | The names of the settings that will be set. |
+| **What will be created** | Procedures, API connections, monitors and the other objects, by name. |
+| **Imported in a safe state** | Each value the import writes differently from the bundle, for example a procedure that arrives as a draft. |
+| **References this environment does not have** | Links the import had to drop, and why. |
+| **Re-enter on this environment** | **Credentials to re-enter**, and **Create these after entering credentials**: objects that could not be created without a credential, with the values to use. |
+| **Check these values** | Values that name the source environment and are often wrong on the target. |
+| **Not included in the bundle** | Everything the export left out. |
+
+## What travels
+
+| Part of the application | What arrives on the target |
+|-------------------------|----------------------------|
+| **Appearance**: Branding, Theme | As exported. |
+| **Suggested Content**: Zero state, Fallback states | As exported. |
+| **Behavior**: Core Features switches, AI Assistant Instructions, Plan Progress Tracking, Session Behavior, Interactive Element Whitelist | As exported. |
+| **General**: Language, Embedding model | As exported. The embedding model cannot be changed after the import. |
+| **Installation**: Advanced Settings | As exported. |
+| **Security**: Allowed Domains, JWT Claim Enforcement, Backend PII filtering | As exported. Review the domains and claims for the target. |
+| **Data & privacy**: retention periods | Only the periods you changed from the default. The rest take the target's defaults. |
+| Procedures | Drafts, unless you chose **Keep published and enabled states**. |
+| Custom API connections and their actions | Turned off, without credentials. |
+| Zendesk connection | **Host-brokered**: created, turned off. **Direct**: not created; the report lists the values to create it with once you have the API user email and token. |
+| Monitors | Off, unless you chose **Keep published and enabled states**. |
+| Intent tags | As exported. |
+| Self-healing schedule (**Proposals > Auto-run**) | Always off, including **Score monitors automatically**. |
+| Intercom handoff rules | As exported. |
+
+From 0.17.0, the bundle also carries the Theme, Session Behavior, the Session Replay and Screen History switches, Advanced Settings, Backend PII filtering and the retention periods. A bundle from 0.16.x left these behind.
+
+## What does not travel
+
+| Not in the bundle | What to do on the target |
+|-------------------|--------------------------|
+| Knowledge Base: sources, pages and uploaded files | Add the sources again under **Knowledge Base** and let them sync. |
+| The **Model** choice under **Configure > Behavior** | The target uses its default model until you choose one. |
+| JWT signing keys | Create or register a key under **Configure > Security**. |
+| API log access key | Generate a new one under **Configure > Security**, if your tools read API logs. |
+| Document360 and Intercom credentials, and Intercom's handoff team and attributes | Connect them again under **Configure > Integrations**. |
+| MCP server connection | Connect the target's MCP server. Procedures that use its tools keep the tool names and work once that server lists them. |
+| Credentials of API and Zendesk connections | Re-enter them, then turn the connections on. |
+| **Collect detailed API logs** and **Automatic deletion** | Both start off. Turn them on under **Configure > Data & privacy** if you need them. |
+| Legal holds and minimum retention periods | Set by the operator of each install. |
+| Sessions, users, analytics, proposals, API logs, audit events and deletion requests | Nothing to do: these are the history of the source install. |
+
+Dashboard users and their roles are not part of an application; they come from your organization or your sign-in provider on each install.
+
+<Note>
+    The new application keeps the source's embedding model. If the target cannot create an application with that model, the import is refused. The legacy Gemini Embedding 001 model is one example: new applications must use a current model.
+</Note>
+
+## After the import
+
+Work through this list on the target before you send real users to it.
+
+1. **Application ID.** Copy the new ID from **Configure > General**. Update the `applicationId` in your app's code, or `?applicationId=` in the CDN script URL, for the target environment.
+2. **Signing key.** Under **Configure > Security > JWT Signing Keys**, create a key and give its secret to the backend that signs tokens for this environment. If you sign with your own key pair, you can **Register public key** with the same public key you use on the source.
+3. **Token claims.** Check **Required Issuer (iss)** and **Required Audience (aud)**. The report lists them even when blank, because a blank value accepts any issuer or audience.
+4. **Allowed domains.** Replace the source's domains with the target's.
+5. **Other values to check.** Go through **Check these values** in the report: API connection base URLs, the Zendesk subdomain, footer and article links, and the **DOM Target Selector** and **Log Level** values.
+6. **Connections.** Under **Configure > Integrations**, re-enter credentials for each Custom API connection and Zendesk, connect Document360, Intercom and the MCP server again, and turn the connections on.
+7. **Knowledge Base.** Add your sources and wait for them to sync.
+8. **Model.** Under **Configure > Behavior > Model**, choose the model, if the target offers a choice.
+9. **Procedures and monitors.** Publish the procedures and turn on the monitors you want live, unless you kept their states.
+10. **Automatic runs.** Under **Proposals > Auto-run**, turn on **Enable automatic runs** and **Score monitors automatically** if you use them.
+11. **Data & privacy.** Check the retention periods, and turn on **Automatic deletion** and **Collect detailed API logs** if you need them.
+12. **Test.** Open your app in the target environment and ask Moss a question.
+
+## If the import is refused
+
+| Message | What to do |
+|---------|------------|
+| "Import requires the same major and minor version. Patch releases may differ." | Bring both installs to the same minor version, then export again from the source. |
+| "This bundle carries no platform version" | Export the bundle again from a released version of Moss. |
+| "This build reports no platform version" | The target install does not report its version. Its operator sets `APP_VERSION` on the target and retries. |
+| "An application named … already exists" | Type a different **Application name**. |
+| "That file is not a valid bundle" | Choose the JSON file that **Export bundle** produced, unchanged. |
+| "Bundle exceeds the … byte import limit" | The file is over 10 MiB. Trim the largest section on the source and export again. |
+
+Each export and import, including a refused import, is recorded in the [Audit Log](/en/security/audit-logging).
+
+## Common questions
+
+**Can I update an existing application from a bundle?**
+No. Import always creates a new application. To replace one, import under a new name, check it, and point your app at its application ID.
+
+**Why are our connections turned off after the import?**
+Credentials never travel in a bundle, so every connection arrives off. Re-enter the credentials under **Configure > Integrations**, then turn the connections on.
+
+**Does the knowledge base come across?**
+No. Add the sources again on the target. See [Knowledge Base](/en/dashboard/knowledge-base).
+
+**We run a second install in another region. Do we need a new application ID and signing key there?**
+Yes. The imported application has its own ID, and signing keys never travel. Your app in that region needs the new ID, and its token backend needs a key the target install knows.
+
+**Can I import a bundle from our hosted application into our self-hosted install?**
+Yes, if both run the same minor version.
+
+**Can we change settings from code instead?**
+There is no update-in-place import. Where your deployment offers [AI assistants](/en/dashboard/ai-assistants), a connected assistant can save procedures, and for an Admin it can also export the bundle and change the **Language**, **On-screen guidance**, **Compact DOM Context**, **Branding**, **Theme** and **Suggested Content**. Each change is shown as a preview that you approve before it is applied.

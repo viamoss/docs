@@ -1,0 +1,308 @@
+---
+title: "Network and egress"
+description: "What a self-hosted Moss install must reach, what can stay private, and what users' browsers need from it"
+icon: "network-wired"
+---
+
+This page lists every place a self-hosted install connects to, which workload
+connects, and which connections can stay on a private network. It ends with
+what your users' browsers need from the install.
+
+An install has three workloads that call out: `sdk-backend`,
+`dashboard-backend` and the `worker`. A destination whose settings are unset is
+never contacted.
+
+## At a glance
+
+| Destination | Workloads | When | Can it stay private? |
+|---|---|---|---|
+| PostgreSQL | Both backends, worker, migrate Job, retention CronJob | Always | Yes |
+| Redis | Both backends, worker | Always | Yes |
+| Object storage (S3-compatible) | Both backends, worker, retention CronJob | Screenshots, recordings, knowledge-base images | Yes for the workloads. Browsers need some of it: see [What the browser needs](#what-the-browser-needs). |
+| Pinecone | Both backends, worker | Knowledge-base search and indexing | Search and writes can, through a private endpoint. Index lookups stay on `api.pinecone.io`. |
+| Chat model provider | Both backends | Every chat turn, and the dashboard's AI features | Depends on the provider |
+| Embedding provider | Both backends, worker | Search and indexing | Depends on the provider |
+| Image annotator provider | Worker | Indexing pages that contain images | Depends on the provider |
+| Your identity provider (OIDC) | Both backends, dashboard | Dashboard sign-in | Yes |
+| Google's token service | Both backends, worker | With `GOOGLE_AUTH_MODE=vertex` | Depends on your credential type and network |
+| `login.microsoftonline.com` | Both backends | With Azure OpenAI on workload identity | Depends on your network |
+| Firecrawl, `api.firecrawl.dev` | Worker | Website sources | No |
+| The websites you add as sources | Worker | Website sources | Public sites only, unless allowlisted |
+| Document360 API | Worker, `dashboard-backend` | Document360 sources | No |
+| Intercom API | Worker, both backends | Intercom sources and the Intercom integration, both from 0.17.0 | No |
+| Zendesk, `<subdomain>.zendesk.com` | `dashboard-backend`; `sdk-backend` too in Direct filing mode | The Zendesk integration | No |
+| Your API action hosts, and MCP servers (from 0.17.0) | `sdk-backend`, `dashboard-backend` | Procedures that call them | No: public addresses only |
+| Your OpenTelemetry collector | All | With `OTEL_EXPORTER_OTLP_ENDPOINT` set | Yes |
+| Slack incoming webhook | All | With `SLACK_WEBHOOK_URL` set | No |
+
+Apart from the database, which the migrate Job needs before any pod starts,
+only one of these stops a workload from starting when it's blocked: on Vertex
+AI, both backends fetch a Google access token at startup and refuse to start
+without one. Everything else fails or degrades when it's used.
+
+## Vector index (Pinecone)
+
+Pinecone is the only supported vector store. Each workload looks the index up
+on `api.pinecone.io`, then sends search, fetch, write and delete requests to
+the index's own host.
+
+To keep those data requests private, set up a Pinecone private endpoint (AWS
+PrivateLink) with private DNS, then set `PINECONE_USE_PRIVATE_ENDPOINT=true`
+(from 0.16.20, off by default):
+
+- **Set it on all three workloads**, `sdk-backend`, `dashboard-backend` and the
+  worker, with the upper-case name and the same value. Accepted values are
+  `true`/`false`, `yes`/`no`, `on`/`off`, `1`/`0`, `t`/`f` and `y`/`n`, in any
+  case. Any other value stops the backends from starting and fails every
+  indexing job.
+- **`api.pinecone.io` stays reachable.** The index lookup always goes there.
+- **There is no fallback to the public host.** If the index's project has no
+  private endpoint, Moss doesn't connect: chats answer without the knowledge
+  base and indexing fails, with an error that names the index and the setting.
+- **Check before you lock Pinecone down.** Each process logs
+  `Pinecone data-plane host: private` the first time it opens the index. That
+  line shows the host Moss picked, not that it's reachable. On `sdk-backend`,
+  ask a question that uses the knowledge base and look for
+  `Pinecone multi-namespace search completed` with `results=N/M`, where N is
+  more than zero. On the worker, refresh a source and check it ends Ready.
+  Only then turn on Pinecone's private-endpoint-only restriction.
+
+The API key needs read and write access to the data plane. It needs rights to
+create indexes only if Moss is to create them for you; the chart README's
+Vector Store section shows how to create them yourself.
+
+## Object storage
+
+The workloads use one S3-compatible store (`STORAGE_TYPE=s3`, `S3_ENDPOINT`),
+which can be in-cluster or behind a private endpoint. It holds session
+screenshots, session recordings, page snapshots and the images the worker
+copies out of knowledge-base pages. With no `S3_ACCESS_KEY_ID` and
+`S3_SECRET_ACCESS_KEY`, the workloads use the cloud's default credentials,
+such as an IAM role for the service account.
+
+Users' browsers reach the store directly for some features, so the address
+they use, `S3_PUBLIC_ENDPOINT` (or `S3_ENDPOINT` when that is unset), may need
+to be reachable from outside. See [What the browser needs](#what-the-browser-needs).
+
+## Model and embedding providers
+
+| Provider | Host |
+|---|---|
+| Vertex AI | `{region}-aiplatform.googleapis.com` for a region, `aiplatform.googleapis.com` for `global`, `aiplatform.eu.rep.googleapis.com` or `aiplatform.us.rep.googleapis.com` for `eu` or `us`. `gemini-embedding-2` uses the global host unless the location is `eu` or `us`. |
+| Gemini Developer API | `generativelanguage.googleapis.com` |
+| OpenAI | `api.openai.com`, or the host in `LLM_API_BASE` |
+| Azure OpenAI | The host in `LLM_API_BASE`, such as `<resource>.openai.azure.com` |
+| Voyage AI (embeddings) | `api.voyageai.com` |
+
+On Vertex AI, the three workloads also get access tokens from Google's token
+service for their credential type, such as GKE Workload Identity, Workload
+Identity Federation or a service-account key.
+
+[Models and response time](/en/self-hosting/models-and-response-time) explains
+which model gets which data, and how to keep all of it on one regional
+endpoint.
+
+## Knowledge-source fetching
+
+| Source type | What the worker fetches, and from where |
+|---|---|
+| Website | It opens the site in a headless Chromium browser to find pages, reading `robots.txt` and sitemaps, then sends each page's address to Firecrawl (`api.firecrawl.dev`, with `FIRECRAWL_API_KEY`), which fetches and returns the page. Chromium also loads whatever the site's pages load, such as scripts and fonts. |
+| Markdown upload | Nothing apart from the images below: the files come from the dashboard. |
+| Document360 | Your Document360 API host, which must be under `document360.io` or `document360.com`, such as `apihub.document360.io`. |
+| Intercom (from 0.17.0) | Your region's Intercom API host: `api.intercom.io`, `api.eu.intercom.io` or `api.au.intercom.io`. |
+| Any type | Every image a page links to, which the worker copies into object storage. |
+
+`dashboard-backend` also calls the Document360 and Intercom APIs, to check
+credentials when an admin saves them and to list Intercom collections.
+`sdk-backend` calls the Intercom API when an application uses the Intercom
+integration. Both Intercom features are new in 0.17.0.
+
+A deployment that adds only Markdown, Document360 or Intercom sources doesn't
+need Firecrawl or `FIRECRAWL_API_KEY`.
+
+### Private addresses and the allowlist
+
+From 0.16.22, the worker's own fetches of addresses that come from content
+reach public addresses only. That covers images, `robots.txt`, sitemaps, a
+website source's start address, and the Document360 host. A private,
+loopback or link-local address is refused: a refused image is recorded as
+failed and keeps its original address, and a refused start address or
+Document360 host fails the job.
+
+To let the worker reach an intranet, list hosts and ranges in
+`WORKER_FETCH_ALLOWLIST` on the worker:
+
+| | |
+|---|---|
+| Type | Comma-separated host names and CIDR ranges |
+| Default | Empty: public addresses only |
+| Example | `wiki.corp.example.com,10.20.0.0/16` |
+
+- A host entry matches that exact name. A CIDR entry matches the address a name
+  resolves to, and every address a name resolves to must pass.
+- `localhost` needs an entry of its own.
+- An entry that is neither a host nor a clean CIDR stops the worker at
+  startup, so a typo opens nothing.
+- Cloud metadata addresses can never be allowed.
+- A private `S3_ENDPOINT` needs no entry.
+
+### Proxies
+
+- **No proxy, ever:** the worker's fetches above (images, `robots.txt`,
+  sitemaps, start addresses and Document360) connect directly and ignore
+  `HTTP_PROXY` and `HTTPS_PROXY`. API actions, and from 0.17.0 MCP
+  connections, don't use a proxy either. A worker that can leave only through
+  a forward proxy can't make these fetches.
+- **Through `HTTPS_PROXY`:** calls to Firecrawl and, from 0.17.0, to the
+  Intercom API, and `dashboard-backend`'s Document360 credential check, follow
+  `HTTPS_PROXY` and `NO_PROXY` when they're set.
+- **Zendesk:** see [Help desk](#help-desk-zendesk).
+
+Test other outbound calls, such as those to model providers, Pinecone and
+object storage, through your proxy before you rely on it.
+
+## Help desk (Zendesk)
+
+Which workload calls Zendesk depends on the filing mode an admin picks for the
+Zendesk integration:
+
+- **Host-brokered:** Moss holds no Zendesk credentials. `dashboard-backend`
+  reads your subdomain's public ticket form, anonymously, when an admin
+  connects or syncs and once a day. Your own backend files the tickets.
+- **Direct:** Moss files tickets with your Zendesk credentials, so
+  `sdk-backend` calls Zendesk too.
+
+Two backend settings, both off by default, change how those calls connect.
+Set them on the workloads that call Zendesk:
+
+| Setting | Default | What it does |
+|---|---|---|
+| `ZENDESK_USE_ENV_PROXY` | `false` | From 0.16.24. `true` sends every Zendesk call through the `http://` proxy named in `HTTPS_PROXY`, unless `NO_PROXY` matches the Zendesk host. A value with no scheme is read as `http://`. An `https://` proxy is refused, and the call fails rather than going direct. |
+| `ZENDESK_ALLOW_PRIVATE_RESOLUTION` | `false` | From 0.17.0. Without a proxy, Moss refuses to call your Zendesk host when this server's DNS answers with a non-public address, and the connection check names this setting. Turn it on only if your network sends `zendesk.com` to an internal gateway on purpose. It never admits loopback, link-local or cloud metadata addresses. |
+
+## API actions and MCP connections
+
+API actions, and from 0.17.0 the MCP servers that admins connect, are called
+over `https` on public addresses only. A host that resolves to a private address is refused.
+This can't be configured, so an API that is reachable only inside your network
+can't be called as an API action. From 0.17.0 this includes the shared range
+`100.64.0.0/10`, which some VPCs use.
+
+## What the browser needs
+
+### From the pages where Moss runs
+
+| Need | Why | Details |
+|---|---|---|
+| `sdk-backend`'s public address | Every SDK request, including the configuration the SDK loads when it starts | The SDK's `apiUrl` points here. See [Configuration](/en/sdk/configuration). |
+| The page's host in the application's allowed domains | Every SDK request is checked against the list | A page the list doesn't cover gets 403 `DOMAIN_NOT_ALLOWED`. See [Dashboard settings](/en/configurations/dashboard-settings). `SDK_REQUIRE_ORIGIN` (default `false`): with `true`, requests without an `Origin` or `Referer`, and every request for an application with an empty list, get 403 `ORIGIN_REQUIRED`. Turn it on once every application's list is filled in. |
+| Proxy timeouts longer than the turn budget | A chat turn can take up to `LLM_TOTAL_TIMEOUT_SECONDS` (240 seconds by default) before its answer is sent | A proxy that closes the request sooner cuts long turns off. |
+| Object storage, at `S3_PUBLIC_ENDPOINT` (or `S3_ENDPOINT`) | When screenshots are captured, and for file attachments when they're turned on, the browser uploads the file to the store with a link the backend signs | The store must accept a cross-origin `PUT` from your pages. |
+| Object storage, at the worker's `S3_ENDPOINT` | Knowledge-base images in replies load from the store, by bucket and path, without a signature | Those objects must be readable at that address. |
+| Server-Sent Events through every proxy | Only with `streamActivity: true` and `appearance.chrome.loader: 'steps'` in the SDK | See [Live steps in the loader](#live-steps-in-the-loader). |
+
+From 0.17.0, replies load images only from allowed hosts: your allowed
+domains, your knowledge base's hosts, your object store, and hosts you add in
+the SDK's `replyLinks.allowedHosts`. On a shared S3 host, such as
+`https://s3.<region>.amazonaws.com` or Google Cloud Storage, they load only
+from the knowledge-base images bucket: `global.storageBuckets.kbImages`, or
+the worker's `STORAGE_BUCKET` when it's in `worker.env`, or
+`KB_IMAGES_BUCKET` on `sdk-backend`. With none of these, those images show as
+their alt text, and `sdk-backend` logs a warning at startup.
+
+### From the dashboard
+
+Admins' browsers need the dashboard's host, your identity provider for
+sign-in, and object storage at `S3_PUBLIC_ENDPOINT` (or `S3_ENDPOINT`), where
+session recordings play from signed links. The dashboard forwards its API
+calls to `dashboard-backend` at `DASHBOARD_API_URL` inside the cluster, so
+`dashboard-backend` needs no public address unless you call its API from
+outside.
+
+From 0.17.0, if you turn on Moss's MCP server for AI assistants
+(`MCP_ENABLED` and `MCP_PUBLIC_URL` on `dashboard-backend`, and `MCP_ENABLED`
+on the dashboard; off by default), assistants connect to `/mcp` on the
+dashboard's host. Assistants
+that run in their vendor's cloud need that address reachable from the
+internet. See [AI assistants](/en/dashboard/ai-assistants).
+
+### Live steps in the loader
+
+From 0.17.0, with `streamActivity: true` and
+`appearance.chrome.loader: 'steps'` in the SDK, the loader shows each step
+Moss takes while it works.
+Those turns use Server-Sent Events on three `sdk-backend` routes:
+
+| Route | Serves |
+|---|---|
+| `POST /api/v1/query/activity` | A typed question |
+| `POST /api/v1/interactions/activity` | A guide step's completion |
+| `GET /api/v1/activity/probe` | Three test events a second apart, with no sign-in |
+
+Every proxy between the browser and `sdk-backend` must pass each event as it's
+written:
+
+- No response buffering on those routes. nginx honours the
+  `X-Accel-Buffering: no` header the backend sends; other proxies need it set.
+- No compression of `text/event-stream` responses.
+- An idle or read timeout of at least 270 seconds: the 240-second turn budget
+  plus at least 30 seconds for the answer. Raise it if you raise
+  `LLM_TOTAL_TIMEOUT_SECONDS`. The backend sends a comment line every 10
+  seconds while a turn runs.
+
+For ingress-nginx:
+
+```yaml
+sdk-backend:
+  ingress:
+    annotations:
+      nginx.ingress.kubernetes.io/proxy-buffering: "off"
+      nginx.ingress.kubernetes.io/proxy-read-timeout: "270"
+      nginx.ingress.kubernetes.io/proxy-send-timeout: "270"
+```
+
+Check the path from a machine on the same network path as your users, with
+your `sdk-backend` host:
+
+```bash
+curl -sN https://moss-sdk-api.example.com/api/v1/activity/probe \
+  | while IFS= read -r line; do printf '%s  %s\n' "$(date +%H:%M:%S)" "$line"; done
+```
+
+The path passes when the three events arrive a second apart. If every line
+arrives at once, about two seconds in, something on the path buffers the
+response. The chart's `docs/sse.md` has settings for ALB, Envoy, Istio,
+Traefik and CDNs.
+
+Without the stream, Moss still answers: the loader shows its fixed rows, and
+the SDK falls back to the plain routes by itself when a proxy refuses the
+stream.
+
+## Common questions
+
+**Can Moss use a Pinecone private endpoint?**
+Yes, from 0.16.20. Set `PINECONE_USE_PRIVATE_ENDPOINT=true` on all three
+workloads and keep `api.pinecone.io` reachable for index lookups. See
+[Vector index](#vector-index-pinecone).
+
+**Our worker can only leave through a proxy. What works?**
+Firecrawl calls, and from 0.17.0 Intercom calls, follow `HTTPS_PROXY`. Image,
+sitemap and Document360 fetches never use a proxy, so they need direct egress.
+See
+[Proxies](#proxies).
+
+**Images or sitemaps on our intranet stopped loading after an upgrade. Why?**
+From 0.16.22 the worker refuses private addresses on those fetches. List the
+host or range in `WORKER_FETCH_ALLOWLIST`.
+
+**Can Zendesk calls go through our proxy?**
+Yes, from 0.16.24, with `ZENDESK_USE_ENV_PROXY=true` and an `http://` proxy in
+`HTTPS_PROXY`.
+
+**Why don't live steps show in the loader?**
+Something between the browser and `sdk-backend` buffers or cuts the stream.
+Run the probe in [Live steps in the loader](#live-steps-in-the-loader).
+
+**Can an API action call an internal API?**
+No. API actions, and from 0.17.0 MCP connections, reach public `https`
+addresses only, and this can't be changed.

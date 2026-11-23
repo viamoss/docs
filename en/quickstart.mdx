@@ -1,16 +1,15 @@
 ---
 title: "Quick Start"
-description: "Get started with Moss AI SDK in minutes"
+description: "Add the Moss assistant to a React app"
 icon: "rocket"
 ---
 
-# Quick Start Guide
+# Quick Start
 
-Get your AI assistant up and running in just a few steps.
+Add the Moss assistant to a React app in three steps. For other sites, use the [CDN script tag](/en/sdk/installation#cdn-script-tag).
 
 <Info>
-    You'll need your **Application ID** from the [Moss
-    Dashboard](https://dashboard.viamoss.ai) and a JWT signing key for authentication.
+    You need your **Application ID**, shown in the [Moss Dashboard](https://dashboard.viamoss.ai) under **Configure > General**, and a JWT signing key. See [Authentication](/en/sdk/authentication).
 </Info>
 
 ## 1. Install the SDK
@@ -19,9 +18,13 @@ Get your AI assistant up and running in just a few steps.
 npm install @viamoss/moss-sdk
 ```
 
+The package is private: the npm account or token you install with needs access to it. If npm refuses the install, contact Moss.
+
+The SDK needs React 18. See [Requirements](/en/sdk/installation#requirements).
+
 ## 2. Add Moss to Your App
 
-Add `AgentProvider` and `AssistantButton` to your application. The provider does **not** need to wrap your entire app — just the Moss components.
+Add `AgentProvider` and `AssistantButton`. The provider does not need to wrap your whole app, only the Moss components.
 
 ```tsx App.tsx
 import { AgentProvider, AssistantButton } from '@viamoss/moss-sdk';
@@ -44,56 +47,76 @@ function App() {
 ```
 
 <Tip>
-    `AgentProvider` only needs to wrap the Moss UI components. It observes the full page DOM regardless of where it sits in the React tree.
+    `AgentProvider` reads the whole page wherever it sits in the React tree.
 </Tip>
+
+<Warning>
+    In Next.js or another framework that renders on the server, load the SDK in the browser only, or the import throws. See [Server-side rendering](/en/sdk/installation#server-side-rendering).
+</Warning>
 
 ## 3. Set Up Authentication
 
-Create a backend endpoint to generate JWT tokens for your users. See the [Authentication Guide](/en/sdk/authentication) for complete setup instructions.
+Create a backend endpoint that signs a token for the signed-in user. `fetchMossToken()` above calls it. See [Authentication](/en/sdk/authentication) for the full setup.
 
-```typescript api/moss-token.ts
-// Example Next.js API route
+```typescript app/api/moss-token/route.ts
+// Next.js App Router route handler, served at /api/moss-token
 import jwt from 'jsonwebtoken';
+import { getCurrentUser } from '@/lib/auth'; // your own session lookup
 
 export async function GET(request: Request) {
   const user = await getCurrentUser(request);
+  if (!user) {
+    return new Response('Unauthorized', { status: 401 });
+  }
 
   const token = jwt.sign(
-    { sub: user.id, app: 'YOUR_APP_ID' },
-    process.env.MOSS_JWT_SECRET,
-    { expiresIn: '1h', header: { kid: process.env.MOSS_KEY_ID } }
+    {
+      sub: String(user.id),                // Required: your user's ID, as a string
+      app: 'YOUR_APP_ID',                  // Required: the Moss application ID
+    },
+    process.env.MOSS_JWT_SECRET!,          // The moss_sk_… secret
+    {
+      algorithm: 'HS256',
+      expiresIn: '1h',                     // Sets exp; jsonwebtoken adds iat
+      keyid: process.env.MOSS_KEY_ID!,     // The key_… ID, sent as the kid header
+    }
   );
 
   return Response.json({ token });
 }
 ```
 
+```typescript
+async function fetchMossToken(): Promise<string> {
+  const response = await fetch('/api/moss-token');
+  if (!response.ok) throw new Error('Could not get a Moss token');
+  return (await response.json()).token;
+}
+```
+
 ## What's Next?
 
-That's it! The Moss AI assistant will now appear as a floating action button in your application.
+Moss now shows a floating button at the bottom right of your app. Clicking it opens the chat.
+
+Before you go live, decide what Moss may read from your pages. The values of native form fields (`input`, `textarea`, `select`) are redacted by default, but not in vision screenshots. Mark other sensitive areas, including custom controls built from other elements, with `data-moss-redact`.
 
 <CardGroup cols={2}>
     <Card
-        title="Authentication"
-        icon="lock"
-        href="/en/sdk/authentication"
+        title="Page data and privacy"
+        icon="shield-halved"
+        href="/en/sdk/page-data"
     >
-        Complete JWT authentication setup
+        What Moss reads and how to limit it
     </Card>
     <Card
         title="Configuration"
         icon="gear"
-        href="/en/configurations/overview"
+        href="/en/sdk/configuration"
     >
-        Customize SDK behavior and options
+        Every SDK option
     </Card>
 </CardGroup>
 
 ## Need Help?
 
-<Tip>
-    Check out the [Dashboard](https://dashboard.viamoss.ai) for your Application
-    ID, JWT signing keys, and detailed analytics.
-</Tip>
-
-If you encounter any issues, please contact our support team or check the [troubleshooting guide](/en/sdk/advanced#troubleshooting).
+If the button doesn't appear or the chat can't connect, see the [troubleshooting guide](/en/sdk/advanced#troubleshooting).

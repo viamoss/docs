@@ -1,156 +1,185 @@
 ---
 title: "Advanced"
-description: "Stability tuning, Shadow DOM, CSP, and troubleshooting"
+description: "Stability tuning, the shadow DOM, CSP, native dialogs, page changes and troubleshooting"
 icon: "sliders"
 ---
 
 # Advanced Configuration
 
+This page covers how the SDK waits for your page to settle, how its UI sits on your page, what a Content Security Policy must allow, and how to troubleshoot an integration. For what the SDK reads from the page and how to limit it, see [Page data and privacy controls](/en/sdk/page-data).
+
 ## Stability Tuning
 
-Before capturing page context, the SDK waits for the page to stabilize. This avoids sending incomplete or mid-render snapshots to the AI. The stability system runs a sequence of detection layers, each of which can be toggled independently:
+Before it reads the page for a question or a guide step, the SDK waits for the page to settle, so the model doesn't see a half-rendered screen. The wait runs these detection layers, in this order:
 
-| Layer | What It Detects | Default |
-|-------|----------------|---------|
-| **Network Idle** | Pending fetch/XHR requests | Enabled |
-| **DOM Mutations** | DOM changes (via MutationObserver) | Enabled |
-| **Loading Indicators** | Spinners, skeletons, `[aria-busy]` | Disabled |
-| **Frame Readiness** | Same-origin frame documents reaching `readyState: 'complete'` | Enabled |
-| **Resource Quiet** | Resource Timing entries settling after the newest completion | Enabled |
-| **Layout Shifts** | Visual layout changes (via PerformanceObserver) | Disabled |
-| **Browser Idle** | CPU idle (via requestIdleCallback) | Enabled |
-| **Final Frame** | One requestAnimationFrame | Enabled |
+| Layer | What it waits for | Default |
+|-------|-------------------|---------|
+| **Network Idle** | Pending fetch and XHR requests | On |
+| **Frame Readiness** | Same-origin frames reaching `readyState: 'complete'` | On |
+| **Resource Quiet** | No new resource loads for a quiet period | On |
+| **DOM Mutations** | No DOM changes for a quiet period | On |
+| **Loading Indicators** | Spinners, skeletons, `[aria-busy]` to disappear | Off |
+| **Layout Shifts** | Layout shifts to stop | Off |
+| **Browser Idle** | An idle callback (`requestIdleCallback`) | On |
+| **Final Frame** | One animation frame | On |
+
+After the layers, a **placeholder guard** always runs: while visible loading placeholders (skeletons, shimmers, `aria-busy`) are in the viewport, it waits for them to clear, for up to 4 seconds, then lets the capture go ahead. It runs whether or not the Loading Indicators layer is on.
 
 <Info>
-    Loading indicators and layout shift layers are disabled by default because many sites have persistent loading animations that would cause unnecessary delays. Enable them if your application uses skeleton screens that reliably disappear.
+    Loading Indicators and Layout Shifts are off by default because many sites keep a loading animation or shifting element on screen, which would hold every capture to its timeout. Turn them on if your skeleton screens reliably disappear.
 </Info>
 
-### Enabling Additional Layers
+### Turning layers on and off
+
+Use `layers` to turn a layer on or off:
 
 ```tsx
 <AgentProvider config={{
   // ...
   stability: {
     layers: {
-      loadingIndicators: true,  // Enable loading indicator detection
-      layoutShift: true,        // Enable layout shift detection
+      loadingIndicators: true,
+      layoutShift: true,
     },
   },
 }}>
 ```
 
-### Layer-Specific Configuration
-
-Each layer can be configured individually:
-
-```tsx
-stability: {
-  // Global timeouts
-  maxTotalWaitMs: 15000,       // Max total time across all layers (default: 15s)
-  networkTimeoutMs: 10000,     // Network idle timeout (default: 10s)
-  browserIdleTimeoutMs: 500,   // Browser idle timeout (default: 500ms)
-
-  // DOM mutations layer
-  domMutations: {
-    quietPeriodMs: 800,        // No mutations for this long = stable (default: 800ms)
-    excludeSelectors: ['.live-clock', '.notification-badge'],
-  },
-
-  // Loading indicators layer (must also enable via layers.loadingIndicators)
-  loadingIndicators: {
-    selectors: ['[class*="skeleton"]', '.spinner', '[aria-busy="true"]'],
-    excludeSelectors: ['.permanent-loader'],
-    timeoutMs: 5000,
-  },
-
-  // Layout shift layer (must also enable via layers.layoutShift)
-  layoutShift: {
-    quietPeriodMs: 200,        // No shifts for this long = stable (default: 200ms)
-    ignoreThreshold: 0.01,     // Ignore tiny shifts (default: 0.01)
-  },
-}
-```
-
-### Disabling Stability Checks
-
-For testing or very simple pages, you can disable layers:
-
-```tsx
-stability: {
-  layers: {
-    networkIdle: false,
-    domMutations: false,
-    browserIdle: false,
-    finalFrame: false,
-  },
-}
-```
+A layer's own `enabled: false` (for example `domMutations: { enabled: false }`) also turns it off, but `enabled: true` there does not turn on a layer that is off by default; use `layers` for that.
 
 <Warning>
-    Disabling stability layers may cause the AI to receive incomplete page context. Only disable for testing or if you're certain the page is fully rendered.
+    Turning layers off can send the model an incomplete page. Do it only for testing, or when you are sure the page is fully rendered.
 </Warning>
+
+### Layer settings
+
+```tsx
+stability: {
+  maxTotalWaitMs: 15000,       // Longest total wait across the layers (default 15000)
+  networkTimeoutMs: 10000,     // Network Idle timeout (default 10000)
+  browserIdleTimeoutMs: 500,   // Browser Idle timeout (default 500)
+
+  domMutations: {
+    quietPeriodMs: 800,                            // default 800
+    excludeSelectors: ['.live-clock', '.notification-badge'],
+    countQuietBeforeLayer: true,                   // default true (from 0.17.0)
+  },
+
+  loadingIndicators: {                             // needs layers.loadingIndicators: true
+    additionalSelectors: ['.my-spinner'],          // added to the default list
+    excludeSelectors: ['.permanent-loader'],
+    timeoutMs: 5000,                               // default 5000
+  },
+
+  frameReadiness: { quietMs: 200, timeoutMs: 10000 },  // defaults
+  resourceQuiet:  { quietMs: 500, timeoutMs: 8000 },   // defaults
+
+  layoutShift: {                                   // needs layers.layoutShift: true
+    quietPeriodMs: 200,                            // default 200
+    ignoreThreshold: 0.01,                         // default 0.01
+  },
+
+  placeholderGuard: {
+    enabled: true,                                 // default true
+    timeoutMs: 4000,                               // default 4000; not counted in maxTotalWaitMs
+    additionalSelectors: ['.my-skeleton'],
+    excludeSelectors: ['.always-shimmering'],
+  },
+}
+```
+
+| Setting | Type | Default | Meaning |
+|---------|------|---------|---------|
+| `maxTotalWaitMs` | `number` (ms) | `15000` | Longest total wait across the layers |
+| `networkTimeoutMs` | `number` (ms) | `10000` | Longest wait for network idle |
+| `browserIdleTimeoutMs` | `number` (ms) | `500` | Longest wait for an idle callback |
+| `domMutations.quietPeriodMs` | `number` (ms) | `800` | No DOM changes for this long counts as settled |
+| `domMutations.excludeSelectors` | `string[]` | `[]` | Changes inside these elements are ignored |
+| `domMutations.countQuietBeforeLayer` | `boolean` | `true` | From 0.17.0. Quiet time seen while the earlier layers run counts toward the quiet period, instead of a fresh window opening after them |
+| `loadingIndicators.selectors` | `string[]` | Built-in list | Replaces the built-in list of loading selectors |
+| `loadingIndicators.additionalSelectors` | `string[]` | — | Adds to the built-in list instead of replacing it |
+| `loadingIndicators.excludeSelectors` | `string[]` | `[]` | Elements that never count as loading; also applies to the placeholder guard |
+| `loadingIndicators.timeoutMs` | `number` (ms) | `5000` | Longest wait for this layer |
+| `frameReadiness.quietMs` | `number` (ms) | `200` | Time all frames must stay complete after one was seen loading |
+| `frameReadiness.timeoutMs` | `number` (ms) | `10000` | Longest wait for this layer |
+| `resourceQuiet.quietMs` | `number` (ms) | `500` | Quiet time since the newest resource finished loading |
+| `resourceQuiet.timeoutMs` | `number` (ms) | `8000` | Longest wait for this layer |
+| `layoutShift.quietPeriodMs` | `number` (ms) | `200` | No shifts for this long counts as settled |
+| `layoutShift.ignoreThreshold` | `number` | `0.01` | Shifts smaller than this are ignored |
+| `placeholderGuard.enabled` | `boolean` | `true` | Run the placeholder guard |
+| `placeholderGuard.timeoutMs` | `number` (ms) | `4000` | Longest wait for placeholders to clear; not counted in `maxTotalWaitMs` |
+| `placeholderGuard.selectors` | `string[]` | `loadingIndicators.selectors`, else the built-in list | Replaces the placeholder selectors |
+| `placeholderGuard.additionalSelectors` | `string[]` | — | Adds to the placeholder selectors |
+| `placeholderGuard.excludeSelectors` | `string[]` | — | Elements, and elements inside them, that never count |
+
+Each layer object also takes `enabled`, described above.
 
 ### After Reload Handling
 
-If your application triggers full page reloads during guided steps, enable the `afterReload` option to preserve state:
+If your app does full page loads during a guide (a link, a redirect or a form post), turn on `afterReload` so the guide continues on the next page:
 
 ```tsx
 stability: {
   afterReload: {
-    enabled: true,          // Off unless explicitly enabled
-    pendingTTL: 30000,      // How long pending state stays valid (default: 30000ms)
-    storageKey: 'my-app-moss-pending',  // Override the storage key holding pending state
+    enabled: true,      // default false
+    pendingTTL: 30000,  // ms; default 30000
   },
 }
 ```
 
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `enabled` | `boolean` | `false` | Preserve pending guide state across a full page reload |
-| `pendingTTL` | `number` | `30000` | Milliseconds a pending marker stays valid before it is discarded |
-| `storageKey` | `string` | SDK default | Storage key used to hold the pending marker |
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `enabled` | `boolean` | `false` | Carry a guide step across a full page load |
+| `pendingTTL` | `number` (ms) | `30000` | How long the next page may take to pick up the step |
+
+If you mount Moss only on demand, `shouldStartMoss()` uses these markers to decide whether to mount it on page load. See [Guides and navigation](/en/sdk/guides-and-navigation).
 
 ---
 
 ## Shadow DOM
 
-The SDK renders all UI inside a Shadow DOM attached to `document.body`. This means:
+The npm package's `AgentProvider` renders a host element, `<div id="clippy-shadow-host">`, where the provider sits in your React tree. The element is `position: fixed` at the top left, with `z-index: 2147483647`. The chat panel and the guide UI render inside its open shadow root. (`clippy` is a legacy name; the id did not change in 0.17.0.)
 
-- **Your CSS cannot affect Moss UI** — styles are fully encapsulated
-- **Moss CSS cannot affect your app** — no style leakage
-- **DOM queries from your app won't find Moss elements** — `document.querySelector` won't match elements inside the shadow root
+- **Your CSS rules don't match Moss's elements** inside the shadow root, and Moss's styles there don't reach your page.
+- **Sizes follow your root font size.** The widget's sizes are in `rem`, so they scale with your page's `html` font size.
+- **The provider's children render outside the shadow root.** `AssistantButton`, `FloatingActionBar` and your own components passed to `AgentProvider` are ordinary elements in your page.
+- **`document.querySelector` doesn't find elements inside the shadow root.** In automated tests, select `#clippy-shadow-host` and pierce its open shadow root.
 
-<Tip>
-    If you're using automated testing tools (Cypress, Playwright, etc.), you'll need to pierce the shadow DOM to interact with Moss elements. Look for the `#moss-shadow-host` host element (`#clippy-shadow-host` in SDK versions up to 0.16).
-</Tip>
+The CDN script renders the same provider into a container it adds to the end of `<body>`: `<div id="moss-sdk-root">`, fixed, with `z-index: 2147483647` and `pointer-events: none`.
+
+Moss also makes a few changes to your page outside the shadow root, such as highlight styles in `<head>`. See [What Moss changes on your page](/en/sdk/overview#what-moss-changes-on-your-page).
 
 ---
 
 ## Content Security Policy (CSP)
 
-If your application uses strict CSP headers, you may need to allow:
+If your app sends a Content Security Policy, it must allow:
 
-| Directive | Value | Reason |
-|-----------|-------|--------|
-| `connect-src` | Your Moss backend URL | API requests |
-| `script-src` | CDN URL (if using script tag) | SDK script |
-| `style-src` | `'unsafe-inline'` | Shadow DOM styles |
-| `img-src` | `blob:` `data:` | Screenshot processing |
+| Directive | Value | Why |
+|-----------|-------|-----|
+| `connect-src` | Your Moss `apiUrl` | Every SDK request, including, from 0.17.0, Server-Sent Events when `streamActivity` is on |
+| `connect-src` | Your Moss deployment's file storage host | Vision screenshots, and from 0.17.0 attachments, upload straight to storage through signed URLs |
+| `script-src` | The CDN script's host | CDN installs only |
+| `style-src` | `'unsafe-inline'` | The SDK adds `<style>` elements to your page and to its shadow root, and uses inline styles |
+| `img-src` | `data:` | Vision screenshots are resized in the browser |
+| `img-src` | Hosts of images in replies | Only images from [allowed hosts](/en/sdk/configuration#replylinks) are loaded |
 
-Example CSP header:
+Example:
 
 ```
 Content-Security-Policy:
   connect-src 'self' https://moss-api.viamoss.ai;
   style-src 'self' 'unsafe-inline';
-  img-src 'self' blob: data:;
+  img-src 'self' data:;
 ```
+
+If `connect-src` blocks the SDK, the browser console shows a CSP violation for your `apiUrl`, and the chat can't connect. When the SDK recognizes the block, it stops retrying and `onEvent` receives `Moss Error` with `errorType: 'connection_blocked'`.
 
 ---
 
 ## DOM Observation Scope
 
-By default, the SDK observes `document.body` for changes. To limit observation to a specific part of your page:
+By default Moss reads the page text from `document.body`. To limit it to part of your page:
 
 ```tsx
 <AgentProvider config={{
@@ -159,197 +188,183 @@ By default, the SDK observes `document.body` for changes. To limit observation t
 }}>
 ```
 
-This is useful when:
-- Your app has a complex sidebar or header that shouldn't trigger re-captures
-- You want to reduce noise from unrelated DOM changes
-- The assistant should only help with a specific section of the page
+The SDK uses the first element that matches, and reads page text only from inside it. Use it when Moss should help with one area only.
+
+It also narrows two parts of the [stability wait](#stability-tuning) to that element: the DOM Mutations layer and the placeholder guard. The Network Idle, Frame Readiness, Resource Quiet, Loading Indicators and Layout Shifts layers stay page-wide. To keep a busy area inside the element, such as a live clock, from holding the wait, use `stability.domMutations.excludeSelectors`.
+
+Vision screenshots, session recordings and screen history still cover the whole page. See [Page data](/en/sdk/page-data#limiting-the-area-moss-reads-observetargetselector).
 
 ---
 
 ## Native Modal Dialogs
 
-When your application opens a native `<dialog>` with `showModal()`, the
-browser makes everything outside the dialog inert — including the Moss widget.
-The user can't click the assistant, and an in-progress guide can't continue.
+When your app opens a native `<dialog>` with `showModal()`, the browser makes everything outside the dialog inert, including the Moss widget. The user can't click the assistant, and a running guide can't continue.
 
-If your application uses `showModal()`, install the modal dialog escape with
-the element your integration mounts the widget into:
+If your app uses `showModal()`, mount Moss into an element your code owns, and install the modal dialog escape on that element:
 
 ```tsx
-import { installModalDialogEscape } from '@viamoss/moss-sdk';
+import { createRoot } from 'react-dom/client';
+import { AgentProvider, AssistantButton, installModalDialogEscape } from '@viamoss/moss-sdk';
 
-const uninstall = installModalDialogEscape(widgetMountElement);
+// An element only Moss lives in, outside your framework's tree.
+const mossHost = document.createElement('div');
+document.body.appendChild(mossHost);
 
-// Later, if you tear the widget down:
+const uninstall = installModalDialogEscape(mossHost);
+
+createRoot(mossHost).render(
+  <AgentProvider config={config}>
+    <AssistantButton />
+  </AgentProvider>
+);
+
+// Later, if you tear Moss down:
 uninstall();
 ```
 
-While a modal dialog is open, the SDK host is temporarily moved into the
-dialog's tree (and promoted above it) so the widget stays interactive and
-keeps its viewport position. When the dialog closes, the host is restored to
-its original place in the DOM. The returned function uninstalls the listeners
-and restores the host.
+While a modal dialog is open, the SDK moves the element into the dialog's tree (and promotes it above the dialog), so the widget stays interactive and keeps its place on screen. When the dialog closes, the element goes back to where it was. The returned function removes the listeners and restores the element.
 
 <Warning>
-    Pass an element your integration owns outright — the container you mounted
-    the Moss widget into. Never pass a node managed by your application's
-    framework: the escape re-parents the element, which would fight the
-    framework's own rendering.
+    Pass an element your integration owns outright, such as the container you mounted Moss into. Never pass a node your app's framework manages: the escape moves the element, which would fight the framework's own rendering.
 </Warning>
 
 **Limitations:**
 
+- `installModalDialogEscape` is in the npm package only; the CDN script doesn't expose it.
 - Dialogs rendered inside shadow roots are not tracked.
-- In browsers without the Popover API, the widget stays interactive but may
-  render clipped inside dialogs that have `overflow: hidden` or a transform.
+- In browsers without the Popover API, the widget stays interactive but may be clipped inside dialogs that have `overflow: hidden` or a transform.
 
 ---
 
 ## Redacting Sensitive Content
 
-### Declarative Redaction with `data-moss-redact`
-
-Mark any HTML element with the `data-moss-redact` attribute to redact it from all data sent to the Moss backend. This is the simplest way to protect sensitive content.
+Mark elements Moss must not read with `data-moss-redact`. Form field values are redacted by default (`redactAllInputs: true`); opt a field back in with `data-moss-unredact`. To reuse markers you already have, list them in `redactionSelectors`.
 
 ```html
 <div data-moss-redact>
   <p>Account balance: $12,340.56</p>
-  <p>SSN: 123-45-6789</p>
 </div>
+<input type="search" data-moss-unredact />
 ```
 
-**What gets redacted:**
+Redaction applies to the page text, guide step reports, and, from 0.17.0, session recordings and screen history. Input redaction covers native fields only (`input`, `textarea`, `select` and editable regions); mark custom controls built from other elements with `data-moss-redact`. Redaction does **not** apply to what the user types in the chat, or to vision screenshots.
 
-- **Text content** — replaced with `[REDACTED]` in the structured context sent to the backend
-- **Sensitive attributes** — `value`, `placeholder`, `title`, `alt`, `aria-label`, `href`, `src`, and `name` are all redacted
-- **Child elements** — all descendants of a redacted element are excluded
+A vision screenshot is the raw frame of what the user shared, normally this tab. Moss takes one only when vision is on (the application's **Enable Vision** switch, or `useVision: true` in your config), `pageContext` is `'full'`, and the user allows the browser's screen-capture prompt. Redaction attributes do not change what is in it. To keep a page out of screenshots, turn vision off with `useVision: false`, or lower `pageContext` to `'metadata'` or `'none'`.
 
-Redaction applies to the marked element and any of its ancestors up to 10 levels deep, so you can mark a container to redact everything inside it.
+For exactly what each marker covers, and for `data-recording-block`, `pageContext` and the collection switches, see [Page data and privacy controls](/en/sdk/page-data#redaction).
 
-```html
-<!-- All form fields inside this section are redacted -->
-<section data-moss-redact>
-  <input type="text" placeholder="Card number" />
-  <input type="text" placeholder="CVV" />
-</section>
-```
+---
 
-### Input Redaction (default on)
+## Programmatic page changes
 
-All input-type elements — `input`, `textarea`, `select`, and
-`contenteditable` regions — have their values redacted by default. What a
-user has typed into a form never leaves the browser as page context.
-
-To opt a specific field out when its content is known to be safe and useful
-to the assistant (for example, a search box), mark it with
-`data-moss-unredact`:
-
-```html
-<input type="search" data-moss-unredact placeholder="Search products…" />
-```
-
-To disable input redaction entirely, set `redactAllInputs: false`:
+`pageSanitizationScript` is a function the SDK calls with your live `document`:
 
 ```tsx
+// Define it once, outside your component, so it keeps the same identity.
+const tidyPage = (doc: Document) => {
+  doc.querySelectorAll('.debug-overlay').forEach((el) => el.remove());
+};
+
 <AgentProvider config={{
   // ...
-  redactAllInputs: false,  // default: true
+  pageSanitizationScript: tidyPage,
 }}>
 ```
+
+What it really does:
+
+- **It changes your page, not a copy.** Anything it edits or removes changes for the user too.
+- **It runs when the SDK starts watching the page**, not before each capture, and again whenever the function's identity or `observeTargetSelector` changes. Content your app renders in between is not touched.
+- **An inline arrow function runs on every render.** A new function on each render of the component that renders `AgentProvider` runs the script again and restarts the page watcher. Define it outside the component, or wrap it in `useCallback`.
+- An error it throws is caught and logged.
+- On the CDN script, pass it as a function in `window.mossSettings.pageSanitizationScript`.
 
 <Warning>
-    Keep `redactAllInputs` enabled unless you have reviewed every form in your
-    application. With it disabled, typed form values are included in the page
-    context sent to Moss.
-</Warning>
-
-### Redaction by CSS Selector
-
-If your application already marks sensitive elements for another tool (for
-example FullStory's `.fs-exclude` / `.fs-mask` classes), reuse those markers
-instead of adding `data-moss-redact` everywhere. Elements matching
-`redactionSelectors` are redacted identically to `data-moss-redact`:
-
-```tsx
-<AgentProvider config={{
-  // ...
-  redactionSelectors: ['.fs-exclude', '.fs-mask', '[data-private]'],
-}}>
-```
-
-`data-moss-redact` is always recognized regardless of this setting. If an
-element matches both an allow rule and a redact rule, the redact rule wins.
-
-### What redaction covers
-
-Redaction applies to the page text and structure sent as context and to the
-interaction reports recorded during step-by-step guidance. It does not alter
-chat messages the user types, screenshots, session recordings, or screen
-history — disable those features individually if their output is not
-permitted in your environment.
-
-### Programmatic Sanitization
-
-For more complex sanitization logic, use `pageSanitizationScript` to modify a cloned copy of the DOM before capture:
-
-```tsx
-<AgentProvider config={{
-  // ...
-  pageSanitizationScript: (doc) => {
-    // Remove credit card fields
-    doc.querySelectorAll('[data-sensitive]').forEach(el => {
-      el.textContent = '[REDACTED]';
-    });
-    // Remove tracking pixels
-    doc.querySelectorAll('img[width="1"]').forEach(el => el.remove());
-  },
-}}>
-```
-
-<Warning>
-    Both methods only affect what the AI sees. The live DOM is never modified — your users won't see any changes.
+    Don't use `pageSanitizationScript` to hide data from Moss: it alters what your users see and misses content rendered after it runs. Use [redaction](/en/sdk/page-data#redaction) instead.
 </Warning>
 
 ---
 
 ## Troubleshooting
 
+Moss's console lines start with `[Moss SDK INFO]`, `[Moss SDK WARN]` and so on; the CDN script's own messages start with `[MossSDK]`. Filter the browser console on `Moss` to see them all. At the default log level, the SDK writes one line as it starts:
+
+```
+[Moss SDK INFO] [MossSDK] v0.17.0 initialized (env=…, app=YOUR_APP_ID)
+```
+
+The object logged with it is your config, with credentials masked. Check the version and the values there first.
+
 ### Assistant button doesn't appear
 
-1. Check the browser console for `[MossSDK]` errors
-2. Verify `applicationId` matches a valid application in the Dashboard
-3. Confirm `apiUrl` is reachable from the browser
-4. Check that your JWT signing key is active and not revoked
+1. **No startup line.** The provider never mounted. In a server-rendering framework, load the SDK on the client only; see [Server-side rendering](/en/sdk/installation#server-side-rendering).
+2. **npm package:** make sure `AssistantButton` is rendered inside `AgentProvider`. With `collectionEnabled: false`, or a [collection control](/en/sdk/page-data#collectioncontrol) that isn't enabled, the provider renders nothing.
+3. **CDN script:** look for `No applicationId found in script URL` or `[MossSDK] Initialization failed`. The script reads `applicationId` only from its own `src`, and finds its own tag by `moss-sdk` in that URL, so keep `moss-sdk` in the file name if you serve the script yourself.
+4. Look for `Moss SDK error: missing required config: …`, which names a missing `apiUrl`, `applicationId` or `userId`.
 
-### "Failed to fetch config" error
+### The chat can't connect
 
-- The SDK couldn't reach the backend. Check `apiUrl` and network/CORS settings.
-- If using CSP, ensure `connect-src` includes the backend URL.
+The SDK starts a session when the chat opens (or when there's a session to resume) by sending `POST {apiUrl}/api/v1/sessions`. Each attempt times out after 10 seconds, and a failed attempt is retried after 1, 2, 4, 8 and 16 seconds. After that the chat shows **Unable to connect** with a **Retry** button.
 
-### Screenshots are blank or incomplete
+Find that request in the browser's Network tab and check its result:
 
-- Try switching `screenshotMode` to `'viewport'`
-- Increase `stability.domMutations.quietPeriodMs` if the page has slow animations
-- Check if iframes or cross-origin content is blocking capture
+| Result | Cause | Fix |
+|--------|-------|-----|
+| Blocked by Content Security Policy | `connect-src` doesn't allow your `apiUrl` | Add it; see [CSP](#content-security-policy-csp) |
+| Network or CORS error | `apiUrl` is wrong or unreachable from the browser | Open `{apiUrl}/health` in the browser; check proxies and firewalls |
+| `401` | The token was missing, expired or not accepted. With `getJwt`, the SDK asks for a new token once and retries | Check the token request in the Network tab, its `kid` header and that the signing key is active. See [Authentication](/en/sdk/authentication) |
+| `403` with `DOMAIN_NOT_ALLOWED` | The page's domain isn't in the application's allowed domains | Add it in the dashboard; see [Dashboard settings](/en/configurations/dashboard-settings) |
+| `403` with `ORIGIN_REQUIRED` | The install requires a page origin, and either the request carried no `Origin` or `Referer`, or the application has no allowed domains | Add your domain to the allowed domains, and make sure proxies pass these headers |
+| `404` on a URL with `//api/` | `apiUrl` ends with `/` (SDK before 0.17.0) | Remove the trailing slash, or upgrade: from 0.17.0 the SDK removes it |
+| `429` | Too many new sessions: 30 a minute per user and application | If all your users share one token subject (`sub`), give each user their own |
 
-### Styles conflict with host application
+Also check the console for `[AuthManager]` lines: a warning `applicationId mismatch` means your token's `app` claim names a different application than your config.
 
-This shouldn't happen — the SDK uses Shadow DOM isolation. If you see conflicts:
-- Check if your app is using `!important` on `*` or `body` selectors
-- Verify no JavaScript is modifying the shadow root
+When you contact support, send:
+
+- the console lines that contain `Moss`, including the startup line and the `[AuthManager]` and `[Session]` lines;
+- the status and timing of your token request and of `POST /api/v1/sessions`;
+- your `apiUrl`, `applicationId`, `userId` and SDK version.
+
+### "That took too long" or "high traffic" replies
+
+These come from the model behind Moss, not from your page or your network.
+
+| What the user sees | Meaning |
+|--------------------|---------|
+| "I'm sorry, that took too long to answer." / "That took too long to answer. Try again." | The turn ran out of time: its whole time budget ran out, or every retry of a model request timed out. It does not mean the service is busy. |
+| "…the service is currently experiencing high traffic…" / "The assistant is busy right now. Try again." | The model provider refused the request as overloaded (HTTP 429 or a 5xx) after Moss's retries. |
+| "Too many requests. Try again shortly." | Moss's own per-user limits on questions and guide steps; see the `429` row above. |
+
+Before 0.16.23, a timeout also produced the high-traffic reply. On a self-hosted install, the turn's time budget is `LLM_TOTAL_TIMEOUT_SECONDS`: 240 seconds by default from 0.17.0, 120 seconds before. See [Models and response time](/en/self-hosting/models-and-response-time).
+
+### Links in answers show as plain text
+
+From 0.17.0, a reply links to or loads images only from allowed hosts: your page's own origin, the articles the reply cites, the application's allowed domains and knowledge-base hosts, and hosts you add in [`replyLinks.allowedHosts`](/en/sdk/configuration#replylinks). Any other link shows as its text, and any other image as its alt text.
+
+### "window is not defined" or "document is not defined"
+
+The SDK touches browser globals as soon as it is imported, so importing it while rendering on the server throws. See [Server-side rendering](/en/sdk/installation#server-side-rendering).
+
+### A setting changed in the dashboard has no effect
+
+The npm package reads most options only from the `config` you pass. See [Configuration](/en/sdk/configuration#where-settings-come-from) and [Sessions](/en/sdk/api/session#where-each-setting-is-read-from).
 
 ### Debug mode
 
-Enable verbose logging to diagnose issues:
+To see what the SDK is doing, raise the log level:
 
 ```tsx
 import { LogLevel } from '@viamoss/moss-sdk';
 
 <AgentProvider config={{
   // ...
-  debugMode: true,
   logLevel: LogLevel.DEBUG,
 }}>
 ```
 
-This logs stability layer timing, network requests, context capture details, and API responses to the browser console.
+This logs stability timing, network requests, context capture and responses to the console. Debug logs can include page content, so don't ship `LogLevel.DEBUG` to production.
+
+<Warning>
+    `debugMode: true` shows debug controls to your users inside the chat. Use it only in development.
+</Warning>

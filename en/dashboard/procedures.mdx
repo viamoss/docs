@@ -1,0 +1,212 @@
+---
+title: "Procedures"
+description: "Tell the assistant the steps to follow for one kind of request, publish them, and control which one runs"
+icon: "list-check"
+---
+
+A procedure is the set of steps the assistant follows for one kind of request, such as a refund, a login problem or filing a ticket. It says when it applies, what the assistant should ask and do, and which tools it may use. A procedure runs for your users only after you **Publish** it.
+
+Open **Content > Procedures** in the sidebar. Admins and members can both create, edit, publish and delete procedures.
+
+## Procedures or AI instructions
+
+Your application has two places to tell the assistant how to behave. Use the one that fits the rule.
+
+| | AI instructions | Procedure |
+|---|---|---|
+| Where | **Configure > Behavior > AI Assistant Instructions** (admins only) | **Content > Procedures** |
+| When it applies | On every message, in every conversation | Only while the assistant is handling the kind of request the procedure covers |
+| Use it for | Standing rules and context: terminology, where things are in your product, tone, what never to say, a link to show whenever a user lacks access | A task a user asks for: the questions to ask, the order of steps, and the tools to call |
+| Tools | None | The tools you list under **Tools it can use** |
+
+A rule that must always hold, for example "When a user can't find a setting because they are not an admin, link to the page that lists their admins", belongs in the AI instructions. A procedure starts only from what the user asks, so a standing rule placed in one is applied only while that procedure is active. See [Dashboard settings](/en/configurations/dashboard-settings) for the AI instructions field.
+
+## Create a procedure
+
+1. Go to **Content > Procedures** and select **New Procedure**.
+2. Choose how to start (from 0.17.0; up to 0.16.25 the list page had **Import from document**, which turned a pasted document into a draft you created with **Create draft**):
+   - **Draft with AI**: describe the situation, or paste a guide your team already uses, and Moss writes a draft. The draft is saved as a **Draft** straight away and opens in the editor with "Moss wrote this draft. Check it, test it on the right, then publish." Select **Keep** to continue with it, **Draft again** to change your description and get a new draft, or **Discard** to delete it.
+   - **Write it myself**: start from an empty editor.
+3. Fill in the fields (below), then select **Save**.
+4. Try it in the **Test** panel.
+5. Select **Publish**.
+
+### Fields
+
+| Field | What it does | Limit |
+|---|---|---|
+| **Name** | Identifies the procedure. Must be unique in the application. The assistant also sees it when choosing a procedure | 200 characters |
+| **When should the assistant use this?** | Describes the requests this procedure is for. The assistant reads it to decide whether to use the procedure | 2,000 characters; the assistant sees the first 200 when choosing |
+| **Trigger keywords** | "A message with one of these words goes straight to this procedure." Type a keyword and press Enter | 24 keywords |
+| **What should it do?** | The steps, in plain language. Type `@` to insert a tool; inserting one also adds it to **Tools it can use** | 8,000 characters |
+| **Tools it can use** | The tools the assistant may call while this procedure is active: **Built-in**, **API actions** and **MCP tools** | |
+
+From 0.17.0, **What should it do?** holds up to 8,000 characters and the assistant uses all of it; the editor shows a character count. Up to 0.16.25, the editor accepted longer text but the assistant used only the first 4,000 characters. A procedure saved before 0.17.0 with more than 8,000 characters keeps working, but the assistant uses only its first 8,000, and you must cut it to 8,000 before you can save a change.
+
+Up to 0.16.25, the fields were labelled **When should this procedure trigger?**, **Policy (plain English)** and **Allowed actions**.
+
+### Test panel
+
+The **Test** panel on the right is a sandbox chat against the procedure, draft or published. Send a message the way a customer would.
+
+- It tests the **last saved** version. Save to test your latest edits.
+- "Tools are never actually run here." Each tool call the assistant makes is shown with its arguments. From 0.17.0, a confirmation card the assistant would show appears too, and confirming it runs nothing.
+- From 0.17.0, you can attach up to 5 PDF, PNG or JPEG files of up to 10 MB each to a test message. Only the file names reach the assistant, not their contents.
+- **Reset** starts a new test conversation.
+
+## Drafts, publishing and versions
+
+| State | Runs for your users | How it gets there |
+|---|---|---|
+| **Draft** | No. Only the **Test** panel runs it | Every new procedure, and **Unpublish** |
+| **Published** | Yes | **Publish** |
+
+- **Publish** makes the procedure available to the assistant at once and raises its version number by one.
+- **Editing a published procedure** keeps it published. Each **Save** is live immediately and raises the version number by one. Because the **Test** panel runs the last saved version, you cannot test an edit to a published procedure before it goes live. To try a large change first, create a separate draft procedure with the new text and a different name, test it, then copy the text into the published one.
+- **Editing a draft** does not change its version number.
+- **Unpublish** returns the procedure to **Draft** and takes it out of use at once. A conversation that was using it continues as normal chat.
+- **Delete procedure** removes it permanently: "Active conversations using it will fall back to normal chat. This cannot be undone."
+
+The list shows each procedure's **Status**, **Version**, **Trigger keywords** and when it was **Updated**. A session's detail page shows which procedure and version guided it (see [Sessions](/en/dashboard/sessions)).
+
+**Going back to an earlier version.** Moss records each published version, but in 0.17.0 the dashboard has no version history or restore. To go back, put the earlier text back and save; that becomes a new version. Copy the text somewhere before a large edit.
+
+A procedure with a **System** badge "is a system procedure managed by Moss. It cannot be edited or deleted."
+
+## How the assistant picks a procedure
+
+On each user message, Moss decides which published procedure, if any, applies:
+
+1. **Trigger keywords.** If a keyword of exactly one published procedure appears anywhere in the message, that procedure is used ("Matched"). Matching ignores case and finds the keyword inside longer words, so `refund` also matches "refunds". Words joined with underscores, such as `order_status`, are ignored, so a keyword containing an underscore never matches.
+2. **Several keyword matches.** If one procedure's matched keywords include all the others' and more, it wins. For example, "track my shipment" matches a procedure with `track` and `shipment` and one with only `shipment`; the first wins. Otherwise the assistant chooses, as in step 3.
+3. **The assistant's choice.** With no single keyword match, the assistant sees the **Name** and **When should the assistant use this?** of the published procedures and uses one if the request clearly matches it ("Agent-selected"). If nothing clearly matches, it answers normally.
+4. **Continuing.** Once a procedure is chosen, the conversation keeps using it on later messages, such as a reply with an email address, until another procedure's keyword matches or the assistant switches to a procedure that fits a new request better. If the procedure is unpublished or deleted, the conversation continues as normal chat.
+
+### When two procedures cover the same task
+
+Two published procedures for the same task compete: on a given message either one can be chosen, by keyword or by the assistant, so conversations about the same task can follow different steps. Keep one published. When you replace a procedure, **Unpublish** the old one.
+
+### Limits on choosing
+
+The assistant chooses by description among at most 30 published procedures, the 30 created first (not counting the one already in use). A procedure beyond the first 30 runs only when one of its trigger keywords matches.
+
+## Tools and support tickets
+
+Under **Tools it can use**, choose what the assistant may call while the procedure is active:
+
+- **Built-in**: `zendesk_ticket` ("File a Zendesk support ticket on the user's behalf") and, from 0.17.0, `intercom_conversation` ("Hand the user to the support team in an Intercom conversation inside the chat").
+- **API actions**: requests to your API that an admin registered.
+- **MCP tools** (from 0.17.0): tools from an MCP server an admin connected, marked "read-only" or "can change data".
+
+API actions and MCP tools are available to the assistant only while a procedure that lists them is active, so every task that needs one needs a published procedure. Connecting Zendesk, Intercom, API actions and MCP servers is covered in [Integrations](/en/dashboard/integrations).
+
+A procedure can list `zendesk_ticket`, but Moss offers a ticket only when Zendesk filing is set up and turned on for the application and, where your page files the ticket itself, the page passes `onSupportTicket`. When it isn't, the assistant is told the ticket step is unavailable and points the user to support instead of collecting their details. For the page side of filing, see [Support ticket handoff](/en/sdk/support-ticket-handoff).
+
+If an MCP server stops listing a tool a procedure uses, the editor shows "The MCP server no longer lists this tool". The procedure runs without it until the server lists it again or you remove it.
+
+## Writing procedures
+
+### Steps
+
+Write the steps in the order the assistant should follow them, as a numbered list. Say what to ask for, what to check, and which tool to call at which point. State each rule once, in the step where it applies.
+
+The assistant follows the steps in conversation: it asks for related details together, does not ask again for something the user already gave, and does not make up values the user never supplied.
+
+### Asking the user a question
+
+To have the assistant ask before acting, write it as a step, for example "Before filing a ticket, ask what the user was trying to do and what happened instead. Ask at most three questions." The user answers by typing; the chat has no buttons for answer choices.
+
+From 0.17.0, when a reply leaves the procedure mid-way (not finished, not stopped and not waiting for the user), the chat shows "This isn't finished yet." with a **Continue** button.
+
+### More than one language
+
+The language of the answer is set by **Language** under **Configure > General** (see [Dashboard settings](/en/configurations/dashboard-settings)), whatever language the procedure is written in:
+
+- **English** or **Korean**: the assistant always answers in that language, whatever the user writes.
+- **Auto** (the default): with **On-screen guidance** on (the default), the assistant answers in the language of your application and its page, and switches when the user writes a full message in another language, not for a single word; then it stays in that language. With **On-screen guidance** off, it answers in the language the user writes in.
+
+The setting's help text mentions only the widget's interface language, but it sets the answer language too.
+
+So one procedure can serve all your users. Two things need care:
+
+- **Trigger keywords** are matched as written. Add keywords in every language your users write in.
+- **Product terms.** When a step names a button, page or plan, use the name your product shows. If it differs by language, give each name.
+
+### Users' roles and permissions
+
+If your app passes user attributes, such as a role or plan, the assistant can see them and word its answers for that user. A procedure can then say, for example, "If the user's role is not admin, tell them an admin must do this step."
+
+Attributes come from `userMetadata` in the SDK configuration and from the `metadata` claim of the signed user token; when both set the same key, the token's value wins. Together they can hold at most 20 attributes; a session with more is refused when it starts. See [Authentication](/en/sdk/authentication) and [Configuration](/en/sdk/configuration) for how to pass them.
+
+<Warning>
+Attributes only shape what the assistant says. The assistant is instructed not to grant or deny access based on them. Enforce permissions in your own API.
+</Warning>
+
+## Limits per turn
+
+The editor shows the limits for each user message: "Each message gets up to 10 tool rounds and 240 seconds; a confirmed card gets 240 seconds too." These are the defaults from 0.17.0; up to 0.16.25 they were 3 tool rounds and 120 seconds. Self-hosted installs can change them, and the editor shows the values that apply to yours. See [Models and response time](/en/self-hosting/models-and-response-time).
+
+- **Tool rounds.** A round is one model call plus the tool calls it asks for. When the rounds run out, the assistant answers with what it has, without calling more tools. From 0.17.0, the chat then notes "The assistant ran out of steps. Ask again in smaller parts."
+- **Time.** The time limit covers the whole message: model calls and tool calls together. When it runs out, the user sees "I'm sorry, that took too long to answer. Please try again."
+
+The time-out reply is not about load. A different reply, "I'm sorry, the service is currently experiencing high traffic. Please try again in a few moments.", means the model provider was busy or returned an error.
+
+If messages in a procedure often run out of time, have the procedure do less per message, for example by confirming with the user between steps that each call several tools.
+
+## Improve a procedure
+
+- **Suggestions** (side panel, from 0.17.0): open proposals for this procedure from Copilot or Autopilot. **Apply** replaces the saved procedure with the suggestion, so save your edits first; **Dismiss** closes it. See [Improving Answers](/en/dashboard/improving-answers#proposals).
+- **Improve with AI**: opens Copilot with a request to review this procedure's recent metrics and transcripts and propose changes. Its proposals arrive in **Suggestions**.
+- **Performance** (side panel): for the last 7 days, 30 days or all time:
+  - From 0.17.0, how sessions left the procedure: **Finished**, **Stopped**, **Waiting on the user** or **Not finished**, with the number of sessions for each.
+  - How many sessions called its tools, how many calls failed, and the count of each tool's calls by result.
+  - Each tool call. For a Zendesk ticket or an Intercom conversation the entry shows what was sent. For API actions and MCP tools it shows the method and timing only; their requests and responses are kept in **API logs** (admins only) when **Record API logs** is on.
+
+## Procedures and interactive guides
+
+A procedure decides what the assistant asks and does in the chat. An interactive guide walks the user through steps on your page, highlighting each control; the assistant offers one with a **Start guide** button.
+
+The assistant offers a guide only when both of these are on:
+
+- **On-screen guidance** under **Configure > Behavior > Core Features** (on by default);
+- **Enable Planning** under **Configure > Behavior > Plan Progress Tracking** (off by default).
+
+With either off, the assistant still answers, but it does not offer a guide. For how guides start and end in your app, see [Guides and navigation](/en/sdk/guides-and-navigation).
+
+## Common questions
+
+### Is my procedure live after I save it?
+
+Not a new one: new procedures are drafts until you select **Publish**. Saving a procedure that is already published is live at once. See [Drafts, publishing and versions](#drafts-publishing-and-versions).
+
+### I want the assistant to always show a link when a user can't do something. Procedure or instructions?
+
+The AI instructions. A procedure applies only while its kind of request is being handled. See [Procedures or AI instructions](#procedures-or-ai-instructions).
+
+### Can I change what the assistant does in a flow without a new release of our app?
+
+Yes. Edit the procedure in the dashboard; a published procedure's changes are live when you save.
+
+### Our old and new procedures both run. Why?
+
+Both are published and cover the same task, so they compete. Unpublish the old one. See [When two procedures cover the same task](#when-two-procedures-cover-the-same-task).
+
+### Can the assistant offer clickable choices when it asks a question?
+
+No. Users answer by typing.
+
+### Do procedures work if our users write in Korean?
+
+Yes. With **Language** under **Configure > General** on **Auto**, the assistant switches to Korean when a user writes in Korean; set to **Korean**, it always answers in Korean. Add trigger keywords in Korean too, because keywords are matched as written. See [More than one language](#more-than-one-language).
+
+### Can the assistant tell a user up front that they lack permission?
+
+Yes, if your app passes the user's role or permissions as attributes and a procedure or the AI instructions say what to do with them. See [Users' roles and permissions](#users-roles-and-permissions).
+
+### Users got "that took too long to answer". Is the service overloaded?
+
+No. It means answering that message used up the time limit (240 seconds by default). See [Limits per turn](#limits-per-turn).
+
+### Why didn't the assistant offer a guide?
+
+The assistant offers **Start guide** only when **On-screen guidance** (on by default) and **Enable Planning** (off by default) are both on for the application, and it answers with a step-by-step plan for a task on the page. See [Procedures and interactive guides](#procedures-and-interactive-guides) and [Guides and navigation](/en/sdk/guides-and-navigation).

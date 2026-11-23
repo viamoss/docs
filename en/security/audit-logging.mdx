@@ -1,203 +1,190 @@
 ---
 title: "Audit Logging"
-description: "Audit events and request logs for compliance and security monitoring"
+description: "What the Audit Log records, who can read it, how to filter and export it, how long events are kept, and how to read it from your own tools"
 ---
+
+The Audit Log records who changed what in Moss: settings, signing keys, knowledge, data deletions, reads of API logs and more, each with the person, the time, the source address and the outcome. Admins read it in **Configure > Audit Log**, export it as JSON or CSV, or pull it into their own tools with a read-only key. Moss records audit events for every application; there is no switch to turn them off. Events are kept for 365 days by default.
+
+<Info>
+    The Audit Log is not the same as **API logs**. API logs hold the requests and responses of your application's API calls, are off by default, and are described in [API logs](/en/dashboard/analytics#api-logs). See [Audit Log and API logs](#audit-log-and-api-logs) below.
+</Info>
 
 ## Overview
 
-Moss records audit events and supports optional detailed request logging for compliance and security investigations.
+| Question | Answer |
+|----------|--------|
+| Where do I read it? | **Configure > Audit Log**, for one application at a time |
+| Who can read it? | Organization admins, and tools holding the application's audit key |
+| What does it record? | Changes made in the dashboard or through the API, admin-only actions refused to members, reads of API logs, AI assistant tool calls, and changes Moss makes itself, such as automatic deletion runs |
+| What doesn't it record? | Opening or exporting sessions, and other reads in the dashboard |
+| How long is it kept? | 365 days by default, set by your deployment's operator |
+| Can anyone edit or delete events? | No one can edit them through the dashboard or the API. They are deleted only when their period ends, or when an admin deletes a user's data. |
 
 ---
 
 ## What Gets Logged
 
-The tables below describe detailed request logs when enabled.
-
-### Inbound Requests (SDK to Backend)
+### Fields of an event
 
 | Field | Description |
 |-------|-------------|
-| Timestamp | When the request was received |
-| Application ID | Which application made the request |
-| User ID | The authenticated user |
-| Session ID | Associated chat session |
-| Endpoint | API endpoint called |
-| Request payload | Credential-redacted request body |
-| Response status | HTTP status code |
-| Duration | Request processing time |
+| Time (`timestamp`) | When it happened. Stored in UTC; the dashboard shows it in your browser's time zone. |
+| Actor (`actor_id`, `actor_email`, `actor_type`) | Who did it: a dashboard user (`user`), a read-only key (`api_key`) or Moss itself (`system`). The dashboard shows the email when known. |
+| Auth method (`auth_method`) | How the actor signed in: `jwt` for a dashboard sign-in, `mcp_pat` or `mcp_oauth` for an AI assistant, or the key type |
+| Action (`action`) | What happened, such as `jwt_key.revoke` |
+| Target (`target_type`, `target_id`, `target_name`) | What it happened to, such as a key, a source or an application |
+| Outcome (`outcome`) | `success`, `failure`, or `denied` for an action refused for lack of the admin role |
+| Status (`status_code`) | The HTTP status of the request, when there was one |
+| Source IP, user agent, request ID | Where the request came from |
+| Changes (`changes`) | The values before and after, for changes that record them |
+| Metadata (`metadata`) | Extra detail, such as counts or the filters an export used |
 
-### Outbound Requests (Backend to External Services)
+The values of credential fields, such as tokens and passwords, appear as `[REDACTED]` in **Changes**.
 
-| Field | Description |
-|-------|-------------|
-| Timestamp | When the request was made |
-| Target service | LLM provider, embedding API, storage |
-| Provider | Specific provider (OpenAI, Google, etc.) |
-| Model | Model used for the request |
-| Request summary | Credential-redacted request details |
-| Response status | Success/failure |
-| Token counts | For LLM requests |
+### What is recorded
 
----
+| Area | Actions |
+|------|---------|
+| Applications and settings | `application.create`, `application.update`, `application.config.update`, `application.sdk_config.update`, `application.instructions.update`, `application.exported`, `application.imported`, and from 0.17.0 `application.guidance.update` |
+| Keys | `jwt_key.create`, `jwt_key.rotate`, `jwt_key.revoke`, `traffic_api_key.generate`, `traffic_api_key.revoke`, `audit_read_key.generate`, `audit_read_key.revoke` |
+| Interactive element whitelist | `whitelist_rule.create`, `whitelist_rule.update`, `whitelist_rule.delete`, `whitelist.config.update` |
+| Knowledge base | `kb.source.*`, `kb.page.*`, `kb.markdown.upload`, `kb.ingestion.*` |
+| Integrations | `document360.credentials.set`, `document360.credentials.clear`, and from 0.17.0 `intercom.*` |
+| Procedures and reviews | `session.evaluate`, `session.message.evaluate`, and from 0.17.0 `procedure.delete` |
+| User data | `user.metadata.delete`, `data.deletion_request.create`, and from 0.17.0 `data.deletion_request.retry` and `data.deletion_request.execute` |
+| Data & privacy (from 0.17.0) | `data.retention.update`, `data.retention.run` (an automatic deletion run), `data.retention.operator_update` (a change by your Moss administrator), `traffic_logging_config.update` (API log recording turned on or off) |
+| API logs | `traffic_log.delete`, and from 0.17.0 `traffic_log.read` and `traffic_log.export` |
+| Model (from 0.17.0) | A change of the application's model, shown with the model's data processor before and after; `application.model.fallback_started`, `application.model.fallback_ended`, `application.model.requests_refused`, `application.model.default_answered` |
+| AI assistants (from 0.17.0) | `mcp.tool.call` for every tool call, and the connection and settings actions `mcp.grant.*`, `mcp.settings.update`, `mcp.oauth.consent` |
+| Access | `auth.denied`: an admin-only action refused to a member (HTTP 403) |
+| Anything else | A change to an application, an organization or the knowledge base through the API that has no action of its own is recorded as `http.<method> <route>`, with `uninstrumented: true` in its metadata. |
 
-## Sensitive Data Redaction
+Notes on reads:
 
-The request-log sanitizer redacts the following credential fields before storage:
+- A read of API logs is recorded at most once every 10 minutes per person and filtered user. From 0.17.0, if Moss cannot record the read, it returns no API logs (HTTP 503 `audit_unavailable`).
+- Opening or exporting sessions in the dashboard is not recorded. To control who can read conversations, see [Who can see end users' conversations](/en/security/authentication#who-can-see-end-users-conversations).
 
-### Redacted Fields
+### Events that are not on an application's page
 
-The following fields are automatically redacted:
+The **Audit Log** page shows the events of one application. Organization-wide events are not on it:
 
-- `api_key`, `apiKey`
-- `authorization`
-- `password`
-- `secret`
-- `token`
-- `x-api-key`
+- `auth.login`: sent by the dashboard, on a best-effort basis, the first time a signed-in person opens it in a browser tab. It records dashboard use, not every sign-in: a tab whose request fails, or a client that does not use the dashboard, leaves no event, and each new tab adds one. Failed sign-ins are not recorded by Moss.
+- AI assistant connections and organization settings.
 
-### Redaction Example
-
-```json
-// Original request
-{
-  "headers": {
-    "authorization": "Bearer eyJhbG...",
-    "x-api-key": "app_abc123"
-  },
-  "body": {
-    "query": "How do I reset my password?"
-  }
-}
-
-// Logged (sanitized)
-{
-  "headers": {
-    "authorization": "[REDACTED]",
-    "x-api-key": "[REDACTED]"
-  },
-  "body": {
-    "query": "How do I reset my password?"
-  }
-}
-```
-
-<Info>
-    Credential fields are redacted recursively. Detailed request logging covers
-    instrumented paths.
-</Info>
+Admins can read them through the [organization endpoint](#reading-the-audit-log-from-your-own-tools), or ask an AI assistant connected with the admin role. Moss's own maintenance events, such as the job that deletes expired audit events, are not shown to any organization.
 
 ---
 
-## Per-Application Control
+## Reading the Audit Log in the Dashboard
 
-Detailed request logging can be enabled or disabled per application:
+Open **Configure > Audit Log**. Only admins can open it; members see a lock.
 
-This setting controls detailed request logs, separately from administrative audit events.
+The page opens on the last 7 days, newest first, 50 events a page. Expand a row to see its **Changes** and **Metadata**. Changes to data retention and to the model are written out in words.
 
-### Dashboard Configuration
-
-Navigate to **Settings > Developer Options > Audit Logging** to enable or disable logging for your application.
-
-### Considerations
-
-| Detailed Request Logging | Use Case |
-|---------------|----------|
-| **Enabled** | Request-level troubleshooting and analysis within the permitted scope |
-| **Disabled** | High-volume applications where storage costs are a concern |
+| Filter | Type | Matches |
+|--------|------|---------|
+| **Actor** | Text | The actor's ID exactly, as in `actor_id`. An email address does not match. |
+| **Action** | Text | The action name exactly, such as `jwt_key.revoke` |
+| **Outcome** | Text | `success`, `failure` or `denied` |
+| **Start date**, **End date** | Date and time, in your browser's time zone | Events in that window. Default: the last 7 days. |
 
 <Tip>
-    Enable detailed request logging when needed.
+    To filter by a person, export the events once and copy their `actor_id`: the table shows the email, but the **Actor** filter matches the ID.
 </Tip>
+
+From 0.17.0, **Configure > Data & privacy > Change history** opens the same page filtered to data and privacy changes over the last 90 days. Click **Show all events** to clear that filter.
+
+### Export
+
+Click **Export**, then **Export as JSON** or **Export as CSV**. The file holds every event that matches the current filters, not only the page you see, with all the fields above. An export can hold up to 10,000 events; above that it is refused, so narrow the dates or filters. The count reads **10,000+ events** when more match.
+
+In CSV files, a cell that starts with `=`, `+`, `-` or `@` is written with a leading `'`, so a spreadsheet does not run it as a formula.
 
 ---
 
-## Accessing Audit Logs
+## Reading the Audit Log from Your Own Tools
 
-### Dashboard Access
-
-View audit logs in the Dashboard under **Configure > Audit Log**.
-
-Features:
-- Filter by date range
-- Filter by user or session
-- Filter by endpoint or status
-- Export to CSV
-
-### API Access
-
-Query audit logs programmatically using the Audit API:
+Send requests to your dashboard's address: `https://dashboard.viamoss.ai` on the Moss-hosted service, or your own dashboard's address on a self-hosted install. The dashboard passes `/api/v1/` requests to the Moss API.
 
 ```bash
-# List audit events for an application
-curl -X GET "https://moss-api.viamoss.ai/api/v1/applications/YOUR_APP_ID/audit-events?start_date=2024-01-01&end_date=2024-01-31" \
+# List an application's audit events (newest first, 50 a page by default)
+curl "https://dashboard.viamoss.ai/api/v1/applications/YOUR_APP_ID/audit-events?start_date=2026-11-01T00:00:00Z&end_date=2026-11-30T23:59:59Z" \
   -H "X-Audit-API-Key: YOUR_AUDIT_API_KEY"
 
-# Export the same events as JSON or CSV
-curl -X GET "https://moss-api.viamoss.ai/api/v1/applications/YOUR_APP_ID/audit-events/export?format=csv" \
-  -H "X-Audit-API-Key: YOUR_AUDIT_API_KEY"
+# Export the same events as CSV (or format=json)
+curl "https://dashboard.viamoss.ai/api/v1/applications/YOUR_APP_ID/audit-events/export?format=csv&start_date=2026-11-01T00:00:00Z" \
+  -H "X-Audit-API-Key: YOUR_AUDIT_API_KEY" -o audit-events.csv
 ```
 
-Results are paginated with `page` and `page_size`, and can be narrowed with `actor_id`, `action`, `target_type`, `outcome`, `start_date`, and `end_date`.
+| Endpoint | Returns | Who can call it |
+|----------|---------|-----------------|
+| `GET /api/v1/applications/{application_id}/audit-events` | `items`, `total`, `page`, `page_size`. `total` stops counting at 10,001. | The application's audit key, or an admin's dashboard sign-in token |
+| `GET /api/v1/applications/{application_id}/audit-events/export` with `format=json` or `format=csv` | A file of up to 10,000 events; more is refused with HTTP 400 | The application's audit key, or an admin's dashboard sign-in token |
+| `GET /api/v1/organizations/{organization_id}/audit-events` | The organization's events, including `auth.login` | An admin's dashboard sign-in token only. The audit key does not work here. |
 
-### Audit API Key
+The dashboard does not display the organization ID. Read it from the `organization_id` field of any exported event.
 
-A separate API key is used for audit log access:
+Query parameters, all optional:
 
-- **Isolated Access** - Audit key is separate from SDK API key
-- **Read-Only** - Cannot modify logs or other data
-- **Revocable** - Can be revoked independently
+| Parameter | Type | Default | Effect |
+|-----------|------|---------|--------|
+| `page` | Integer, 1 or more | `1` | Page number (list only) |
+| `page_size` | Integer, 1 to 100 | `50` | Events per page (list only) |
+| `start_date`, `end_date` | ISO 8601 date-time | None | Time window. A time with no offset is read as UTC. |
+| `actor_id` | String | None | Exact actor ID |
+| `action` | String | None | Exact action name |
+| `action_prefix` | String, repeatable | None | Actions that start with any of these, such as `jwt_key.` |
+| `target_type` | String | None | Exact target type, such as `jwt_key` |
+| `outcome` | String | None | `success`, `failure` or `denied` |
+| `exclude_system` | Boolean | `false` | Leave out events Moss made itself |
+
+There is no push or streaming delivery. To feed a SIEM, poll the list endpoint with a moving `start_date`.
+
+### Audit API key
+
+The audit key is a read-only key for one application's audit events:
+
+- It reads the list and export endpoints of its own application. A request for another application gets HTTP 403. It cannot change anything.
+- It starts with `audit_`. Moss shows it once and keeps only a hash of it.
+- An application has at most one. Creating a new key replaces the old one, which stops working at once.
+- Creating and revoking it is recorded as `audit_read_key.generate` and `audit_read_key.revoke`.
+
+The dashboard has no control for the audit key in 0.17.0. It is created and managed through the API, and each call must be authenticated as a signed-in admin of the organization:
+
+| Request | Effect |
+|---------|--------|
+| `POST /api/v1/applications/{application_id}/audit-api-key` | Creates a key, replacing any existing one, and returns it once in `api_key` |
+| `DELETE /api/v1/applications/{application_id}/audit-api-key` | Revokes the key |
+| `GET /api/v1/applications/{application_id}/audit-api-key/status` | Tells whether a key exists (`has_audit_api_key`) |
+
+Store the key in a secrets manager, not in code. To rotate it, create a new key and update your tools: the old key stops working as soon as the new one exists.
 
 ---
 
 ## Log Retention
 
-| Record type | Default in the backend | Application of the period |
-|-------------|------------------------|---------------------------|
-| Optional detailed API request logs | 90 days | Per-application window; disabling collection does not erase existing records |
-| Administrative/security audit events | 365 days | Operator-managed; customer-controlled records follow their documented instructions |
+| Record type | How long it is kept | Who sets it |
+|-------------|---------------------|-------------|
+| Audit events | 365 days by default, then deleted by a daily job. An application on legal hold keeps all its events. | The operator of your deployment (`AUDIT_RETENTION_DAYS` on a self-hosted install). It cannot be changed in the dashboard, and **Data & privacy** settings do not apply to it. |
+| API logs | Kept until deleted while **Automatic deletion** is off, the default. With it on, 90 days by default. | An admin, in **Configure > Data & privacy**. See [Data privacy](/en/dashboard/data-privacy). |
 
 Applicable agreements, documented customer instructions, and lawful preservation
 requirements determine the deployed schedule. A required minimum must be
 reconciled with an expiry period before deletion. Confirm the active schedule
 for your deployment with Moss.
 
----
+On a self-hosted install, the daily job runs in the dashboard backend and needs a database role that may delete audit events. See [The retention CronJob](/en/self-hosting/operations#the-retention-cronjob).
 
-## Use Cases
+### When a user's data is deleted
 
-### Compliance Reporting
+When an admin deletes a user's data (**Configure > Data & privacy > Delete a user's data**), Moss also deletes the audit events about that user. The dashboard lists them as "Audit records about this user, including your team's reviews and reads of their conversations". They include:
 
-Generate reports for auditors:
+- the evaluations your team made of that user's conversations (`session.evaluate`, `session.message.evaluate`);
+- reads, exports and deletions of API logs filtered to that user;
+- AI assistant tool calls on that user's chats (`mcp.tool.call`);
+- earlier deletions of that user's metadata, and earlier deletion requests for that user.
 
-1. Filter logs by date range
-2. Export to CSV
-3. Include in compliance documentation
-
-### Security Investigation
-
-Investigate suspicious activity:
-
-1. Identify the user or session
-2. Review all related requests
-3. Check for anomalous patterns
-4. Export evidence for incident response
-
-### Performance Analysis
-
-Analyze API usage patterns:
-
-1. Review request durations
-2. Identify slow endpoints
-3. Track LLM token usage
-4. Optimize based on data
-
-### Cost Analysis
-
-Track LLM usage costs:
-
-1. Review token counts per model
-2. Identify high-usage sessions
-3. Optimize prompts and context
+Other audit records of admin actions stay. If your deployment's operator has set an audit minimum, events about the user that hold no content and are younger than the minimum are kept and listed on the deletion certificate. A legal hold blocks the deletion. See [Data privacy](/en/dashboard/data-privacy) for the whole procedure.
 
 ---
 
@@ -206,7 +193,11 @@ Track LLM usage costs:
 ### Append-Only Audit Events
 
 - Application users cannot edit or delete existing audit events through the dashboard or Audit API.
-- The retention process removes expired audit events.
+- Events are deleted only when their retention period ends, and when an admin deletes a user's data, as described above.
+
+### When an event cannot be written
+
+For most actions, recording is best effort: if Moss cannot write the event, the action itself still completes. Reads and exports of API logs are the exception: Moss refuses them when it cannot record them.
 
 ### Timestamps
 
@@ -214,49 +205,76 @@ Audit-event timestamps are generated by the server in UTC.
 
 ---
 
+## Audit Log and API Logs
+
+| | Audit Log | API logs |
+|---|---|---|
+| What it holds | Who did what, with before and after values | The requests and responses of your application's API calls, with known keys and personal-data patterns masked |
+| On by default | Yes, always | No. An admin turns it on with **Record API logs** in **API logs**, or **Collect detailed API logs** in **Configure > Data & privacy**. |
+| Where | **Configure > Audit Log** | **API logs**, in the **Analyze** group (from 0.17.0) |
+| Who can read it | Admins, and the audit key | Admins, and the **API log access key** (`X-Traffic-API-Key`) from **Configure > Security** |
+| Kept | 365 days by default, set by the operator | Set in **Data & privacy** |
+
+Reading, exporting and deleting API logs, and turning their recording on or off, are themselves recorded in the Audit Log.
+
+---
+
 ## Best Practices
-
-### Enable for Production
-
-Configure production audit and request logging to:
-
-- Meet compliance requirements
-- Enable incident investigation
-- Track usage patterns
 
 ### Regular Review
 
 Periodically review audit logs for:
 
-- Unusual access patterns
-- Access changes and recorded security events
-- Unexpected API usage
+- Changes to signing keys, allowed domains and other **Configure > Security** settings
+- `auth.denied` events, which show members trying admin-only actions
+- Reads and exports of API logs
+- AI assistant tool calls, if your organization allows assistants
 
 ### Secure API Keys
 
 Protect your Audit API key:
 
 - Store securely (not in code)
-- Rotate periodically
-- Monitor for unauthorized use
+- Rotate periodically by creating a new key, which replaces the old one
+- Revoke it when a tool no longer needs it
 
 ---
+
+## Common Questions
+
+**Are dashboard sign-ins recorded?**
+Partly. The dashboard sends an `auth.login` event, on a best-effort basis, the first time a signed-in person opens it in a browser tab, so it records dashboard use rather than every sign-in. These are organization-wide events, so they are not on an application's **Audit Log** page; read them through the [organization endpoint](#reading-the-audit-log-from-your-own-tools). Failed sign-ins are not recorded by Moss.
+
+**Is it recorded when someone reads a conversation?**
+Not when they open or export sessions in the dashboard. Reads of API logs and AI assistant tool calls are recorded.
+
+**Can we send audit events to our SIEM?**
+Yes, by polling `GET /api/v1/applications/{application_id}/audit-events` with the application's audit key. Moss does not push events.
+
+**Can we keep audit events longer or shorter than 365 days?**
+Not from the dashboard. The period is set by your deployment's operator; on the Moss-hosted service, ask Moss.
+
+**Why does the Actor filter find nothing when I type an email?**
+The filter matches the actor's ID exactly, not the email. Copy the `actor_id` from an export.
+
+**What happens to audit events when we delete a user's data?**
+The events about that user are deleted with it; other admin events stay. See [When a user's data is deleted](#when-a-users-data-is-deleted).
 
 ## Next Steps
 
 <CardGroup cols={2}>
     <Card
-        title="Compliance"
-        icon="certificate"
-        href="/en/security/compliance"
+        title="Data privacy"
+        icon="database"
+        href="/en/dashboard/data-privacy"
     >
-        GDPR, data deletion, and certifications
+        Retention periods and deleting a user's data
     </Card>
     <Card
         title="Authentication"
         icon="key"
         href="/en/security/authentication"
     >
-        Secure your SDK integration
+        Sign-in, roles and who can see conversations
     </Card>
 </CardGroup>

@@ -1,0 +1,286 @@
+---
+title: "Knowledge Base"
+description: "Add your help content so the assistant can answer from it, check that it is used, and keep it current"
+icon: "book-open"
+---
+
+The Knowledge Base holds the help content the assistant answers from. You add **sources** (a website, a list of URLs, Markdown files, a Document360 project or an Intercom Help Center), Moss splits each **page** of a source into passages and indexes them, and on every question the assistant searches the indexed passages of your sources.
+
+Open it from the sidebar: **Content > Knowledge Base**, then **Add Content**.
+
+<Note>
+A knowledge source gives the assistant text to answer from. It never lets the assistant call your API or act in your product, even when the content is API documentation. To let the assistant take actions, connect the API or tool under [Integrations](/en/dashboard/integrations) and use it from a [procedure](/en/dashboard/procedures).
+</Note>
+
+Admins and members can both add, refresh, turn off and delete sources.
+
+## Add content
+
+**Add Content** opens **Add Content to Knowledge Base** with five tabs.
+
+| Tab | Use it for | What you enter | Button |
+|---|---|---|---|
+| **Crawl Website** | A public documentation or help site | **Base URL** (required), **Source Name**, **Description**, **Sitemap URL (optional)** | **Start Crawling** |
+| **URL List** | A fixed set of public pages | **URLs (one per line)**, or **Or upload .txt/.csv** to fill the box | **Start Import** |
+| **Markdown** | Content a crawler cannot read, or content you write for the assistant | One or more `.md`, `.mdx` or `.txt` files, or **Select Folder** | **Upload & Process** |
+| **Document360** | A Document360 knowledge base | **Project Version**, **Language**, **Include drafts**, **Source Name** | **Start Import** |
+| **Intercom** | An Intercom Help Center | **Languages**, **Collections**, **Include drafts**, **Source Name** | **Start Import** |
+
+When you leave **Source Name** empty, Moss names the source after the website's host name (Crawl Website and URL List) or the first file's title (Markdown).
+
+### Crawl Website
+
+Moss treats the **Base URL** as a scope: it takes only pages on the same site whose address starts with the Base URL. Set it to the narrowest path that holds the content you want. For example, `https://docs.example.com/api` takes your API reference and leaves the rest of the site out. The match is on the text of the address, so `/api` also takes `/api-v2` and `/apis`.
+
+From 0.17.0, a crawl finds pages in this order:
+
+1. It reads the site's `robots.txt`. Pages that `robots.txt` disallows are never taken.
+2. It reads the site's sitemaps: the one you enter in **Sitemap URL (optional)**, the ones `robots.txt` names, and, when neither exists, common sitemap names, including a language sitemap such as `sitemap-en.xml` for the language the start page declares. Every page in a sitemap that falls under the Base URL is taken.
+3. It opens pages, shallowest path first, and follows the links it finds. It stops when 20 pages in a row reveal nothing new, or after it has opened 300 pages (by default).
+
+A crawl leaves out:
+
+- Pages outside the Base URL, or on another host.
+- Links marked `rel="nofollow"`.
+- Links to files, such as PDFs, text files and images. These are not pages.
+- The `#fragment` part of a link. `?page=2` is a separate page; `#section` is not.
+- Pages that turn out to be a "not found" or sign-in screen, pages with fewer than three words, and near-duplicates of another page in the same source. These show as **Skipped** or **Duplicate**.
+- Pages behind a login. Moss cannot sign in to your site.
+
+New in 0.17.0: `robots.txt`, `nofollow`, leaving out file links, keeping the `?query` part so `?page=2` is its own page, and the not-found, sign-in, short-page and near-duplicate checks. Up to 0.16.25, a crawl dropped the whole `?query` part, so `?page=2` counted as the same page, and of the content checks it skipped only redirected pages and exact duplicates.
+
+If a site has more pages than link-following can reach, give Moss a sitemap. Pages listed in the sitemap are always taken; the 300-page stop applies only to link-following.
+
+### URL List
+
+Moss imports exactly the URLs you list. It does not follow links from them. Choose **New Source**, or **Existing Source** to add the URLs to a website or URL-list source you already have.
+
+Use a URL-list source for pages a crawl cannot find. Refreshing a crawled website runs the page search again and keeps only the pages it finds, while refreshing a URL-list source re-imports the same list.
+
+### Markdown
+
+Each file becomes one page. The page title is the file's first `# ` heading, or the file name when there is none. Choose **New Source**, or **Existing Source** to add the files to a Markdown source you already have.
+
+One upload is limited to about 10 MB for all selected files together; the limit counts the request Moss sends, so the usable total is a little less. Upload larger sets in batches into the same source. From 0.17.0, a larger upload is refused with "Request body exceeds the 10485760 byte limit."; earlier versions also failed it, with a less clear error.
+
+Uploading a file again adds a second page; it does not replace the page with the same title. To change a page, see [Update one page](#update-one-page).
+
+If Moss saves the files but cannot start processing, you see "Content saved, but processing could not be started. Please retry shortly." The files are kept; once the service is back, select **Reprocess Markdown** on the source instead of uploading them again.
+
+### Document360
+
+Connect Document360 first under **Configure > Integrations > Document360** (see [Integrations](/en/dashboard/integrations)). Until you do, the tab shows "Document360 is not configured for this application."
+
+From 0.17.0, Moss accepts either kind of Document360 credential:
+
+- an enhanced (v3) API key, which needs the Draft writer or Editor content role with access to the workspaces you import;
+- a v2 API token, which needs GET permission on Project Versions, Categories and Articles.
+
+Moss only reads from Document360. Each source imports one project version (a workspace, with a v3 key) in one language. To import several languages, add one source per language. **Include drafts** also imports articles that are still drafts.
+
+### Intercom
+
+From 0.17.0, you can import an Intercom Help Center. Connect Intercom first under **Configure > Integrations > Intercom** (see [Integrations](/en/dashboard/integrations)); the access token needs read access to Help Center articles and collections.
+
+- **Languages**: each article is imported once per language you select.
+- **Collections**: leave all unchecked to import the whole Help Center, including articles outside any collection. Checking a collection includes its sub-collections.
+- **Include drafts**: also imports language versions that are still drafts.
+
+### Other ways content arrives
+
+- **Proposals**: applying a knowledge-gap proposal writes a Markdown page into a source named **Moss Suggestions**, created the first time. See [Improving Answers](/en/dashboard/improving-answers#proposals).
+- **AI assistants**: where your install has AI assistants turned on, a connected assistant with the Knowledge permission can add website sources and Markdown pages. See [AI assistants](/en/dashboard/ai-assistants).
+
+### Not supported
+
+PDF, Word and HTML file uploads, OpenAPI or Swagger spec files, GitHub repositories, and pages behind a login. Convert such content to Markdown and upload it.
+
+## Content a crawler cannot read
+
+Moss reads a web page as it appears when it loads. It does not click anything. Content that the page shows only after a click, such as tabs, accordions, "show more" buttons or a single-page app that swaps sections in place, is missed: you get the first view only.
+
+For content like this, or content behind a login:
+
+1. Export or copy the content into Markdown files, one file per topic, each starting with a `# ` title.
+2. Go to **Knowledge Base > Add Content > Markdown**.
+3. Choose **Select Folder** (or pick the files), then **Upload & Process**.
+4. When the content changes, update the pages (see [Update one page](#update-one-page)), or upload the new files into a new source and delete the old one.
+
+If a site blocks Moss with bot protection, the source shows "The source site's bot protection is blocking most pages. Try uploading the content as markdown instead." The same Markdown route applies.
+
+## Check that a source is used
+
+The assistant uses a source only when both hold:
+
+- the source's status is **Ready**, and
+- the **Use in AI answers** switch in the source header is on.
+
+### Source status
+
+While a source is being processed, its header shows the stage, **Finding pages**, **Importing pages** or **Preparing for search**, with a page count. The list updates every 10 seconds. Processing runs in five steps: find pages, collect pages, describe images (a vision model writes a text description of each image so it can be searched), split and index, and finish.
+
+When processing ends, the header shows a status, the page count and when the source was last updated.
+
+| Status | Meaning | Used in answers |
+|---|---|---|
+| **Pending** | Waiting to start | No |
+| **Processing** | Finding, collecting or indexing pages | No. During a refresh, the current version keeps answering (see [Refresh a source](#refresh-a-source)) |
+| **Ready** | Finished. Some pages may have failed; the good ones are used | Yes, if **Use in AI answers** is on |
+| **Error** | Finished with no usable result: the source has no pages, every page failed, or a page failed to index | No |
+
+A source that is **Ready** but has failed pages shows an amber chip, "N pages couldn't be imported". Click it to list only those pages. A message from Moss about the whole source, such as an access or bot-protection problem, appears under the header.
+
+Each page in the list has a status dot: **Ready**, **Processing**, **Pending**, **Error**, **Skipped** or **Duplicate**. A page that was collected but failed to index also shows **Processing**. Open a page to see the text Moss extracted from it.
+
+### Use in AI answers
+
+Turn **Use in AI answers** off to keep a source but exclude it from answers. The header then says "Excluded from answers. Content is kept and can be re-enabled anytime." and the sidebar marks the source **off**. The change takes effect within a few minutes. The setting carries over to new versions of the source, and refresh and automatic refresh keep running while it is off.
+
+### See it in answers
+
+- **Analytics > Articles** lists every page that surfaced in answers in the chosen range, with how often and how it was rated. See [Analytics](/en/dashboard/analytics).
+- In a session's transcript, the "N documents" chip on an answer opens **Retrieved Documentation**, the pages that answer drew on, ranked by relevance. See [Sessions](/en/dashboard/sessions).
+- **Analytics > Content Gaps**, and the Sessions filter for content gaps, show questions where the search found nothing relevant.
+
+By default, Moss drops passages that match a question with a relevance score below 0.45 before the model sees them. A page about a topic in general may not be used for a specific question; a page whose title and headings name the task matches better.
+
+## Refresh a source
+
+Each source has a refresh button in its header. Its label depends on the type:
+
+| Source type | Button | What it does |
+|---|---|---|
+| Website | **Refresh** | Runs the whole crawl again, including the page search |
+| URL list | **Refresh URLs** | Fetches the same URLs again |
+| Markdown | **Reprocess Markdown** | Processes the pages already stored again. It does not read new files |
+| Document360, Intercom | **Refresh** | Pulls the articles from the platform again |
+
+A refresh builds a **new version** of the source next to the current one:
+
+1. The current version keeps answering while the new one is processed.
+2. When the new version finishes **Ready**, it replaces the current one, which becomes **Outdated** and is hidden from the list. Moss deletes an outdated version once it has been outdated for 48 hours.
+3. If the new version fails, the current version stays in use and the failed copy is hidden. If the source you refreshed was in **Error**, it is retired as soon as the new run starts.
+
+The toast "Refresh started. The new source version is selected." means the dashboard now shows the new version. Only one refresh can run for a source at a time; a second one is refused until the first finishes. A refresh that has made no progress for 24 hours no longer blocks a new one.
+
+**What a refresh changes for anything that pointed to the old version.** The new version has a new source ID, and its pages have new page IDs.
+
+- **Analytics > Articles** counts by page, so after a refresh a page's counts start again under its new version; the old version's row keeps the answers it gave before.
+- A knowledge-gap proposal that edits a Markdown page points to the page in the version that existed when the proposal was made. Apply such proposals before you select **Reprocess Markdown**, or make the change by hand afterwards.
+- Scripts or AI assistants that stored a source ID must look the source up again.
+- The **Use in AI answers** setting and the automatic refresh schedule carry over.
+
+### Update one page
+
+- **Website, URL-list, Document360 and Intercom pages**: open the page and select **Re-crawl**. Moss clears that page and processes it again from the source. The rest of the source is untouched.
+- **Markdown pages**: open the page, select **Edit Content**, change the text and select **Save & Re-index**.
+- **Delete** removes one page from the knowledge base.
+
+### Retry failed pages
+
+When pages fail, the header shows **Retry failed pages (N)**. It processes only the failed pages again and leaves good pages as they are. From 0.17.0, it also retries pages that were collected but failed to index; such failures put a source in **Error**, and this is how to recover it. Those pages show a **Processing** dot, and the count on the button includes them. Retrying never takes a **Ready** source out of answers.
+
+### Delete a source
+
+Open the **...** menu in the source header and select **Delete source…**. This removes the source, all its pages and its automatic refresh schedule.
+
+## Automatic refresh
+
+Automatic refresh is set per source and is **off by default**. Open it from the **...** menu > **Auto-refresh…**, or click the **Auto-refresh off** chip in the source header.
+
+| Setting | Values | Default |
+|---|---|---|
+| **Enable automatic refresh** | on or off | off |
+| **Refresh interval** | **Weekly** (7 days), **Monthly** (30 days), or **Custom**: 1 to 366 days | Weekly |
+| **Preferred hour (optional)** | **Any time**, or an hour from 0 to 23 in UTC | Any time |
+
+- **The first automatic run happens one interval after you save**, not right away. If you set a preferred hour, the run moves to that hour on the day it falls due. To get fresh content now, also select **Refresh**.
+- Each automatic run is a full refresh, as described in [Refresh a source](#refresh-a-source): a new version is built while the current one keeps answering.
+- Runs start up to 15 minutes after they fall due, so sources saved together do not all start at once.
+- A scheduled refresh counts as run once it has **started**. If it then fails, the current version keeps answering, the failed copy is hidden, and the next automatic run comes a full interval later. The dialog's "Last refresh succeeded" means the refresh started, not that it finished.
+- If Moss cannot start a scheduled refresh, for example because the integration's credentials were removed, it tries again after 6 hours, then 12, then 24, doubling each time but never waiting longer than the interval. A schedule never turns itself off.
+- Automatic refresh only refreshes a source that has a **Ready** version. A source in **Error** is skipped, run after run, until you recover it with **Refresh** or **Retry failed pages**.
+
+The header chip shows the interval and the next run, for example "Auto-refreshes weekly", and, when scheduled refreshes could not be started, how many times in a row. The **Auto-refresh…** dialog shows the next run and the last outcome. The Knowledge Base toolbar shows how many sources auto-refresh and when the next run is.
+
+Because a refresh that starts and then fails is not shown as a failure in the dialog, check sources with automatic refresh on from time to time: open each one and confirm it is **Ready** and its "Updated" date is after the last scheduled run. A failed copy is hidden, so an old date is the sign that the last refresh did not finish.
+
+## Limits
+
+| Limit | Value |
+|---|---|
+| Link-following during a website crawl | Stops after opening 300 pages by default. Pages in a sitemap are not limited by this |
+| Markdown upload | About 10 MB for all files in one upload |
+| Markdown file types | `.md`, `.mdx`, `.txt` |
+| Automatic refresh interval | 1 to 366 days |
+| Refreshes per source at a time | 1 |
+| Outdated versions kept after a refresh | 48 hours |
+| Sources listed on the Knowledge Base page | The 50 most recently added or refreshed. Sources beyond that still answer |
+| Relevance needed for a passage to reach the model | 0.45 by default |
+
+Knowledge sources are not part of an application export. After you [import an application](/en/dashboard/export-import), add its sources again.
+
+## Errors and what to do
+
+Messages appear under the source header (for the whole source) or on a failed page.
+
+| Message | What to do |
+|---|---|
+| "Most pages at the source URL could not be found. Please verify the base URL." | Check the **Base URL** for typos and that it is the path the pages live under. |
+| "Access to most pages was denied by the source site. Authentication may be required, or the URL needs to be changed." | The pages need a login or block outside visitors. Upload the content as Markdown. |
+| "The source site's bot protection is blocking most pages. Try uploading the content as markdown instead." | Ask your site team to allow the crawler, or upload the content as Markdown. |
+| "The source site is heavily rate-limiting us. We'll continue retrying but progress may be slow." | Wait. Moss keeps retrying. |
+| "Part of this content could not be processed. The rest is available." | The source is usable. Check the failed pages and select **Retry failed pages**. A crawl that stopped at the 300-page link limit also shows this; add a sitemap. |
+| "This page no longer exists at the source URL." | Remove the page, or refresh the source. |
+| "Access to this page was denied by the source site." | The page needs a login. Upload it as Markdown. |
+| "The source site took too long to respond. We'll retry automatically." and other "We'll retry automatically" messages | Wait, then use **Retry failed pages** if pages stay failed. |
+| "Document360 API token is invalid or expired." | Enter the token again under **Configure > Integrations > Document360**. |
+| "Document360 credentials lack read access. …" | Give the key the content role, or the token the GET permissions, listed in [Document360](#document360). |
+| "Stored Document360 credentials cannot be decrypted …" | Enter the token again under **Configure > Integrations > Document360**. |
+| "The Document360 host must be a Document360 API host …" | Enter a host such as `apihub.document360.io` or `apihub.us.document360.io`, with no `https://`, port or path. |
+| "Intercom access token is invalid or expired." or "… cannot be decrypted …" | Enter the token again under **Configure > Integrations > Intercom**. |
+| "Intercom access token lacks read access to Help Center articles and collections." | Grant the token that access, then enter it again. |
+| "Article no longer exists in Document360 and was skipped." (or Intercom) | Nothing to do. The article was deleted at the source. |
+| "We couldn't process this content. Please retry, and contact support if it persists." | Select **Retry failed pages**. |
+| "Something went wrong on our end. Please contact support." | A problem with the Moss service or its configuration. Contact support, or on a self-hosted install, your operator. |
+| "A refresh for this source is already in progress" | Wait for the running refresh to finish. |
+| "Request body exceeds the 10485760 byte limit." | The Markdown upload is over about 10 MB. Upload the files in smaller batches. |
+
+## Self-hosted installs: network for website sources
+
+Every source needs the worker to reach your model providers, object storage and vector index; [Network](/en/self-hosting/network) lists those. Document360 and Intercom sources also need their platform's API hosts. Website and URL-list sources also need the following, all from the **worker**:
+
+- **Your site.** The worker opens the start page in a headless browser, reads `robots.txt` and sitemaps, and follows links. That browser also loads the resources the pages pull in, such as scripts, fonts and CDN files.
+- **Firecrawl.** The worker fetches each page's content through Firecrawl, a hosted scraping service at `api.firecrawl.dev`. Set `FIRECRAWL_API_KEY` on the worker and allow egress to `api.firecrawl.dev`. Firecrawl fetches the page from its own servers, so the page must be reachable from the public internet, and the page content passes through Firecrawl. There is no self-hosted alternative. Without the key, the collect step fails and no pages are imported.
+- **Private addresses.** The worker refuses to fetch `robots.txt`, sitemaps and images on private, loopback or link-local addresses unless they are listed in `WORKER_FETCH_ALLOWLIST` (comma-separated hosts and CIDRs, empty by default).
+- **No proxy for these fetches.** The worker fetches `robots.txt`, sitemaps and images directly, ignoring `HTTP_PROXY` and `HTTPS_PROXY`. A worker that reaches the internet only through a forward proxy cannot make any of them, public or private.
+
+After you fix the network, select **Retry failed pages**, or **Refresh**, on each affected source. For the full list of hosts, see [Network](/en/self-hosting/network).
+
+Automatic refresh is started by the dashboard backend, not the worker. `PULSE_ENABLED` and `PULSE_KB_REFRESH_ENABLED` (both on by default) turn it off.
+
+## Common questions
+
+### I added our API documentation as a source, but the assistant doesn't use it.
+
+Check that the source is **Ready**, **Use in AI answers** is on, and its pages are **Ready** rather than Skipped or Error. Crawl the published HTML docs with the **Base URL** set to the docs' path, or convert an OpenAPI spec to Markdown and upload it; spec files are not supported. A source gives the assistant text to answer from; to let it call your API, see [Integrations](/en/dashboard/integrations).
+
+### Auto-refresh is off. If I turn it on, how often does it run?
+
+Weekly by default, or monthly, or every 1 to 366 days, optionally at a preferred UTC hour. The first run comes one interval after you save. See [Automatic refresh](#automatic-refresh).
+
+### Why are some pages of our site missing?
+
+The crawl takes only pages under the **Base URL**, skips pages `robots.txt` disallows and links marked nofollow, and stops following links after 300 pages. Add a sitemap, or list the missing pages in a URL-list source. See [Crawl Website](#crawl-website).
+
+### Our docs page shows one section at a time, and the assistant knows only the first.
+
+Moss reads the page as it loads and doesn't click. Upload that content as Markdown. See [Content a crawler cannot read](#content-a-crawler-cannot-read).
+
+### Which Document360 keys does Moss accept?
+
+From 0.17.0, an enhanced (v3) API key with the Draft writer or Editor content role, or a v2 API token with GET permission on Project Versions, Categories and Articles. Earlier versions accept v2 tokens only.
+
+### Does a refresh take our content offline?
+
+No. The current version keeps answering until the new version is **Ready**. If the new version fails, the current one stays. See [Refresh a source](#refresh-a-source).

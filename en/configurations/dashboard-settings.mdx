@@ -1,124 +1,168 @@
 ---
 title: "Dashboard Settings"
-description: "Configure application defaults through the Moss Dashboard"
+description: "Every setting under Configure in the Moss dashboard: its default, what it does, and which installs it reaches"
 ---
 
-## Overview
-
-The [Moss Dashboard](https://dashboard.viamoss.ai) provides a web interface for managing application-level settings. These settings serve as defaults that can be overridden by SDK initialization or runtime configuration.
-
-<Tip>
-    Dashboard settings are ideal for application-wide defaults, security
-    policies, and settings that should apply to all users.
-</Tip>
-
----
-
-## Application Information
-
-View and manage your application's metadata and identity settings.
-
-### Application Name
-
-Your application's display name in the dashboard. This field is currently read-only.
-
-### Application ID
-
-Your unique application identifier. Use this when integrating the SDK.
-
-### Created Date
-
-When your application was created.
-
-### UI Language
-
-Controls the language displayed to end users in the SDK interface.
-
-**Default:** Auto (detects user's browser language)
-
-Navigate to **Settings > Application Information** and select from the Language dropdown.
-
-<Info>
-    When set to "Auto", Moss will automatically detect and use the user's
-    preferred browser language. This can be overridden via SDK initialization.
-</Info>
-
----
-
-## General Settings
-
-Configure your application's core AI assistant features.
-
-### Enable Vision
-
-Allow the SDK to process and analyze screenshots and visual content. When enabled, the AI assistant can "see" the user's screen and provide more contextual guidance.
-
-**Default:** `true`
-
-Navigate to **Settings > General Settings > Core Features** and toggle "Enable Vision".
-
-**Use cases:**
-- Visual troubleshooting
-- UI element identification
-- Screenshot-based guidance
-
-<Tip>
-    Enable this feature if your users need help finding specific UI elements or
-    if you want the AI to provide visual context.
-</Tip>
-
-### Enable Session Replay
-
-Record and upload user sessions for replay in the dashboard. This allows you to review user interactions and debug issues.
-
-**Default:** `true`
-
-Navigate to **Settings > General Settings > Core Features** and toggle "Enable Session Replay".
-
-**What's recorded:**
-- User interactions (clicks, inputs, navigation)
-- DOM structure changes
-- Timestamps and session metadata
+This page covers every setting in the dashboard's **Configure** group at 0.17.0, in sidebar order. Only Admins can open these pages; see [Roles](/en/dashboard/overview#roles).
 
 <Warning>
-    Session recordings may contain sensitive user data. Ensure you have
-    appropriate privacy policies and user consent.
+    Not every dashboard setting reaches your app, and some dashboard settings cannot be overridden in code. Which is which depends on how you installed Moss.
 </Warning>
 
-### Enable Screen History for AI
+## Which settings reach your app
 
-Include user action history (clicks, inputs, navigation) and DOM changes in the AI's context. This provides the AI with a richer understanding of the user's journey.
+Moss has two install types:
 
-**Default:** `true`
+- **npm package**: your code imports `AgentProvider` from `@viamoss/moss-sdk`. This is the **Self-hosted (npm)** tab under **Configure > Installation**.
+- **CDN script**: your page loads the Moss script with a `<script>` tag and sets `window.mossSettings`. These are the **JavaScript** and **Next.js (App Router)** tabs.
 
-Navigate to **Settings > General Settings > Core Features** and toggle "Enable Screen History for AI".
+| Settings | npm package | CDN script |
+|----------|-------------|------------|
+| **Model**, **AI Assistant Instructions**, **Enable Planning**, **Compact DOM Context**, **On-screen guidance**, **Language** (the answer language), **Backend PII filtering**, **Allowed Domains**, JWT settings | Applied on the server. Code cannot override them. | Applied on the server. Code cannot override them. |
+| **Branding**, **Theme** | Applied. Field by field, the dashboard's value replaces the one in your code. | The same. |
+| **Enable Vision**, **Zero state** (Suggested Content), **When a user returns after inactivity** | Applied, unless your code sets `useVision` (which wins both ways), `appearance.zeroState` or `sessionConfig.onReturnAfterInactivity`. | The same, with those keys in `window.mossSettings`. |
+| **Interactive Element Whitelist**, **Let users reopen their earlier chats** | Applied. | Applied. |
+| **Enable Session Replay** | Applied on the server: while it is off, Moss refuses recordings from every install. Recording also needs `enableSessionRecording: true` in your config. | Applied. `window.mossSettings.enableSessionRecording: false` turns recording off; `true` does not turn it on while the switch is off. |
+| **Timeout (min)**, **Max Age (hrs)**, **Notifications**, **Enable Screen History for AI**, **Advanced Settings**, **Fallback states** (Suggested Content), **Language** (the widget's own text) | **Not applied.** Set the matching options in your `AgentProvider` config. | Applied, unless `window.mossSettings` sets the same key. For **Fallback states** that key is `appearance`: any `appearance` object there replaces the dashboard's fallback states, even one that sets only colors. |
 
-**Benefits:**
-- More contextual AI responses
-- Better understanding of user intent
-- Improved multi-step guidance
+Two exceptions: **DOM Stability** and **Screenshot**, under **Advanced Settings**, have no effect in 0.17.0 on either install type. See [Advanced Settings](#advanced-settings).
+
+With the CDN script, a key in `window.mossSettings` replaces the dashboard's value, and an object replaces the dashboard's whole object. For example, a `sessionConfig` there replaces the dashboard's **Timeout (min)**, **Max Age (hrs)** and **Notifications** as a whole: a field you leave out goes back to its default, not to the dashboard's value. **When a user returns after inactivity** still follows the dashboard unless you set `onReturnAfterInactivity` there.
+
+For the code side of each option, see [SDK Options](/en/configurations/sdk-options).
+
+## General
+
+**Configure > General** has three cards: **Application Information**, **Export application** and **Danger Zone**.
+
+### Application Information
+
+| Field | Default | What it does |
+|-------|---------|--------------|
+| **Application Name** | Set when the application is created | Read-only. |
+| **Application ID** | Assigned at creation | Read-only. Pass it as `applicationId` in your code, or in the CDN script URL as `?applicationId=`. |
+| **Created** | | Read-only. |
+| **Embedding model** | Chosen at creation | Read-only. The model that indexes your knowledge base. It is fixed when the application is created; to change it, create a new application. |
+| **Language** | **Auto** | **Auto**, **English** or **Korean**. Saves as soon as you choose. See below. |
+
+**Language** does two things:
+
+- **The answer language, on every install.** With **English** or **Korean**, Moss always answers in that language, whatever language the user writes in. With **Auto**, Moss answers in the user's language; while **On-screen guidance** is on, it starts in the language of your page and switches when the user writes a full message in another language.
+- **The widget's own text, on the CDN script only.** The widget's buttons and labels use the chosen language, and the widget's language picker is hidden. With **Auto**, the widget detects the language and shows the picker. With the npm package, set `language: 'en' | 'ko'` in your config instead.
+
+### Export application
+
+**Export bundle** downloads this application's setup as a file you can import into another environment or region. Credentials are never included. See [Export and import](/en/dashboard/export-import).
+
+### Danger Zone
+
+You cannot delete an application from the dashboard.
+
+## Installation
+
+### Install the SDK
+
+Ready-to-copy install code with your application ID filled in, in three tabs:
+
+- **JavaScript**: the CDN script.
+- **Next.js (App Router)**: the CDN script, loaded with `next/script`.
+- **Self-hosted (npm)**: the npm package. The tab is for any app that installs the package from npm, whether or not you host Moss yourself.
+
+Below the code:
+
+- A status line: **SDK installed — N sessions recorded**, or **Waiting for the first session from your application…**
+- **Authentication**: whether the application has an active JWT signing key, with a link to **Manage in Security**. The SDK needs one before it can connect.
+
+`/api/moss-jwt` in the snippets is an example endpoint that you build on your backend. It must authenticate the current user and return the signed Moss token in a `token` field. See [Authentication](/en/sdk/authentication).
+
+### Advanced Settings
+
+These reach the **CDN script only**. With the npm package, set the option in the last column in your config. Save with **Save Advanced Settings**.
+
+| Setting | Default | What it does | npm option |
+|---------|---------|--------------|------------|
+| **Screenshot** | **Full Page** | **Full Page** or **Viewport**. Chat-turn screenshots are frames of the shared browser tab, so this choice does not change them in 0.17.0. | `screenshotMode: 'fullpage' \| 'viewport'` |
+| **Log Level** | **Info** | **Error**, **Warning**, **Info** or **Debug**: how much the widget writes to the browser console. | `logLevel` (the `LogLevel` enum) |
+| **DOM Target Selector** | `body` | CSS selector for the element Moss watches for page changes. | `observeTargetSelector` |
+| **DOM Stability** | **Smart Wait (Debounce)**: **Initial Delay** 300 ms, **Maximum Wait** 2000 ms | Not applied in 0.17.0; see the note. | `stability` |
+
+<Note>
+    In 0.17.0 the widget does not read the **DOM Stability** values, so the choice here has no effect. To tune how long Moss waits for a page to settle, set `stability` in `window.mossSettings` or in your `AgentProvider` config. See [SDK Options](/en/configurations/sdk-options).
+</Note>
+
+From 0.17.0 there is no **Debug** switch. Debug mode is never taken from the dashboard; turn it on in your own code while you develop, never in production.
+
+## Appearance
+
+**Configure > Appearance** styles the chat widget. Both cards reach every install type. A field you fill in replaces the value your code or the SDK preset sets for it; a field left blank keeps that value. For the code side, see [Where values come from](/en/sdk/appearance#where-values-come-from) in the Appearance reference.
+
+### Branding
+
+Saved with **Save branding**.
+
+| Section | Field | What it does |
+|---------|-------|--------------|
+| Header | **Header title** | Title at the top of the chat panel. |
+| Header | **Show status dot** | A small filled circle next to the title, showing the assistant is online. |
+| Header | **New chat icon** | **SDK preset default**, **Plus**, **Refresh** or **Compose**. |
+| Input bar | **Background tint (hex)** | Accent color for the chat input bar. |
+| Footer | **Show footer** | Off by default. Shows a footer below the input bar with a help-center link and an open-a-ticket link. Turning it off clears both links. |
+| Footer | **Help center label**, **Help center URL** | The first footer link. |
+| Footer | **Ticket label**, **Ticket URL** | The second footer link. |
+| Footer | **Background color (hex)** | Color of the footer strip. Blank matches the panel background. |
+
+### Theme
+
+Saved with **Save theme**.
+
+| Section | Field | What it does |
+|---------|-------|--------------|
+| Panel | **Border color (hex)** | One color for every hairline in the widget: dividers, card outlines and the input's edge. |
+| Panel | **Panel shadow** | **SDK preset default**, **Subtle** or **Elevated**. |
+| Panel | **Title font size (px)** | 12 to 24. The header title, and the title of the full-panel unavailable message. |
+| Action buttons | **Button color (hex)**, **Hover color (hex)** | The guide and next-step buttons, at rest and on hover. |
+| Text and icons | **Primary text (hex)**, **Secondary text (hex)**, **Tertiary text and icons (hex)** | Text colors. Header and card icons follow them. |
+
+## Behavior
+
+**Configure > Behavior** has up to six cards, in this order.
+
+### Model
+
+From 0.17.0. The card appears only when your deployment offers this application a choice of model, or a model is already chosen for it.
+
+- The list shows the models on offer. **Default model** is "used by every application that has not chosen another model."
+- Choosing another model asks you to confirm, and names who processes this application's data before and after the switch. The change applies from the next message.
+- If the chosen model is unavailable, the card says what is answering instead, usually the server default. A model marked **No fallback** never falls back: nothing answers until it is available again.
+- The choice also applies to this application's Copilot, monitors and the other features the card lists. Search, embeddings, Knowledge Base image descriptions and the screenshot analyzer keep their own models.
+
+Only Admins can change the model. It applies on the server, to every install. Model changes, and fallbacks for chat answers, appear in the [Audit Log](#audit-log). When the other features fall back to the default model, nothing records it. An export bundle does not carry the model choice.
+
+### Core Features
+
+Each switch saves as soon as you flip it. From 0.17.0, **Enable Session Replay** and **Enable Screen History for AI** also show what the server allows (**Allowed by server** or **Off at server**) and where the value comes from (**Application setting** or **Default (off)**). Browser permissions and your own code can limit collection further.
+
+| Switch | Default | What it does | Reaches |
+|--------|---------|--------------|---------|
+| **Enable Vision** | Off | When on, Moss may take a screenshot for a chat turn, if page context is full and the user allows the browser's screen-capture prompt for the current tab. If the user declines, no screenshots are taken. | Every install. An app that sets `useVision` in its SDK config overrides this switch both ways: `true` turns screenshots on even when the switch is off, `false` turns them off. |
+| **Enable Session Replay** | Off | Records page structure and events, and uploads them for replay in the dashboard. From 0.17.0 the server refuses recordings while this switch is off, on every install. An application that never saved this switch stops recording after the upgrade until an Admin turns it on. | Every install (server). npm: also set `enableSessionRecording: true`; see [Session recording](/en/sdk/page-data#session-recording). |
+| **Enable Screen History for AI** | Off | Adds the user's clicks, input events, navigation and page changes to what the model sees. The server does not enforce this switch: an npm app that sets `enableScreenHistoryRecording: true` sends screen history even while it shows **Off at server**. | CDN script. npm: `enableScreenHistoryRecording`. |
+| **Compact DOM Context** | Off | Strips noise from the page text before it reaches the model (CSS classes, SVG paths, empty tags) to use fewer tokens. | Every install (server). |
+| **On-screen guidance** | On | Lets Moss highlight elements and guide users through the page. Off makes Moss a chat-only assistant. With the CDN script, the widget then sends only the page URL and title: no page text, no screenshots. With the npm package, `pageContext` in your code sets what the widget sends. | Every install (server). |
+
+<Warning>
+    Screenshots are frames of the shared browser tab, with no redaction applied: `data-moss-redact` and your redaction selectors do not hide anything in them. See [Page data and privacy controls](/en/sdk/page-data) for the controls.
+</Warning>
+
+The **Vision screenshots** status under **Configure > Data & privacy** shows whether this application's settings allow screenshots: **Enable Vision** on, with **On-screen guidance** on. It does not show a `useVision` value set in your code.
+
+What the other switches collect, and the controls in your own code, are covered in [Page data and privacy controls](/en/sdk/page-data).
 
 ### AI Assistant Instructions
 
-Provide custom instructions to help the AI assistant navigate your application or provide context not available through documentation.
+Text added to the AI's system prompt for this application: navigation patterns specific to your app, UI context, edge cases, terms from your domain. Up to 30,000 characters. Save with **Save Instructions**.
 
-**Default:** Empty
-**Maximum:** 30,000 characters
-
-<Note>
-    This setting is **Dashboard and API only** - it cannot be configured via SDK
-    initialization.
-</Note>
-
-Navigate to **Settings > General Settings > AI Assistant Instructions** and enter your custom instructions in the textarea.
-
-**What to include:**
-- Specific navigation patterns unique to your application
-- Important UI context or workflow information
-- Special considerations or edge cases
-- Terminology or concepts specific to your domain
-
-**Example:**
+Instructions apply on the server, to every install. You cannot set them in SDK code.
 
 ```
 When users ask about 'dashboard', always guide them to the Analytics
@@ -127,164 +171,153 @@ on mobile devices and requires clicking the hamburger icon in the
 top-left corner.
 ```
 
-<Tip>
-    Use clear, concise language. The AI will incorporate these instructions when
-    helping users.
-</Tip>
+### Plan Progress Tracking
 
----
-
-## User Experience
-
-Configure planning features and session behavior.
-
-### Planning Configuration
-
-Enable AI-powered multi-step planning for complex user tasks.
-
-#### Enable Planning
-
-Turn on/off the planning feature entirely.
-
-**Default:** `false`
-
-Navigate to **Settings > User Experience > Planning Configuration** and toggle "Enable Planning".
-
-When enabled, the AI can break down complex tasks into multiple steps and execute them sequentially.
-
-#### Maximum Steps
-
-The maximum number of steps allowed in a single plan.
-
-**Default:** `10`
-**Range:** 1-20
-
-<Info>
-    Higher values allow for more complex multi-step tasks but may take longer to
-    complete.
-</Info>
-
-#### Allow User Skip
-
-Allow users to skip individual steps in a plan.
-
-**Default:** Enabled
-
-When enabled, users can choose to skip steps they've already completed or want to handle manually.
-
-#### Show Plan Overview
-
-Display the full plan overview to users before execution.
-
-**Default:** Enabled
-
-Shows users what the AI plans to do before taking action, improving transparency and trust.
+**Enable Planning**, off by default, saves as soon as you flip it. When it is on, a request for help with a multi-step task gets a guided plan that tracks progress through each step. It applies on the server, to every install.
 
 ### Session Behavior
 
-Configure how user sessions are managed and timed out.
+How long a chat lasts in the widget, and what happens when a user comes back to an old one. Save with **Save Session Settings**. For how the limits behave, see [Sessions](/en/sdk/api/session).
 
-#### Inactivity Timeout
+| Field | Default | What it does | Reaches |
+|-------|---------|--------------|---------|
+| **Timeout (min)** | 30 | Minutes of inactivity before the chat counts as timed out. | CDN script. npm: `sessionConfig.inactivityTimeout`. |
+| **Max Age (hrs)** | 2 | Hours after the chat started before it counts as expired, whatever the activity. | CDN script. npm: `sessionConfig.maxSessionAge`. |
+| **When a user returns after inactivity** | **Ask to continue or start new** | **Ask to continue or start new**: past the timeout, a card offers to continue or start a new chat; past the max age, a new chat starts and a card says so. **Start a new chat** opens a new chat with no card. | Every install. On npm, `sessionConfig.onReturnAfterInactivity` in your code wins. |
+| **Let users reopen their earlier chats** | Off | From 0.17.0. Users can open their own chats from the last 30 days, never past your retention period, read-only. Moss does not use them to answer. | Every install. |
+| **Notifications** | On | Shows a short notice when Moss starts a new chat on its own. | CDN script. npm: `sessionConfig.showNotification`. |
 
-Time in minutes before an inactive session is considered expired.
+<Warning>
+    With the npm package, changing **Timeout (min)** or **Max Age (hrs)** here has no effect. Set them in your `AgentProvider` config.
+</Warning>
 
-**Default:** 30 minutes
+Turn on **Let users reopen their earlier chats** only if each person signs in as themselves. With a shared user ID, people would see each other's chats.
 
-After this period of inactivity, a new session will be created for the user.
+These limits change what the user sees in the chat. They delete nothing: how long conversations are stored is set under **Configure > Data & privacy**; see [Data retention and deletion](/en/dashboard/data-privacy).
 
-#### Maximum Session Age
+### Interactive Element Whitelist
 
-Maximum session duration in hours, regardless of activity.
+Rules that mark elements as interactive when Moss cannot tell from the page alone, such as controls that only appear on hover. The **Enabled** switch at the top turns all rules on or off; it is on by default.
 
-**Default:** 2 hours
-
-Sessions will automatically expire after this duration, even if the user is active.
-
-#### Show Notifications
-
-Display notifications when starting new sessions.
-
-**Default:** Enabled
-
-When enabled, users will see a notification when a new session begins.
-
-### Session Data Export
-
-Session exports are documented in the dedicated Dashboard section:
-
-- [Session Data Export](/en/dashboard/session-data-export)
-
----
+Click **Add Rule** to add one. Each rule has a **Description**, a **Pattern Type** (**CSS Selector (Recommended)**, **XPath** or **Structural Pattern**), a **Pattern**, a **Priority** (default 100; higher priorities are checked first) and its own **Enabled** switch. Rules reach every install type when a chat starts.
 
 ## Security
 
-Control access and security settings for your SDK.
+**Configure > Security** has five cards.
 
 ### Domain Access Control
 
-Restrict which domains can use your SDK to prevent unauthorized usage.
+**Allowed Domains** lists the sites where the SDK may run. Click **Add** for each entry, then **Save security settings**, which saves this card and **JWT Claim Enforcement** together.
 
-**Default:** Empty (all domains allowed)
+- `app.example.com` matches that host only.
+- `*.example.com` matches every subdomain at any depth, but not `example.com` itself. Add both if you need both.
+- An entry with a port, such as `localhost:3000`, matches that port only. An entry without a port matches every port, so leave out `:443`.
+- Moss reads the page from the request's `Origin` header, then from `Referer`. A request from a sandboxed frame or a `file://` page is refused while the list has entries.
+- A page the list doesn't cover gets `403` with the code `DOMAIN_NOT_ALLOWED`.
 
-<Note>This setting is **Dashboard only**.</Note>
-
-**How it works:**
-- If the list is empty, the SDK works on any domain
-- If domains are specified, the SDK only works on those domains
-- Wildcards are not supported
-
-**Example allowed domains:**
+An empty list lets the SDK run on any domain, unless your deployment requires domains. In that case the SDK is blocked while the list is empty, and requests fail with `ORIGIN_REQUIRED`. On a self-hosted install, the operator turns this on with `SDK_REQUIRE_ORIGIN=true`. It also refuses requests that carry neither an `Origin` nor a `Referer` header; without it, such requests are not checked against the list.
 
 ```
 app.example.com
-staging.example.com
+*.staging.example.com
 localhost:3000
 ```
 
 <Warning>
-    Be careful when restricting domains. Make sure to include all environments
-    where your application runs (production, staging, development).
+    Include every environment where your app runs, including staging and local development, before you save a list.
 </Warning>
 
----
+### JWT Claim Enforcement
 
-## Developer Options
+**Required Issuer (iss)** and **Required Audience (aud)**. When set, every SDK token must carry that value in its `iss` or `aud` claim. Leave a field blank to skip that check.
 
-Advanced settings for developers and technical configuration.
+### JWT Signing Keys
 
-### API Keys
+The keys Moss uses to check the tokens your backend signs for the SDK. There is no separate SDK API key.
 
-Manage API keys for SDK authentication.
+- **Create Key** makes an HMAC secret. The secret is shown once; store it in your backend.
+- **Register public key** takes an RS256 or ES256 public key in PEM (SubjectPublicKeyInfo) format. You sign with your private key, and Moss refuses a pasted private key.
+- **Revoke** asks for a grace period: **Immediately**, **24 hours** or **72 hours**. Tokens signed with the key stop working when it ends.
 
-<Note>This setting is **Dashboard only**.</Note>
+Each key shows when it was created and last used. See [Authentication](/en/sdk/authentication).
 
-#### Current API Key
+### Backend PII filtering
 
-Your active production API key. The full key is only shown once when generated.
+From 0.17.0. Replaces common personal-information patterns with `[REDACTED]` before Moss stores a request or sends it to the model. Data already stored is not changed. It applies on the server, to every install. Save with **Save PII settings**.
 
-<Warning>
-    Your API key is sensitive. Store it securely and never commit it to version
-    control.
-</Warning>
+| Setting | Default | What it does |
+|---------|---------|--------------|
+| **Filter this application's requests** | The deployment default, which is off unless the operator turns it on | **Use deployment default** returns to it. |
+| **What to filter**: **Page context** | On | Page text, the screen-history timeline and the page title. |
+| **What to filter**: **Interaction reports** | On | Text, labels and markup of the element the user acted on. |
+| **What to filter**: **Chat messages** | Off | What the user types. Off by default because it can remove the value the user is asking about. |
+| **Additional patterns** | Off | **IPv4 addresses**, **IBANs (checksum validated)**, **Korean resident registration numbers**. |
+| **Custom patterns** | None | Up to 25 patterns in RE2 syntax, 200 characters each. No lookahead, lookbehind or backreferences. Names use lowercase letters, digits and underscores. |
 
-#### Regenerate API Key
+Email addresses, US phone numbers, payment-card numbers and US Social Security numbers are always filtered while filtering is on.
 
-Create a new API key and invalidate the old one.
+### API log access key
 
-<Danger>
-    Regenerating your API key will immediately invalidate the old key. Any
-    applications using the old key will stop working.
-</Danger>
+A key for reading this application's API logs from your own tools. Send it in the `X-Traffic-API-Key` header. It is read-only: it can't delete logs or turn recording on or off.
 
-### Vector Store Configuration
+**Generate key** shows the key once. **Revoke key** stops it at once. In 0.16.x this card was called **Traffic Log API Key**.
 
-Your documentation is indexed into an isolated per-application vector store, which the assistant searches for RAG (Retrieval-Augmented Generation).
+## Integrations
 
-<Note>This setting is **Dashboard only**.</Note>
+**Configure > Integrations** connects other services to this application, in two groups:
 
----
+- **Knowledge sources**: **Document360** and, from 0.17.0, **Intercom**, which sync help-center articles into the knowledge base. Intercom can also take over a conversation as a support handoff.
+- **Actions & APIs**: **Custom API actions** (your own APIs as procedure actions), **MCP server** (from 0.17.0; its tools become procedure actions) and **Zendesk** (procedures file tickets for the user).
 
-## Next Steps
+See [Integrations](/en/dashboard/integrations).
+
+## Data & privacy
+
+**Configure > Data & privacy** summarizes what Moss collects for this application and sets how long it is kept. From 0.17.0 it holds:
+
+- **What Moss collects**: which kinds of data are on, with a link to change them under **Behavior**.
+- **How long data is kept**: **Automatic deletion**, off by default, and a retention period for each kind of data.
+- **Collect detailed API logs**: whether Moss records API requests and responses for this application. Off by default.
+- **Delete a user's data**: deletion requests for one user, with their status.
+
+See [Data retention and deletion](/en/dashboard/data-privacy).
+
+## Audit Log
+
+**Configure > Audit Log** shows who accessed the system and what changed: settings, keys, model changes, retention, imports and exports. Filter by actor, action, target type, outcome and date; the log opens on the last 7 days. **Export** downloads the filtered events as JSON or CSV.
+
+See [Audit Logging](/en/security/audit-logging).
+
+## Common questions
+
+**Where can we limit the chat session TTL?**
+**Configure > Behavior > Session Behavior > Timeout (min)** and **Max Age (hrs)**, for the CDN script. With the npm package, set `sessionConfig.inactivityTimeout` and `sessionConfig.maxSessionAge` in your code. These are widget rules, not storage: see [Sessions](/en/sdk/api/session) and [Data retention and deletion](/en/dashboard/data-privacy).
+
+**I changed a setting in the dashboard and nothing changed in my React app.**
+The npm package does not apply every dashboard setting. Check the table in [Which settings reach your app](#which-settings-reach-your-app).
+
+**Session replays stopped after we upgraded to 0.17.0.**
+From 0.17.0 the server refuses recordings while **Enable Session Replay** is off, and it is off for an application that never saved it. Turn it on under **Configure > Behavior > Core Features**. An npm app also needs `enableSessionRecording: true`.
+
+**I set colors in my code, but the widget shows different ones.**
+**Branding** and **Theme** values saved in the dashboard replace your code's values, field by field. Clear the field in the dashboard to let your code's value through.
+
+**Can allowed domains use wildcards?**
+Yes. `*.example.com` matches every subdomain, but not `example.com` itself. See [Domain Access Control](#domain-access-control).
+
+**Why is the SDK blocked when our allowed domains list is empty?**
+Your deployment requires domains. Add each domain where the SDK runs.
+
+**Where do I find our API key for the SDK?**
+There isn't one. The SDK authenticates with tokens your backend signs; manage the keys under [JWT Signing Keys](#jwt-signing-keys).
+
+**How do I copy these settings to another environment or region?**
+Export a bundle and import it there. See [Export and import](/en/dashboard/export-import).
+
+**How do I delete an application?**
+You can't from the dashboard in 0.17.0.
+
+## Next steps
 
 <CardGroup cols={2}>
     <Card
@@ -292,13 +325,13 @@ Your documentation is indexed into an isolated per-application vector store, whi
         icon="code"
         href="/en/configurations/sdk-options"
     >
-        Override Dashboard settings in your application code
+        The options you set in your own code
     </Card>
     <Card
-        title="Configuration Overview"
-        icon="bolt"
-        href="/en/configurations/overview"
+        title="Dashboard overview"
+        icon="compass"
+        href="/en/dashboard/overview"
     >
-        How Dashboard and SDK settings fit together
+        Every dashboard page, and what Admins and Members can do
     </Card>
 </CardGroup>

@@ -1,223 +1,192 @@
 ---
 title: "Configuration"
-description: "Full SDK configuration reference"
+description: "Every supported SDK option, with its type, default and where it is explained"
 icon: "gear"
 ---
 
 # Configuration
 
-All SDK options and their defaults.
+You configure the SDK with the `config` prop of `AgentProvider` (npm package) or with `window.mossSettings` (CDN script). The type is `MossSDKConfig`. This page lists every supported option in 0.17.0; a few options reserved for Moss's own tools are left out. The linked pages explain each option in depth.
 
-## Required Fields
-
-Every SDK initialization requires these fields:
+## Required fields
 
 ```tsx
 <AgentProvider config={{
-  apiUrl: 'https://moss-api.viamoss.ai',   // Moss backend URL
-  applicationId: 'YOUR_APP_ID',               // From the Dashboard
-  userId: 'user-123',                          // Your user's identifier
-  getJwt: () => fetchMossToken(),              // JWT token provider
+  apiUrl: 'https://moss-api.viamoss.ai',   // Your Moss backend
+  applicationId: 'YOUR_APP_ID',            // Configure > General > Application ID
+  userId: currentUser.id,                  // Your user's stable identifier
+  getJwt: () => fetchMossToken(),          // Returns a signed token
 }}>
 ```
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `apiUrl` | `string` | Moss backend API URL |
-| `applicationId` | `string` | Application UUID from the Dashboard |
-| `userId` | `string` | Unique identifier for the current user |
-| `getJwt` | `() => Promise<string>` | Function that returns a fresh JWT token |
+| Field | Type | Meaning |
+|-------|------|---------|
+| `apiUrl` | `string` | Base URL of your Moss backend. From 0.17.0, a trailing `/` is ignored. |
+| `applicationId` | `string` | The application's ID, shown under **Configure > General** as **Application ID**. |
+| `userId` | `string` | A stable identifier for the current user. |
+| `getJwt` or `jwt` | see below | How the SDK authenticates. See [Authentication](/en/sdk/authentication). |
 
 <Info>
-    You can provide `applicationName` instead of `applicationId` if preferred. At least one is required.
+    The type also accepts `applicationName` in place of `applicationId`, for older integrations. Use `applicationId`: without it, the SDK can't check that your token's `app` claim names the same application, and it logs a warning.
 </Info>
 
-## Common Options
+## Where settings come from
 
-Options you'll likely want to configure.
+**npm package.** The SDK reads options only from the `config` you pass. Settings you change in the dashboard reach it with each new session, when the backend sends:
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `language` | `'en' \| 'ko'` | Auto-detect | UI language |
-| `debugMode` | `boolean` | `false` | Enable debug logging and UI |
-| `screenshotMode` | `'fullpage' \| 'viewport'` | `'fullpage'` | Screenshot capture mode |
+- the application's **Enable Vision** setting, used when you don't set `useVision`;
+- the dashboard's theme and chrome, applied over your `appearance`, value by value;
+- the dashboard's suggested content, used when your `appearance` sets no `zeroState`;
+- the dashboard's choice for a user returning after inactivity, used when you don't set `sessionConfig.onReturnAfterInactivity`;
+- the application's reply-link hosts, added to your [`replyLinks`](#replylinks);
+- the application's proactive guides. Before the first session, the SDK also reads them from the application's public settings.
+
+Dashboard values for language, session timeouts, screen history, page context, logging, the observed area and the fallback states (**Content > Suggested Content > Fallback states**) don't reach an npm install by themselves. **Enable Session Replay** is different: from 0.17.0 the server refuses recordings while it is off, so the dashboard switch stops an npm app's recordings even with `enableSessionRecording: true`. The dashboard's **DOM Stability** and **Screenshot** settings have no effect in 0.17.0 on either install type; see [Dashboard settings](/en/configurations/dashboard-settings#advanced-settings). To use the other dashboard values, build your config from the dashboard's settings:
 
 ```tsx
-<AgentProvider config={{
-  apiUrl: 'https://moss-api.viamoss.ai',
-  applicationId: 'YOUR_APP_ID',
-  userId: 'user-123',
+import { fetchAppConfig, convertBackendConfig } from '@viamoss/moss-sdk';
+
+// Throws if the request fails; fall back to your own config then.
+const dashboard = await fetchAppConfig('YOUR_APP_ID', 'https://moss-api.viamoss.ai');
+const config = {
+  ...convertBackendConfig(dashboard, currentUser.id, 'YOUR_APP_ID', 'https://moss-api.viamoss.ai'),
   getJwt: () => fetchMossToken(),
-  language: 'en',
-  debugMode: false,
-  screenshotMode: 'fullpage',
-}}>
+};
 ```
 
-## All Options
+`convertBackendConfig()` takes the language, session settings, recording switches, page context, observed area, log level and appearance (including the fallback states) from the dashboard. It always sets `debugMode: false`. Add your own options on top, as `getJwt` above.
 
-### Authentication
+**CDN script.** The script starts from the application's dashboard settings, then applies `window.mossSettings` on top, key by key. An object you set there, such as `appearance` or `sessionConfig`, replaces the dashboard's whole object for that key. `applicationId` always comes from the script URL. If the settings request fails, the script uses built-in defaults.
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `getJwt` | `() => Promise<string>` | — | Function to fetch fresh JWT (recommended) |
-| `jwt` | `string` | — | Static JWT token (no auto-refresh) |
+See [Configuration overview](/en/configurations/overview) for the dashboard side.
 
-### Display
+### Values read once
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `language` | `'en' \| 'ko'` | Auto-detect | UI language |
-| `screenshotMode` | `'fullpage' \| 'viewport'` | `'fullpage'` | How screenshots are captured |
-| `appearance` | `AppearanceInput` | `'blue'` | Visual theme (preset name or custom object) |
-| `displayMode` | `'chat' \| 'headless'` | `'chat'` | Guide display: full chat modal, or a positioned tooltip bubble near highlighted elements |
-| `headless` | `HeadlessConfig` | — | Options that apply in headless mode: spotlight dim overlay, animated cursor, completion toast |
+The SDK reads `apiUrl`, `jwt`, `getJwt`, `getBridgeCode` and `applicationId` once, when `AgentProvider` mounts, and `redactionSelectors` and `redactAllInputs` for the page text likewise. To change them, for example when a different user signs in, remount the provider, for instance by giving `AgentProvider` a `key` that changes with the user.
+
+## All options
+
+### Identity and authentication
+
+| Option | Type | Default | Meaning | More |
+|--------|------|---------|---------|------|
+| `apiUrl` | `string` | Required | Base URL of your Moss backend | [Installation](/en/sdk/installation) |
+| `applicationId` | `string` | Required | Application ID from the dashboard | |
+| `applicationName` | `string` | — | Older alternative to `applicationId` | |
+| `userId` | `string` | Required | Stable identifier for the current user | |
+| `getJwt` | `() => Promise<string>` | — | Returns a signed token. Called when there is none, when the current one expires within 60 seconds, and once after a `401`. A token without an `exp` claim is fetched again for every request | [Authentication](/en/sdk/authentication) |
+| `jwt` | `string` | — | A token you already hold. Not refreshed; prefer `getJwt` | [Authentication](/en/sdk/authentication) |
+| `getBridgeCode` | `() => Promise<string>` | — | From 0.17.0. Returns a single-use session-bridge code from your backend, for an application whose MCP server signs users in through your site | [Integrations](/en/dashboard/integrations) |
+
+### Page data and privacy
+
+| Option | Type | Default | Meaning | More |
+|--------|------|---------|---------|------|
+| `pageContext` | `'full' \| 'metadata' \| 'none'` | `'full'` | How much of the page each turn sends | [Page data](/en/sdk/page-data#how-much-page-context-to-send-pagecontext) |
+| `redactAllInputs` | `boolean` | `true` | Redact the values of all form fields; opt one back in with `data-moss-unredact` | [Page data](/en/sdk/page-data#form-fields-redactallinputs-and-data-moss-unredact) |
+| `redactionSelectors` | `string[]` | — | More selectors to redact, as `data-moss-redact` is | [Page data](/en/sdk/page-data#your-own-selectors-redactionselectors) |
+| `useVision` | `boolean` | The application's **Enable Vision** setting, off for a new application | Send a raw, unredacted frame of what the user shares (normally this tab) with each turn, once the user allows the browser's screen-capture prompt and while `pageContext` is `'full'`. Overrides **Enable Vision** in both directions: `true` turns screenshots on, `false` turns them off | [Page data](/en/sdk/page-data#vision-screenshots) |
+| `screenshotMode` | `'fullpage' \| 'viewport'` | `'fullpage'` | Has no effect on chat screenshots in 0.17.0 | |
+| `enableSessionRecording` | `boolean` | `false` | Record sessions for **Session Replay**. **From 0.17.0** the server also refuses recordings unless the application's **Enable Session Replay** switch is on, and an application that never saved the switch counts as off; an npm app needs both the switch and this option | [Page data](/en/sdk/page-data#session-recording) |
+| `enableScreenHistoryRecording` | `boolean` | `false` | Send a timeline of the user's recent actions with each turn | [Page data](/en/sdk/page-data#screen-history) |
+| `observeTargetSelector` | `string` | `'body'` | The element Moss reads page text from | [Page data](/en/sdk/page-data#limiting-the-area-moss-reads-observetargetselector) |
+| `userMetadata` | `Record<string, string \| number \| boolean \| string[]>` | — | The user's role, plan and similar attributes, sent when a session starts | [Page data](/en/sdk/page-data#user-metadata) |
+| `collectionEnabled` | `boolean` | `true` | From 0.17.0. `false` keeps Moss from mounting | [Page data](/en/sdk/page-data#collectionenabled) |
+| `collectionControl` | `MossCollectionControl` | — | From 0.17.0. A switch your code holds; Moss mounts only while it is enabled | [Page data](/en/sdk/page-data#collectioncontrol) |
+| `pageSanitizationScript` | `(document: Document) => void` | — | Runs on your live page when the SDK starts watching it, and again whenever the function's identity or `observeTargetSelector` changes; define it outside your component. Not a privacy control | [Advanced](/en/sdk/advanced#programmatic-page-changes) |
 
 ### Behavior
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `useVision` | `boolean` | Backend setting | Override vision (screenshot analysis) |
-| `observeTargetSelector` | `string` | `'body'` | CSS selector for DOM observation scope |
-| `pageSanitizationScript` | `(doc: Document) => void` | — | Clean the DOM before context capture |
-| `enableSessionRecording` | `boolean` | `true` | Upload session recordings to dashboard |
-| `enableScreenHistoryRecording` | `boolean` | `false` | Include screen history in AI context |
+| Option | Type | Default | Meaning | More |
+|--------|------|---------|---------|------|
+| `language` | `'en' \| 'ko'` | Detected | Interface language. Setting it hides the language menu in the chat | [Below](#language) |
+| `sessionConfig` | `{ inactivityTimeout?, maxSessionAge?, showNotification?, onReturnAfterInactivity? }` | 30 minutes, 2 hours, `true`, the dashboard's choice else `'ask'` | When a chat times out and what the user sees on return | [Sessions](/en/sdk/api/session) |
+| `stability` | `StabilityConfig` | See Advanced | How long the SDK waits for the page to settle before reading it | [Advanced](/en/sdk/advanced#stability-tuning) |
+| `closingChatEndsGuide` | `boolean` | `false` | Closing the chat ends a running guide | [Guides and navigation](/en/sdk/guides-and-navigation) |
+| `enableProactiveGuides` | `boolean` | `true` | `false` turns off announcements and trigger rules set up in the dashboard | [Guides and navigation](/en/sdk/guides-and-navigation) |
+| `streamActivity` | `boolean` | `false` | From 0.17.0. With `appearance.chrome.loader: 'steps'`, shows the backend's steps as they happen, over Server-Sent Events | [Appearance](/en/sdk/appearance) |
+| `replyLinks` | `{ allowedHosts?: string[] }` | — | From 0.17.0. More hosts that replies may link to and load images from | [Below](#replylinks) |
 
-### Privacy & Redaction
+### Appearance
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `redactAllInputs` | `boolean` | `true` | Redact values of all input-type elements; opt out per field with `data-moss-unredact` |
-| `redactionSelectors` | `string[]` | — | Additional CSS selectors redacted identically to `data-moss-redact` |
-| `userMetadata` | `Record<string, string \| number \| boolean \| string[]>` | — | User attributes (role, tier) for personalized guidance; avoid raw PII |
+| Option | Type | Default | Meaning | More |
+|--------|------|---------|---------|------|
+| `appearance` | `'blue' \| 'purple' \| DeepPartial<MossAppearance>` | `'blue'` | Theme preset, or your overrides on top of a preset | [Appearance](/en/sdk/appearance) |
+| `pageKey` | `string` | — | Names the current page, to pick a suggested-content variant. Events carry it too | [Appearance](/en/sdk/appearance) |
 
-See [Advanced > Redacting Sensitive Content](/en/sdk/advanced#redacting-sensitive-content).
+### Callbacks
 
-### Integrations
+| Option | Type | Default | Meaning | More |
+|--------|------|---------|---------|------|
+| `onSupportTicket` | `(handoff: SupportTicketHandoff) => Promise<SupportTicketOutcome>` | — | Files a support ticket through your backend and reports the outcome | [Support ticket handoff](/en/sdk/support-ticket-handoff) |
+| `onEvent` | `(event: MossEvent) => void` | — | Receives usage events, for your analytics | [Events](/en/sdk/events) |
+| `eventQueryText` | `'omit' \| 'include' \| ((text: string) => string)` | `'omit'` | Whether question events carry the question's text | [Events](/en/sdk/events) |
+| `onError` | `(error: MossError) => void` | — | From 0.17.0. Receives every problem the chat shows the user | [Events](/en/sdk/events) |
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `onSupportTicket` | `(handoff) => Promise<SupportTicketOutcome>` | — | Host callback for brokered support-ticket filing; see [Support Ticket Handoff](/en/sdk/support-ticket-handoff) |
+### Diagnostics
 
-### Session Management
+| Option | Type | Default | Meaning | More |
+|--------|------|---------|---------|------|
+| `logLevel` | `LogLevel` | `LogLevel.INFO` | Console verbosity: `LogLevel.DEBUG`, `INFO`, `WARN`, `ERROR` or `SILENT`. Pass the enum, not a string. With the CDN script, which has no `LogLevel`, pass the number: `1` (debug) to `5` (silent) | [Advanced](/en/sdk/advanced#debug-mode) |
+| `debugMode` | `boolean` | `false` | Shows debug controls to users in the chat. Development only | [Advanced](/en/sdk/advanced#debug-mode) |
+
+### Removed in 0.17.0
+
+`displayMode`, `headless` and `forcedActivationFlow` no longer exist, nor does `displayMode` on `useAgent()`. TypeScript rejects them; at runtime they are ignored and the chat works as usual. The exported types `HeadlessConfig`, `ForcedActivationFlowConfig` and `ForcedActivationFlowDefinition` are gone too.
+
+## Language
+
+With `language` unset, the SDK picks `'en'` or `'ko'` from, in order: the `lng` query parameter, the language the chat last used in this browser (`localStorage` key `mossLng`), an `i18next` cookie, an `i18nextLng` `sessionStorage` entry, the page's `<html lang>`, and the browser's language. Anything else falls back to English. The chat shows a language menu.
+
+With `language` set, the SDK uses it and hides the language menu.
+
+## replyLinks
+
+From 0.17.0, a reply renders a link, or loads an image, only when its address is on an allowed host:
+
+- your page's own origin;
+- the knowledge-base articles the reply cites;
+- the application's allowed domains and knowledge-base hosts, delivered with each session;
+- the hosts you list in `replyLinks.allowedHosts`.
+
+Any other link shows as its text, and any other image as its alt text, so no request is made.
 
 ```tsx
-sessionConfig: {
-  inactivityTimeout: 30,    // Minutes before new session (default: 30)
-  maxSessionAge: 2,         // Hours before forcing new session (default: 2)
-  showNotification: true,   // Notify when auto-starting session (default: true)
-}
+<AgentProvider config={{
+  // ...
+  replyLinks: { allowedHosts: ['help.example.com', '*.example.org'] },
+}}>
 ```
 
-### Debug
+Entries are a host (`help.example.com`), `*.example.com` for its subdomains (not `example.com` itself), either with an optional `:port`, or an `http(s)` URL, which stands for its host. Unlike the application's own list, your entries are not checked against hosts that many owners share (such as `*.github.io`), so prefer exact hosts.
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `logLevel` | `LogLevel` | `LogLevel.INFO` | Logging verbosity: `DEBUG`, `INFO`, `WARN`, `ERROR`, `SILENT` |
-| `debugMode` | `boolean` | `false` | Enable debug UI and verbose logging |
+## AssistantButton props
 
-### Stability
-
-The SDK waits for the page to stabilize before capturing context. This is configured via the `stability` field. See [Advanced > Stability Tuning](/en/sdk/advanced#stability-tuning) for details.
-
-```tsx
-stability: {
-  layers: {
-    networkIdle: true,        // Wait for network requests (default: true)
-    domMutations: true,       // Wait for DOM to stop changing (default: true)
-    loadingIndicators: false, // Wait for spinners/skeletons (default: false)
-    frameReadiness: true,     // Wait for same-origin frames to finish loading (default: true)
-    resourceQuiet: true,      // Wait for resource loads to go quiet (default: true)
-    layoutShift: false,       // Wait for layout shifts (default: false)
-    browserIdle: true,        // Wait for browser idle (default: true)
-    finalFrame: true,         // Wait for animation frame (default: true)
-  },
-}
-```
-
----
-
-## Full TypeScript Interface
-
-```typescript
-interface MossSDKConfig {
-  // Required
-  apiUrl: string;
-  userId: string;
-  applicationId?: string;     // At least one of applicationId
-  applicationName?: string;   // or applicationName is required
-
-  // Authentication
-  getJwt?: () => Promise<string>;   // Recommended
-  jwt?: string;
-
-  // Display
-  language?: 'en' | 'ko';
-  screenshotMode?: 'fullpage' | 'viewport';
-  appearance?: AppearanceInput;  // 'blue' | 'purple' | custom object
-  displayMode?: 'chat' | 'headless';
-  headless?: HeadlessConfig;
-
-  // Behavior
-  useVision?: boolean;
-  observeTargetSelector?: string;
-  pageSanitizationScript?: (document: Document) => void;
-  enableSessionRecording?: boolean;
-  enableScreenHistoryRecording?: boolean;
-
-  // Privacy & redaction
-  redactAllInputs?: boolean;
-  redactionSelectors?: string[];
-  userMetadata?: Record<string, string | number | boolean | string[]>;
-
-  // Integrations
-  onSupportTicket?: (handoff: SupportTicketHandoff) => Promise<SupportTicketOutcome>;
-
-  // Session
-  sessionConfig?: {
-    inactivityTimeout?: number;
-    maxSessionAge?: number;
-    showNotification?: boolean;
-  };
-
-  // Debug
-  logLevel?: LogLevel;
-  debugMode?: boolean;
-
-  // Stability
-  stability?: StabilityConfig;
-}
-```
-
----
-
-## AssistantButton Props
-
-The `AssistantButton` component accepts optional props for customization:
+`AssistantButton` is the floating button that opens and closes the chat. It renders in your page, outside the shadow root, at `position: fixed`.
 
 ```tsx
 <AssistantButton
-  iconVariant="question"        // 'default' (Moss logo) or 'question' (? icon)
-  iconUrl="/custom-icon.svg"    // Custom icon URL (overrides iconVariant)
-  position={{ bottom: 20, right: 80 }}  // Button position in pixels
-  onButtonClick={() => {}}      // Callback when button is clicked
+  iconVariant="question"                 // 'question' (default) or 'default' (Moss logo)
+  iconUrl="/custom-icon.svg"             // overrides iconVariant
+  position={{ bottom: 20, right: 80 }}   // pixels from the viewport edges
+  onButtonClick={() => {}}               // runs after the chat toggles
 />
 ```
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `iconVariant` | `'default' \| 'question'` | `'question'` | Built-in icon style |
-| `iconUrl` | `string` | — | Custom icon image URL |
-| `position` | `{ bottom?, right?, top?, left? }` | `{ bottom: 20, right: 80 }` | Button position |
-| `onButtonClick` | `() => void` | — | Click callback |
+| Prop | Type | Default | Meaning |
+|------|------|---------|---------|
+| `iconVariant` | `'default' \| 'question'` | `'question'` | Built-in icon: `'default'` is the Moss logo, `'question'` a question mark |
+| `iconUrl` | `string` | — | URL of your own icon image; overrides `iconVariant`. The image is drawn as a white silhouette |
+| `position` | `{ bottom?, right?, top?, left? }` | `{ bottom: 20, right: 80 }` | Distance from the viewport edges, in pixels. A value you pass replaces the default as a whole, so `{ bottom: 40 }` alone sets no horizontal offset |
+| `onButtonClick` | `() => void` | — | Called after the click toggles the chat |
 
 ## Next Steps
 
 <CardGroup cols={2}>
-    <Card title="Advanced" icon="sliders" href="/en/sdk/advanced">
-        Stability tuning, Shadow DOM, CSP headers
+    <Card title="Page data and privacy" icon="shield-halved" href="/en/sdk/page-data">
+        What Moss reads and how to limit it
     </Card>
-    <Card title="SDK Options" icon="list" href="/en/configurations/sdk-options">
-        Full SDK configuration options
+    <Card title="Types" icon="brackets-curly" href="/en/sdk/api/types">
+        The `MossSDKConfig` type and related types
     </Card>
 </CardGroup>

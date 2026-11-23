@@ -1,0 +1,129 @@
+---
+title: "Dashboard Overview"
+description: "A tour of the Moss dashboard: applications, what each page is for, and what Admins and Members can do"
+icon: "compass"
+---
+
+The Moss dashboard is where you create an application, add the content Moss answers from, set how the assistant behaves, and review conversations. On the hosted service it is at [dashboard.viamoss.ai](https://dashboard.viamoss.ai). A self-hosted install serves its own dashboard, at the address your operator gives you.
+
+Everyone who signs in is an **Admin** or a **Member**. Members can use most of the dashboard; settings under **Configure** are for Admins. See [Roles](#roles).
+
+## Applications
+
+An application is one Moss assistant: its knowledge base, procedures, settings and conversations. Your app's code connects to it by its application ID.
+
+After you sign in, you see **Applications**, with a card for each application in your organization. Click a card to open the application; it opens on **Analytics**. Inside an application, the switcher at the top of the sidebar moves to another application or back to the list.
+
+If you belong to more than one organization, choose it with the organization picker on **Applications**, or with **Switch organization** in your user menu.
+
+### Create an application
+
+You need the Admin role.
+
+1. On **Applications**, click **New Application**.
+2. Enter an **Application Name**. Names are unique within an organization, and the dashboard can't change the name later.
+3. Leave **Enable Vision** off unless you want Moss to send screenshots to the model. You can change it later under **Configure > Behavior**.
+4. Choose an **Embedding model**, the model that indexes your knowledge base. It can't be changed after the application is created. **Voyage 3.5** is preselected, or **Google Gemini Embedding 2** on an install that uses Google Vertex AI. On a self-hosted install, choose a model your operator has set up.
+5. Click **Create Application**. The dialog shows the new application ID.
+
+Then, before you connect your app:
+
+1. Create a JWT signing key under **Configure > Security**. The SDK can't connect without one. See [Authentication](/en/sdk/authentication).
+2. Copy the install code from **Configure > Installation**. See [Installation](/en/sdk/installation).
+3. Add your help content under **Knowledge Base**.
+
+To bring an application over from another environment instead, use **Import bundle** on **Applications**. See [Export and import](/en/dashboard/export-import).
+
+You can't delete an application from the dashboard.
+
+## Pages in an application
+
+The sidebar has three groups.
+
+### Analyze
+
+| Page | What it's for |
+|------|---------------|
+| **Analytics** | Usage, feedback, top questions, resolution, content gaps and how your articles perform. See [Analytics](/en/dashboard/analytics). |
+| **Copilot** | Ask questions about your chat sessions in plain language and get report-style answers. It can also draft procedures. See [Improving answers](/en/dashboard/improving-answers). |
+| **Sessions** | Find a conversation, read its transcript and see what the assistant did. See [Sessions](/en/dashboard/sessions), and [Session Data Export](/en/dashboard/session-data-export) to export them. |
+| **Users** | The people who have used Moss in your app, and their conversations. See [Users](/en/dashboard/analytics#users). |
+| **API logs** | Admins only. Recorded API requests and responses, when recording is on. From 0.17.0 this is its own page; before, API logs were under **Configure > Data & Privacy**. See [API logs](/en/dashboard/analytics#api-logs). |
+| **Proposals** | Changes suggested by Copilot and the Autopilot. Review the diff, then accept or dismiss. See [Improving answers](/en/dashboard/improving-answers). |
+| **Monitors** | Quality criteria scored against conversations. Flagged sessions wait in a review queue. See [Improving answers](/en/dashboard/improving-answers). |
+
+### Content
+
+| Page | What it's for |
+|------|---------------|
+| **Knowledge Base** | The help content Moss answers from: documentation sources and uploaded content. See [Knowledge Base](/en/dashboard/knowledge-base). |
+| **Procedures** | Step-by-step instructions for one kind of request, which you write, test and publish. See [Procedures](/en/dashboard/procedures). |
+| **Suggested Content** | The suggested questions and recommended articles on the chat's start screen, and the messages shown when something goes wrong. See [Suggested Content](/en/dashboard/suggested-content). |
+
+### Configure
+
+Admins only. Members see a lock next to the group name.
+
+| Page | What it's for |
+|------|---------------|
+| **General** | Application ID, name, embedding model and language; export the application. See [General](/en/configurations/dashboard-settings#general). |
+| **Installation** | Install code for your app, and settings for the CDN script. See [Installation](/en/configurations/dashboard-settings#installation). |
+| **Appearance** | Branding and colors of the chat widget. See [Appearance](/en/configurations/dashboard-settings#appearance). |
+| **Behavior** | Model, core features, AI instructions, planning and session behavior. See [Behavior](/en/configurations/dashboard-settings#behavior). |
+| **Security** | Allowed domains, JWT keys and claims, PII filtering and the API log access key. See [Security](/en/configurations/dashboard-settings#security). |
+| **Integrations** | Document360, Intercom, your own APIs, your MCP server and Zendesk. See [Integrations](/en/dashboard/integrations). |
+| **Data & privacy** | How long data is kept, API log recording, and deleting one user's data. See [Data & privacy](/en/dashboard/data-privacy). |
+| **Audit Log** | Who accessed the system and what changed. See [Audit Logging](/en/security/audit-logging). |
+
+### Outside an application
+
+Beside **Applications**, the sidebar can show **AI assistants**, where you connect an AI assistant such as Claude to your Moss data. It appears only when your deployment offers it. See [AI assistants](/en/dashboard/ai-assistants).
+
+A deployment may show other items in the sidebar that this page doesn't cover.
+
+### Your user menu
+
+**Theme** (Light, Dark or System), **Language** for the dashboard itself (English or 한국어), **Switch organization** when you belong to more than one, and **Sign out**.
+
+## Roles
+
+There are two roles, **Admin** and **Member**. A role applies to every application in the organization.
+
+| | Member | Admin |
+|---|:---:|:---:|
+| Analytics, Copilot, Sessions, Users, Proposals and Monitors | Yes | Yes |
+| Knowledge Base and Procedures | Yes | Yes |
+| View **Suggested Content** | Yes | Yes |
+| Save **Suggested Content** | | Yes |
+| **API logs** | | Yes |
+| Accept a proposal that changes the AI instructions | | Yes |
+| Every page under **Configure** | | Yes |
+| Delete a user's data | | Yes |
+| Create an application, **Import bundle**, **Export bundle** | | Yes |
+| On **AI assistants**, where offered: change the organization's access, and see everyone's connections | | Yes |
+
+When a Member opens an Admin-only page, the dashboard shows "Admin role required" instead.
+
+### Where roles come from
+
+- **Hosted service**: your role in your organization. An organization admin is an Admin in Moss; every other member is a Member.
+- **Self-hosted install**: the groups in your sign-in provider's token. The operator lists the admin groups in `OIDC_ADMIN_GROUPS` and the member groups in `OIDC_MEMBER_GROUPS`. A user in an admin group is an Admin. A user in a member group is a Member. If `OIDC_MEMBER_GROUPS` is empty, anyone who can sign in is a Member; otherwise a user in neither list can't sign in. The groups are read from the token's `groups` claim unless the operator names another claim with `OIDC_ROLE_CLAIM`.
+
+To change someone's role on a self-hosted install, change their groups in your sign-in provider.
+
+## Common questions
+
+**What can an Admin do that a Member can't?**
+Everything under **Configure**, the **API logs** page, saving **Suggested Content**, creating, importing and exporting applications, deleting a user's data, accepting proposals that change the AI instructions, and the organization-wide **AI assistants** settings. See [Roles](#roles).
+
+**Why do I see a lock on Configure?**
+You're a Member. Ask an Admin in your organization to make the change, or to give you the Admin role.
+
+**Where do roles come from on our self-hosted install?**
+From your sign-in provider's groups, mapped with `OIDC_ADMIN_GROUPS` and `OIDC_MEMBER_GROUPS`. See [Where roles come from](#where-roles-come-from).
+
+**Can I give someone access to only one application?**
+No. A role applies to every application in the organization.
+
+**I changed a setting under Configure, and nothing changed in our app.**
+Not every dashboard setting reaches an app that uses the npm package. See [Which settings reach your app](/en/configurations/dashboard-settings#which-settings-reach-your-app).

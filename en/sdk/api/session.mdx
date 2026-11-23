@@ -1,31 +1,147 @@
 ---
-title: "Session"
-description: "Session-related SDK configuration and behavior"
+title: "Sessions"
+description: "How long a chat lasts, what happens when it times out, and where each setting is read from"
 icon: "message"
 ---
 
-## Session Configuration
+## What a session is
 
-Use `sessionConfig` to control how long user conversations stay active and when a new session should be created.
+A session is one chat: the messages a user and Moss exchange, and any guide that runs in it. Moss remembers the current session in the browser, so a user who navigates or reloads comes back to the same chat.
 
-```ts
+A session ends when the user starts a new chat, or when it passes one of the two limits below.
+
+## The two limits
+
+| Option | Unit | Default | Counts from |
+|--------|------|---------|-------------|
+| `sessionConfig.inactivityTimeout` | minutes | `30` | The user's last activity in the chat |
+| `sessionConfig.maxSessionAge` | hours | `2` | When the chat started |
+
+```tsx
+<AgentProvider config={{
+  apiUrl: 'https://moss-api.viamoss.ai',
+  applicationId: 'YOUR_APP_ID',
+  userId: currentUser.id,
+  getJwt: () => fetchMossToken(),
+  sessionConfig: {
+    inactivityTimeout: 15, // minutes
+    maxSessionAge: 1,      // hours
+  },
+}}>
+  <AssistantButton />
+</AgentProvider>
+```
+
+- **Activity** is sending a message or taking a guide step. While a page stays open, opening or closing the chat counts too.
+- **Unset or `0`** means the default. To make a limit effectively unlimited, set a large number.
+- **The limits are checked when the user comes back**, not on a background timer: when Moss loads on a page, and, with `'new_chat'` below, when the user reopens the chat on a page that stayed open. A chat that is open on screen is never closed under the user.
+
+## What happens past a limit
+
+`sessionConfig.onReturnAfterInactivity` decides.
+
+| Value | Past the inactivity timeout | Past the max age |
+|-------|-----------------------------|------------------|
+| `'ask'` (default) | A card offers **Continue this chat** or **New conversation**, with a one-tap rating. Closing the card continues the chat. | A new chat starts. A card says so and offers an optional rating. |
+| `'new_chat'` | A new chat starts, with no card and no rating. | The same. |
+
+```tsx
 sessionConfig: {
-  inactivityTimeout: 30,  // Minutes before session expires due to inactivity
-  maxSessionAge: 2,       // Hours before forcing a new session
-  showNotification: true, // Show notification when a new session starts
+  inactivityTimeout: 15,
+  maxSessionAge: 1,
+  onReturnAfterInactivity: 'new_chat',
 }
 ```
 
-## Session Recording
+A few cases behave differently:
 
-Use `enableSessionRecording` to control whether recording data is uploaded to Dashboard for replay.
+- **A chat with almost nothing in it** (fewer than two messages) restarts quietly in both modes.
+- **A guide in progress** is not ended by the max age alone. Past the inactivity timeout, `'ask'` shows the card and `'new_chat'` ends the guide with its chat.
+- **A guide step that moves the user to another page** keeps its chat, even if a limit passes during the move.
 
-```ts
-enableSessionRecording: true
+### The notice
+
+When Moss starts a new chat on its own without showing a card, it shows a short notice, such as "Due to inactivity, we've started a new conversation." Set `showNotification: false` to turn the notice off.
+
+```tsx
+sessionConfig: {
+  onReturnAfterInactivity: 'new_chat',
+  showNotification: false,
+}
 ```
 
-## Related References
+## Where each setting is read from
+
+This depends on how Moss is installed.
+
+| Install | `inactivityTimeout`, `maxSessionAge`, `showNotification` | `onReturnAfterInactivity` |
+|---------|-----------------------------------------------------------|---------------------------|
+| npm package (`AgentProvider`) | Your config. The dashboard's values are not applied. | Your config if set, otherwise the dashboard's setting, otherwise `'ask'`. |
+| CDN script | The dashboard. | The dashboard. |
+
+The dashboard fields are under **Configure > Behavior > Session Behavior**: **Timeout (min)**, **Max Age (hrs)**, **When a user returns after inactivity**, and **Notifications**.
+
+With the CDN script, a `sessionConfig` object in `window.mossSettings` replaces the dashboard's timeout, max age and notification settings as a whole: a field you leave out goes back to its default, not to the dashboard's value. If you set one of them there, set all three. `onReturnAfterInactivity` is the exception: left out, it still follows the dashboard.
+
+<Warning>
+    With the npm package, changing **Timeout (min)** or **Max Age (hrs)** in the dashboard has no effect. Set `sessionConfig.inactivityTimeout` and `sessionConfig.maxSessionAge` in your code.
+</Warning>
+
+<Info>
+    The dashboard's "When a user returns after inactivity" setting reaches npm embeds from backend 0.16.22 and SDK 0.16.22.
+</Info>
+
+## Starting a new chat
+
+Users can start a new chat at any time with the new-chat button in the chat header. Your app can do the same:
+
+```tsx
+const { startNewChat } = useAgent();
+
+await startNewChat();
+```
+
+See [Hooks](/en/sdk/api/hooks) for the rest of `useAgent()`.
+
+## Earlier chats
+
+From 0.17.0, users can reopen their own earlier chats from the start screen. It is off until you turn it on in the dashboard: **Configure > Behavior > Session Behavior > Let users reopen their earlier chats**.
+
+- The start screen lists the user's three most recent chats under **Recent chats**, with **See all** for the rest.
+- Only the signed-in user's chats from the last 30 days are listed, and never past your retention period.
+- An earlier chat opens read-only. Typing asks in the current chat, and Moss does not use the earlier chat to answer.
+
+<Warning>
+    Turn this on only if each person signs in as themselves. With a shared `userId`, people would see each other's chats.
+</Warning>
+
+## Session lifetime is not data retention
+
+The limits on this page control what the user sees in the chat. They do not delete anything.
+
+- **How long conversations are stored** is set per application in the dashboard, under **Configure > Data & privacy** (from 0.17.0). See [Data & privacy](/en/dashboard/data-privacy).
+- **How long a user's token is valid** is set by the JWT your server signs. See [Authentication](/en/sdk/authentication).
+- **When the dashboard shows a session as closed** is decided on the server: by default, 30 minutes after the session's last message. A later message reopens it. See [Sessions](/en/dashboard/sessions).
+
+Moss answers from the current chat only. A new chat does not carry over what was said in an earlier one.
+
+## Session recording
+
+Recording a session for replay in the dashboard is a separate setting, and it is off unless you turn it on. See [Page data and privacy controls](/en/sdk/page-data).
+
+## Common questions
+
+**I changed the timeout in the dashboard and nothing happened.**
+Your app uses the npm package, which reads the two limits from your code. See [Where each setting is read from](#where-each-setting-is-read-from).
+
+**Can a chat end while the user is typing?**
+No. The limits are checked when the user comes back to the chat, not while it is open.
+
+**Can a user get a timed-out chat back?**
+With `'ask'`, the card offers **Continue this chat** after an inactivity timeout. Past the max age, or with `'new_chat'`, the chat is replaced. From 0.17.0, [Earlier chats](#earlier-chats) lets users read their previous chats.
+
+## Related references
 
 - Full type definitions: [Types](/en/sdk/api/types)
 - Hook usage patterns: [Hooks](/en/sdk/api/hooks)
-- Dashboard-level defaults: [Dashboard Settings](/en/configurations/dashboard-settings)
+- Dashboard fields: [Dashboard Settings](/en/configurations/dashboard-settings)

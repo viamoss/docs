@@ -1,63 +1,90 @@
 ---
 title: "Authentication"
-description: "Secure your SDK integration with JWT authentication"
+description: "Sign a short-lived JWT for each user on your server. Moss verifies it on every SDK request."
 icon: "lock"
 ---
 
-# Authentication
+Every request the SDK sends to Moss carries a JSON Web Token (JWT) that your server signs for the signed-in user. Moss checks the token's signature, claims and lifetime on every request, and refuses a request without a valid token with HTTP 401. The one exception is the request that reads the application's public settings; see [Allowed domains](#allowed-domains). The SDK has no API keys: the signed token is the only way it authenticates.
 
-JWT (JSON Web Token) is the recommended way to authenticate SDK requests. It provides cryptographic verification, automatic token refresh, and per-user session ownership.
+To set it up:
 
-<Info>
-    JWT signing keys are managed in the [Moss Dashboard](https://dashboard.viamoss.ai) under **API Keys**.
-</Info>
+1. In the [Moss Dashboard](https://dashboard.viamoss.ai), open **Configure > Security** and create a key in the **JWT Signing Keys** card. Only organization admins can open this page.
+2. Add an endpoint to your server that signs a token for the user who is signed in to your app.
+3. Give the SDK a `getJwt` function that calls that endpoint.
 
 ## How It Works
 
-1. Your backend holds a **JWT signing key** (generated in the Moss Dashboard)
-2. When a user loads your app, your backend **signs a JWT** with the user's identity
-3. The SDK sends this token with every request to the Moss backend
-4. The Moss backend **verifies the signature** and extracts the user identity
+```
+User loads your app → your server signs a JWT → the SDK sends it with each request → Moss verifies it
+```
 
-```
-User loads app → Your backend signs JWT → SDK sends JWT → Moss verifies
-```
+1. Your server holds the signing secret or private key. It never goes to the browser.
+2. When the SDK needs a token, it calls your `getJwt` function, which asks your server for one.
+3. Your server checks who is signed in to your app and signs a token whose `sub` is that user's ID.
+4. The SDK sends the token in the `Authorization: Bearer` header of every request.
+5. Moss finds the signing key named by the token's `kid` header, verifies the signature with that key's algorithm, checks the claims, and takes the user's identity from `sub`.
+
+<Warning>
+    Sign a token only for a user your server has authenticated, and take `sub` from your own session, never from the request. Whoever holds a valid token for a `sub` acts as that user in Moss, including reopening that user's chats.
+</Warning>
 
 ## Setup
 
-### 1. Generate a Signing Key
+### 1. Create a Signing Key
 
-In the Moss Dashboard, navigate to **API Keys** and create a JWT signing key. You'll receive:
+Open **Configure > Security**. The **JWT Signing Keys** card offers two kinds of key:
 
-- **Key ID** (`kid`) — included in the JWT header
-- **Secret** — used to sign tokens (store securely, never expose to the client)
+| Kind | Button | Algorithm | Who holds the signing material | What Moss stores |
+|------|--------|-----------|--------------------------------|------------------|
+| HMAC | **Create Key** | HS256 | Moss generates a secret that starts with `moss_sk_` and shows it to you once. Your server and Moss both hold it. | The secret, which Moss needs to verify your tokens |
+| Public key | **Register public key** | RS256 (RSA, 2,048 to 8,192 bits) or ES256 (P-256) | You generate the key pair. The private key never leaves your systems. | Your public key only |
+
+After you create or register a key, the card shows its **Key ID**: `key_` followed by 12 characters. Put it in the `kid` header of every token you sign with that key.
 
 <Warning>
-    The secret is shown only once. Store it in your backend's environment variables or secrets manager.
+    The HMAC secret is shown only once, when you create the key. Store it in your server's secrets manager or environment variables. If you lose it, create a new key and revoke the old one.
 </Warning>
+
+To use a public key, generate a key pair, then click **Register public key**, choose the **Algorithm** and paste the public key into **Public Key (PEM)**:
+
+```bash
+# RS256: a 2,048-bit RSA key pair
+openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out moss-private.pem
+openssl pkey -in moss-private.pem -pubout -out moss-public.pem
+
+# ES256: a P-256 key pair
+openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out moss-private.pem
+openssl pkey -in moss-private.pem -pubout -out moss-public.pem
+```
+
+Paste one public key in PEM form (`-----BEGIN PUBLIC KEY-----`; for RS256, `-----BEGIN RSA PUBLIC KEY-----` also works). Moss refuses a private key, more than one key in one paste, an RSA-PSS key, and a public key this application already has, even a revoked one: rotating means a new key pair.
+
+<Info>
+    Choose a public key when your security policy does not allow sharing a symmetric secret with a vendor: Moss holds only material that verifies tokens, nothing that could sign one with that key. Otherwise HMAC is the simpler choice.
+</Info>
 
 ### 2. Create a Token Endpoint
 
-Add an endpoint to your backend that signs JWTs for authenticated users.
+Add an endpoint to your server that signs a token for the signed-in user. Both examples use an HMAC key.
 
 <Tabs>
   <Tab title="Node.js">
     ```javascript
     const jwt = require('jsonwebtoken');
 
+    // requireAuth is your own middleware: it must identify the signed-in user.
     app.get('/api/moss-token', requireAuth, (req, res) => {
       const token = jwt.sign(
         {
-          sub: req.user.id,              // Required: user identifier
-          app: 'YOUR_APPLICATION_ID',    // Required: Moss application ID
-          email: req.user.email,         // Optional: user email
-          name: req.user.name,           // Optional: user name
+          sub: String(req.user.id),              // Required: your user's ID, as a string
+          app: process.env.MOSS_APPLICATION_ID,  // Required: the Moss application ID
+          metadata: { role: req.user.role },     // Optional: attributes for answers
         },
-        process.env.MOSS_JWT_SECRET,
+        process.env.MOSS_JWT_SECRET,             // The moss_sk_… secret
         {
           algorithm: 'HS256',
-          expiresIn: '1h',
-          header: { kid: process.env.MOSS_KEY_ID },
+          expiresIn: '1h',                       // Sets exp; jsonwebtoken adds iat
+          keyid: process.env.MOSS_KEY_ID,        // The key_… ID, sent as the kid header
         }
       );
 
@@ -68,24 +95,27 @@ Add an endpoint to your backend that signs JWTs for authenticated users.
 
   <Tab title="Python">
     ```python
-    import jwt
-    from datetime import datetime, timedelta
+    import os
+    from datetime import datetime, timedelta, timezone
+
+    import jwt  # PyJWT
+    from flask import jsonify
 
     @app.route('/api/moss-token')
-    @require_auth
+    @require_auth  # Your own decorator: it must identify the signed-in user.
     def moss_token():
+        now = datetime.now(timezone.utc)
         token = jwt.encode(
             {
-                'sub': current_user.id,           # Required: user identifier
-                'app': 'YOUR_APPLICATION_ID',     # Required: Moss application ID
-                'email': current_user.email,      # Optional
-                'name': current_user.name,        # Optional
-                'exp': datetime.utcnow() + timedelta(hours=1),
-                'iat': datetime.utcnow(),
+                'sub': str(current_user.id),               # Required: your user's ID, as a string
+                'app': os.environ['MOSS_APPLICATION_ID'],  # Required: the Moss application ID
+                'iat': now,                                # Required
+                'exp': now + timedelta(hours=1),           # Required
+                'metadata': {'role': current_user.role},   # Optional: attributes for answers
             },
-            os.environ['MOSS_JWT_SECRET'],
+            os.environ['MOSS_JWT_SECRET'],                 # The moss_sk_… secret
             algorithm='HS256',
-            headers={'kid': os.environ['MOSS_KEY_ID']},
+            headers={'kid': os.environ['MOSS_KEY_ID']},    # The key_… ID
         )
 
         return jsonify({'token': token})
@@ -93,78 +123,282 @@ Add an endpoint to your backend that signs JWTs for authenticated users.
   </Tab>
 </Tabs>
 
+With a registered public key, sign with your private key and its algorithm instead: `algorithm: 'RS256'` or `'ES256'` with the private key PEM in place of the secret. Use the `kid` of the public key you registered.
+
+Your application ID is on **Configure > General**, under **Application ID**. Copy it exactly as shown: Moss compares `app` to it character for character.
+
 ### 3. Configure the SDK
 
-Pass a `getJwt` function that fetches a fresh token from your endpoint. The SDK calls this automatically when the token expires.
+Pass a `getJwt` function that fetches a token from your endpoint. The SDK calls it when it needs a token, as described in [Token Refresh](#token-refresh).
 
 <Tabs>
-  <Tab title="React (NPM)">
+  <Tab title="React (npm)">
     ```tsx
-    <AgentProvider config={{
-      apiUrl: 'https://moss-api.viamoss.ai',
-      applicationId: 'YOUR_APP_ID',
-      userId: currentUser.id,
-      getJwt: async () => {
-        const res = await fetch('/api/moss-token');
-        const data = await res.json();
-        return data.token;
-      },
-    }}>
+    import { AgentProvider, AssistantButton } from '@viamoss/moss-sdk';
+
+    <AgentProvider
+      config={{
+        apiUrl: 'https://moss-api.viamoss.ai',
+        applicationId: 'YOUR_APPLICATION_ID',
+        userId: String(currentUser.id), // The same value as the token's sub
+        getJwt: async () => {
+          const res = await fetch('/api/moss-token');
+          if (!res.ok) throw new Error(`Token request failed: ${res.status}`);
+          const { token } = await res.json();
+          return token;
+        },
+      }}
+    >
       <AssistantButton />
     </AgentProvider>
     ```
   </Tab>
 
-  <Tab title="CDN (Script Tag)">
+  <Tab title="CDN (script tag)">
     ```html
     <script>
       window.mossSettings = {
-        apiUrl: 'https://moss-api.viamoss.ai',
-        userId: 'USER_ID',
-        getJwt: async function() {
+        userId: 'USER_ID', // The same value as the token's sub
+        getJwt: async function () {
           const res = await fetch('/api/moss-token');
+          if (!res.ok) throw new Error('Token request failed: ' + res.status);
           const data = await res.json();
           return data.token;
         },
       };
     </script>
-    <script src="https://cdn.viamoss.ai/moss-sdk@latest.min.js?applicationId=YOUR_APP_ID"></script>
+    <script
+      src="https://cdn.viamoss.ai/moss-sdk@latest.min.js?applicationId=YOUR_APPLICATION_ID"
+      data-api-base="https://moss-api.viamoss.ai"
+    ></script>
     ```
   </Tab>
 </Tabs>
 
+The SDK requires a `userId`. Set it to the same value as `sub`. Moss takes the user's identity only from the token's `sub`; the `userId` setting does not change who Moss thinks the user is.
+
 ## JWT Claims Reference
 
-| Claim | Required | Description |
-|-------|----------|-------------|
-| `sub` | Yes | User identifier (string) |
-| `app` | Yes | Moss application UUID |
-| `exp` | Yes | Expiration time (Unix timestamp) |
-| `iat` | Yes | Issued at time (Unix timestamp) |
-| `email` | No | User email address |
-| `name` | No | User display name |
-| `metadata` | No | Custom metadata (object) |
+### Header
+
+| Field | Required | Value |
+|-------|----------|-------|
+| `kid` | Yes | The key's **Key ID** from the dashboard, `key_` followed by 12 characters |
+| `alg` | Yes | The key's algorithm: `HS256`, `RS256` or `ES256`. Moss verifies with the algorithm the key was created with and refuses a token signed with any other. |
+
+### Claims
+
+| Claim | Required | Type | What Moss does with it |
+|-------|----------|------|------------------------|
+| `sub` | Yes | Non-empty string | The user's identity. Chats, earlier-chat lists, request limits and deleting a user's data all work per `sub`, so give each person their own. |
+| `app` | Yes | String | Must equal the application ID of the signing key exactly, as shown in **Configure > General**. |
+| `exp` | Yes | Number (Unix seconds) | Expiry. Moss refuses an expired token. |
+| `iat` | Yes | Number (Unix seconds) | Issue time. `exp` minus `iat` may be at most 86,400 seconds (24 hours). |
+| `iss` | Only when **Required Issuer (iss)** is set | String | Must equal the required issuer exactly. Ignored when none is set. |
+| `aud` | Only when **Required Audience (aud)** is set | String | Must equal the required audience exactly, as one string, not an array. Ignored when none is set. |
+| `metadata` | No | Object | Attributes Moss gives the model to tailor its answers. See [Telling Moss about the user](#telling-moss-about-the-user). |
+
+`exp` and `iat` must be JSON numbers; a number written as a string is refused. Set the claims above; Moss uses no other claim to identify or describe the user, so leave `email`, `name` and other personal data out of the token. Standard claims that the token library checks are honored when present: a `nbf` (not before) in the future is refused, and a `jti` must be a string.
+
+Moss allows no clock skew. Keep your server's clock synchronized: a token whose `iat` is later than Moss's clock is refused as `INVALID_TOKEN`, and `exp` is checked to the second.
+
+### Required issuer and audience
+
+To have Moss accept only tokens meant for it, for example when your tokens come from a shared identity service, set the values in **Configure > Security > JWT Claim Enforcement**:
+
+| Field | Type | Default | Effect |
+|-------|------|---------|--------|
+| **Required Issuer (iss)** | String, up to 255 characters | Blank (not enforced) | Every token must carry this exact `iss`, or Moss answers `ISSUER_MISMATCH`. |
+| **Required Audience (aud)** | String, up to 255 characters | Blank (not enforced) | Every token must carry this exact `aud` as a single string, or Moss answers `AUDIENCE_MISMATCH`. |
+
+Click **Save security settings** to save. The button saves the **Allowed Domains** list and these two fields together. The values apply to every key of the application.
 
 ## Token Refresh
 
-The SDK handles token refresh automatically when you provide `getJwt`:
+Moss refuses a token that lives more than 24 hours (`exp` minus `iat`). Within that limit you choose the lifetime. A shorter lifetime limits how long a leaked token can be used, and with `getJwt` the SDK asks your server for a new token when the current one is about to expire.
 
-- Checks token expiration before each request
-- Calls `getJwt()` when the token is within 60 seconds of expiring
-- Retries failed requests with the new token
+With `getJwt`, the SDK:
 
-If you have a static token that doesn't need refresh, use `jwt` instead:
+- calls `getJwt` when it has no token, or when the current token expires within 60 seconds;
+- on a 401 from Moss, calls `getJwt` once more and retries the request once with the new token;
+- treats an error thrown by `getJwt` as a failed sign-in for that request.
+
+<Tip>
+    Give tokens a lifetime well above 60 seconds. A shorter token is always inside the 60-second refresh window, so the SDK calls `getJwt` before every request.
+</Tip>
+
+With a static `jwt` instead, the SDK uses that token as it is. Once it expires, every request fails and the user sees the sign-in error described below. Use a static token only for tests, or for pages that never outlive the token.
 
 ```tsx
 <AgentProvider config={{
   // ...
-  jwt: 'YOUR_STATIC_TOKEN',  // No auto-refresh
+  jwt: 'YOUR_STATIC_TOKEN',  // No refresh
 }}>
 ```
 
-<Tip>
-    Prefer `getJwt` over `jwt` for production applications. It ensures tokens are always fresh.
-</Tip>
+If you pass both, the SDK uses `jwt` first and calls `getJwt` when it nears expiry.
+
+A chat continues across new tokens as long as `sub` stays the same. A token for a different `sub` cannot continue it: Moss answers 403 `SESSION_UNAUTHORIZED`. When the SDK was reopening a saved chat at startup, it drops the saved chat and starts a new one.
+
+## What the User Sees When a Request Is Refused
+
+| When | What happens |
+|------|--------------|
+| A chat is starting | The SDK retries for about 30 seconds, then shows **Unable to connect** and "We couldn't connect to the server. Please check your internet connection." with a **Retry** button. If you set up an unavailable fallback state, the SDK shows that instead. |
+| The user asks a question or a guide step runs | After the refresh and retry above, the chat shows "This page could not sign in to the assistant." |
+| The user is over a request limit | The chat shows "Too many requests. Try again shortly." with a retry action. See [Request limits](#request-limits). |
+
+The sign-in and request-limit messages are new in 0.17.0. From 0.17.0, your `onError` handler also receives these problems, with `code` set to `sign_in_failed` or `rate_limited`.
+
+To find the cause, open the browser's network panel and read the failed response. Its body names the reason in `detail.code`:
+
+```json
+{ "detail": { "error": "Token has expired", "code": "TOKEN_EXPIRED" } }
+```
+
+| Status | `detail.code` | Cause | Fix |
+|--------|---------------|-------|-----|
+| 401 | `MISSING_AUTH` | The request had no `Authorization: Bearer` header. | Pass `getJwt` or `jwt` to the SDK. |
+| 401 | `INVALID_TOKEN` | The token is malformed or its signature does not verify; `kid` is missing or not a Moss key ID; `alg` differs from the key's algorithm; `sub`, `app`, `exp` or `iat` is missing; `sub` is empty; `exp` or `iat` is not a number; `metadata` is not an object; `iat` or `nbf` is in the future; or `jti` is not a string. | Check the token at signing time against the [claims reference](#jwt-claims-reference). |
+| 401 | `TOKEN_EXPIRED` | `exp` has passed. | Use `getJwt` so the SDK fetches new tokens. |
+| 401 | `TOKEN_LIFETIME_EXCEEDED` | `exp` minus `iat` is more than 24 hours. | Shorten the lifetime. |
+| 401 | `UNKNOWN_KEY` | No key has this `kid`. | Check that `MOSS_KEY_ID` was created on the Moss deployment you send requests to. A key of another application on the same deployment gets `APP_MISMATCH` instead. |
+| 401 | `KEY_REVOKED` | The key was revoked. | Sign with an active key. |
+| 401 | `KEY_EXPIRED` | The key's revocation grace period has ended. | Sign with an active key. |
+| 401 | `APP_MISMATCH` | `app` is not the application ID of the signing key. | Copy the ID from **Configure > General** exactly. |
+| 401 | `ISSUER_MISMATCH` | **Required Issuer (iss)** is set and `iss` is missing or different. | Match the required value exactly. |
+| 401 | `AUDIENCE_MISMATCH` | **Required Audience (aud)** is set and `aud` is missing, different, or an array. | Send `aud` as one string equal to the required value. |
+| 403 | `DOMAIN_NOT_ALLOWED` | The page is not in the application's **Allowed Domains**, or its origin is `null`. | See [Allowed domains](#allowed-domains). |
+| 403 | `ORIGIN_REQUIRED` | The deployment requires an allowed page, and the request had no `Origin` or `Referer`, or the application has no allowed domains. | Add your domains to **Allowed Domains**. |
+| 403 | `SESSION_UNAUTHORIZED` | The chat belongs to another user or application. | Keep `sub` the same for one person. |
+| 429 | `RATE_LIMITED` | The user is over a request limit. The `Retry-After` header gives the wait in seconds. | See [Request limits](#request-limits). |
+| 500 | `KEY_STORAGE_MISCONFIGURED` | Self-hosted: the server cannot read the stored secret of an HMAC key, because the operator's `SECRET_ENCRYPTION_KEYS` setting is missing or no longer holds the key the secret was stored with. | The operator restores that setting. See [Backup, restore and reinstall](/en/self-hosting/operations#backup-restore-and-reinstall). |
+
+## Signing Keys: Rotate and Revoke
+
+Each application can have up to 5 active keys. A key in a revocation grace period counts until the period ends. The **JWT Signing Keys** card shows each key's type, status, when it was created and when it was last used.
+
+### Revoke a key
+
+Click **Revoke** and choose a **Grace period**:
+
+| Grace period | Effect |
+|--------------|--------|
+| **Immediately** | Tokens signed with the key fail at once with `KEY_REVOKED`, including tokens already issued. |
+| **24 hours** or **72 hours** | The key keeps working until the deadline, shown as **Scheduled for revocation** with its date, then fails with `KEY_EXPIRED`. |
+
+A revocation cannot be undone. A scheduled revocation can be brought forward by revoking the key immediately, but not postponed.
+
+### Rotate a key
+
+1. Create a new key: **Create Key** for HMAC, or **Register public key** with a new key pair.
+2. Deploy the new secret or private key and its `kid` to your token endpoint.
+3. Revoke the old key with a **24 hours** or **72 hours** grace period, so tokens already issued keep working until they expire.
+
+You need a free slot for the new key, so revoke unused keys first if the application already has 5.
+
+### If a key leaks
+
+1. Revoke the key with **Immediately**. Every token signed with it stops working at once.
+2. Create a new key and deploy it to your token endpoint.
+
+With `getJwt`, the SDK fetches a new token after the 401, so users recover as soon as your server signs with the new key. Creating and revoking keys is recorded in the [audit log](/en/security/audit-logging) as `jwt_key.create` and `jwt_key.revoke`.
+
+## Allowed Domains
+
+The **Allowed Domains** list in **Configure > Security > Domain Access Control** is a second check, after the token. Moss compares the page each SDK request comes from with the list, on every SDK request, including the request that reads the application's public settings (the CDN script makes it at startup). A page that does not match gets 403 `DOMAIN_NOT_ALLOWED`.
+
+Click **Add** for each entry, then **Save security settings**.
+
+How entries match:
+
+- The page is read from the request's `Origin` header, or from `Referer` when there is no `Origin`.
+- An entry matches its exact host: `app.example.com` matches only `app.example.com`.
+- `*.example.com` matches every subdomain at any depth, such as `app.example.com` and `eu.app.example.com`, but not `example.com` itself. Add both entries if you need both.
+- An entry without a port matches any port. An entry with a port, such as `localhost:3000`, matches only that port. Browsers leave the default port out of `Origin`, so an entry such as `app.example.com:443` never matches.
+- A page with the origin `null`, such as a sandboxed iframe or a `file://` page, is refused while the list has any entry.
+
+What the list does and does not do:
+
+- It stops other websites from using your application's assistant in a browser, because the browser sets `Origin` and a page cannot change it.
+- It does not stop a client outside a browser, which can send any `Origin`. The signed token is what authenticates a request.
+- An empty list allows every page.
+- A request with neither `Origin` nor `Referer` passes, unless the deployment requires an allowed page. A self-hosted operator turns that on with `SDK_REQUIRE_ORIGIN`; then such requests, and every request for an application with an empty list, get 403 `ORIGIN_REQUIRED`. See [What the browser needs](/en/self-hosting/network#what-the-browser-needs).
+- On a self-hosted install, from 0.17.0 `CORS_ALLOWED_ORIGINS` no longer applies to SDK requests, so this list is the only check on which pages can use the SDK.
+
+<Note>
+    The application's public settings need no token: anyone who knows your application ID can read them. The allowed-domain check applies to that request too, but a client outside a browser can pass it. Never put a secret in SDK-facing settings.
+</Note>
+
+## Request Limits
+
+From 0.17.0, Moss limits how fast each user can send SDK requests:
+
+| Request | Limit | Counted per |
+|---------|-------|-------------|
+| Starting a chat | 30 a minute | User (`sub`) and application |
+| Asking a question | 60 a minute | User (`sub`) and application |
+| Completing a guide step | 120 a minute | User (`sub`) and chat |
+| Uploading a session recording | 10 a minute | Chat |
+
+A request over a limit gets 429 `RATE_LIMITED` with a `Retry-After` header in seconds. On a question or a guide step, the chat shows "Too many requests. Try again shortly." with a retry action. When starting a chat, the SDK retries for about 30 seconds and then shows the connection error.
+
+Users who share one `sub` share these limits. On a self-hosted install, the operator can turn the limits off with `SDK_RATE_LIMITS_ENABLED=false`; see [SDK request limits](/en/self-hosting/overview#sdk-request-limits).
+
+## Telling Moss About the User
+
+Put attributes such as the user's role, plan or permissions in the token's `metadata` claim. The SDK's `userMetadata` setting takes the same attributes from the page, unsigned. When both set the same key, the token's value wins.
+
+```json
+{
+  "sub": "user_8842",
+  "app": "YOUR_APPLICATION_ID",
+  "iat": 1795000000,
+  "exp": 1795003600,
+  "metadata": { "role": "viewer", "plan": "team", "can_export": false }
+}
+```
+
+What Moss does with them:
+
+- When a chat starts or reopens, Moss stores the combined attributes on the user's record and includes them in what the model reads when it answers.
+- The model uses them to word its answers, for example to say up front that a viewer cannot export.
+- From 0.17.0, each attribute is marked as signed by your server or reported by the page, and the model is told not to grant or deny anything based on them.
+- They grant and block nothing in Moss. Your own app must still enforce what each user may do.
+
+Limits, counted after the token's and the page's attributes are combined:
+
+| Limit | Value |
+|-------|-------|
+| Keys | At most 20 |
+| Key length | At most 100 characters |
+| Value types | String, number, boolean, or a list of strings |
+| String, number or boolean value | At most 200 characters |
+| List value | At most 500 characters in all, counting brackets and quotes |
+
+<Warning>
+    A `metadata` claim that is not an object makes the token invalid (`INVALID_TOKEN`). Attributes over these limits make the chat fail to start (HTTP 422), and the user sees the connection error. Use short roles and categories, not raw personal data such as full names, emails or phone numbers.
+</Warning>
+
+## Common Questions
+
+**Can the SDK use an API key instead of a token?**
+No. Every SDK request needs a token your server signs. The only API keys in Moss are read-only keys for reading the [audit log](/en/security/audit-logging) and API logs from your own tools.
+
+**How long should a token live?**
+Moss accepts at most 24 hours. Within that, a shorter lifetime limits how long a leaked token can be used, and with `getJwt` the SDK fetches a new token as each one nears expiry. A lifetime under 60 seconds makes the SDK fetch a token before every request.
+
+**Why do I get `APP_MISMATCH`?**
+The `app` claim must equal the application ID of the key in `kid`, exactly as **Configure > General** shows it. A key from another application, or an ID in a different case, does not match. A key created on another Moss deployment gets `UNKNOWN_KEY` instead.
+
+**Can Moss know what a user is allowed to do, and say so up front?**
+Yes. Put the user's role or permissions in the token's `metadata`, as in [Telling Moss about the user](#telling-moss-about-the-user). Moss uses them only to word its answers; it grants and blocks nothing.
+
+**Does the allowed-domain list protect my application ID?**
+It stops other websites from using your assistant in a browser. It does not stop a client outside a browser, and an empty list allows every page. The signed token is what protects your application.
+
+**Several people share one login in our app. Does that matter?**
+Yes. Moss treats everyone with the same `sub` as one user: they share request limits and can reopen each other's chats. Give each person their own `sub` where you can.
 
 ## Next Steps
 
@@ -172,7 +406,7 @@ If you have a static token that doesn't need refresh, use `jwt` instead:
     <Card title="Configuration" icon="gear" href="/en/sdk/configuration">
         Full SDK configuration reference
     </Card>
-    <Card title="Installation" icon="download" href="/en/sdk/installation">
-        Installation guides by framework
+    <Card title="Security: Authentication" icon="shield" href="/en/security/authentication">
+        Dashboard sign-in, roles and tenant isolation
     </Card>
 </CardGroup>

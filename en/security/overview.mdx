@@ -1,19 +1,32 @@
 ---
 title: "Security Overview"
-description: "Moss security architecture, principles, and compliance commitments"
+description: "How Moss authenticates, isolates and records access to your data, and where to find the answer to each security review question"
 ---
 
-## Our Security Commitment
-
-Moss is built with security as a foundational principle. We understand that our platform processes sensitive user interactions and business data, and we take that responsibility seriously.
-
-This documentation outlines the security measures implemented in Moss to protect your data and your users.
+This section is for security and privacy reviewers. It covers how Moss authenticates SDK requests and your team, how organizations are kept apart, what Moss records, and where to read about page data, retention and compliance. The table below answers the questions reviewers ask most and links to the details.
 
 ### Deployment Scope
 
 Hosted-service descriptions apply to Moss-operated services. Customer-managed
 deployments follow their agreed architecture, data flows and access restrictions.
 Moss remains responsible for software supply-chain, build and release security.
+
+---
+
+## Answers at a Glance
+
+| Question | Short answer | Details |
+|----------|--------------|---------|
+| How does the SDK authenticate? | With a JWT your server signs for each user, checked on every request. There are no SDK API keys. | [SDK Authentication](/en/sdk/authentication) |
+| Is the allowed-domain list a security boundary? | No. It stops other websites from using your assistant in a browser. The signed token is what authenticates a request, and an empty list allows every page. | [Allowed domains](/en/sdk/authentication#allowed-domains) |
+| How does our team sign in, and which roles exist? | Through Clerk on the Moss-hosted service, or your own identity provider (OIDC) on a self-hosted install. There are two roles, Admin and Member, for the whole organization. | [Authentication](/en/security/authentication) |
+| Who at our company can read end users' conversations? | Every member and admin of the organization, for every application. | [Who can see conversations](/en/security/authentication#who-can-see-end-users-conversations) |
+| What does the audit log record, and for how long? | Changes, admin-only actions refused to members, reads of API logs and AI assistant tool calls. Kept 365 days by default. | [Audit Logging](/en/security/audit-logging) |
+| Is anything deleted automatically? | Not until an admin turns on **Automatic deletion** for the application in **Configure > Data & privacy**. Audit events have their own period. | [Data privacy](/en/dashboard/data-privacy) |
+| How do we delete one person's data? | **Configure > Data & privacy > Delete a user's data**. | [Data privacy](/en/dashboard/data-privacy) |
+| Can an AI assistant read our Moss data? | Only where the deployment offers it and an admin turns it on. An assistant acts as the person who connected it. | [AI assistants](/en/dashboard/ai-assistants) |
+
+What Moss reads from your pages and how to limit it is on [What Moss reads from the page](/en/sdk/page-data). Where data is stored and how it is protected is on [Data Protection](/en/security/data-protection), and certifications and legal frameworks are on [Compliance](/en/security/compliance).
 
 ---
 
@@ -25,10 +38,10 @@ Moss employs multiple layers of security controls:
 
 | Layer                | Protection                                               |
 | -------------------- | -------------------------------------------------------- |
-| **Authentication**   | JWT tokens, API keys, and SSO via Clerk                  |
-| **Authorization**    | Organization-based access control, session verification  |
+| **Authentication**   | Signed JWTs for SDK requests; dashboard sign-in through Clerk (Moss-hosted) or your identity provider (self-hosted) |
+| **Authorization**    | Organization roles (Admin and Member); each chat bound to its application and user |
 | **Data Protection**  | Encryption in transit (TLS), sensitive data redaction    |
-| **Audit Logging**    | Audit events and optional detailed request logging |
+| **Audit Logging**    | Audit events and optional API logs |
 | **Input Validation** | Request schema validation                   |
 
 ### Multi-Tenancy Isolation
@@ -36,8 +49,10 @@ Moss employs multiple layers of security controls:
 Moss-hosted applications use organization-level isolation:
 
 - **Database Access** - Authorization checks use organization, application and session scope
-- **API Isolation** - JWT tokens scope access to specific organizations
+- **API Isolation** - Dashboard requests are scoped to your organization, and each SDK token is bound to one application through its signing key
 - **Data Isolation** - Users cannot access data from other organizations
+
+A dashboard request for another organization's application is refused. See [Multi-tenancy security](/en/security/authentication#multi-tenancy-security).
 
 ---
 
@@ -54,9 +69,11 @@ Moss is pursuing a SOC 2 Type II examination and ISO 27001 certification:
 
 ### Privacy and Security Features
 
-- **GDPR Support** - Data deletion service, audit logging, user consent mechanisms
+- **GDPR Support** - Data deletion service, audit logging
 - **TLS 1.2+** - Public service endpoints use encrypted HTTPS connections
 - **Secure Credential Storage** - API-key verification hashes and encrypted reusable credentials
+
+The SDK has no consent prompt of its own. To load it only after your own consent flow allows it, see [What Moss reads from the page](/en/sdk/page-data).
 
 ---
 
@@ -64,13 +81,13 @@ Moss is pursuing a SOC 2 Type II examination and ISO 27001 certification:
 
 <CardGroup cols={2}>
   <Card title="Authentication" icon="key" href="/en/security/authentication">
-    JWT tokens, API keys, and multi-factor authentication
+    JWT tokens, dashboard roles, and multi-factor authentication
   </Card>
   <Card title="Data Protection" icon="lock" href="/en/security/data-protection">
     Encryption, input validation, and secure storage
   </Card>
   <Card title="Audit Logging" icon="clipboard-list" href="/en/security/audit-logging">
-    Audit events, request logs, and compliance reporting
+    Audit events, export, and reading the log from your own tools
   </Card>
   <Card title="Compliance" icon="certificate" href="/en/security/compliance">
     GDPR, SOC 2, ISO 27001, and EU AI Act
@@ -82,5 +99,7 @@ Moss is pursuing a SOC 2 Type II examination and ISO 27001 certification:
 ## Responsible Disclosure
 
 If you discover a security vulnerability in Moss, please report it responsibly. Contact our security team through the Dashboard or email [security@viamoss.ai](mailto:security@viamoss.ai).
+
+Every Moss backend also publishes the security contact in a `security.txt` file (RFC 9116) at `/.well-known/security.txt`.
 
 We appreciate your help in keeping Moss secure for everyone.
