@@ -9,6 +9,452 @@ icon: "clock-rotate-left"
 Notable customer-visible changes to the Moss SDK (`@viamoss/moss-sdk`) and the
 Moss dashboard. From v0.13.0, the SDK version tracks the Moss platform version.
 
+## 0.17.0 — 2026-11-24
+
+0.17.0 rebuilds data retention, adds feedback, earlier-chat and guide
+controls, and applies 26 application-database migrations and one knowledge-base
+migration. Self-hosted installs: read
+**Before you upgrade (self-hosted)** under Changed first.
+
+### Added
+
+- **A labelled New chat button.** Set
+  `appearance.chrome.header.newChatStyle: 'outline'` for the icon and a
+  translated label in your primary colour. Unset keeps the icon alone. Narrow
+  headers fall back to the icon so the close button stays visible.
+- **Procedures in one editor.** Start with an AI draft or write one yourself,
+  edit instructions and tools together, and use Test, Suggestions and Performance
+  beside the document. The playground accepts file names and previews confirmation
+  cards with execution disabled; it does not upload files or run proposed writes.
+  Its attach control is separate from the SDK chat's opt-in attach button.
+- **What went wrong, after a thumbs-down.** With
+  `appearance.chrome.feedback.askWhatWentWrong: true`, a thumbs-down on an
+  answer asks what went wrong, with reason chips, an optional comment and
+  Skip. In a guide, only the finished-guide card asks, and it rates the
+  guide's last answer. Off unless set.
+- **A 1–5 session rating.** With
+  `appearance.chrome.feedback.sessionRating: 'stars'`, the session card asks
+  for 1–5 stars in place of thumbs, with an optional comment at any score.
+  4–5 count as helpful, 1–2 as unhelpful, and 3 as neither, which still
+  counts as rated. The dashboard shows the score on the session view, in the
+  sessions tables and on a Feedback-tab card with the average, the spread and
+  the reasons. Off unless set.
+- **Earlier chats, read-only.** With Configure → Behavior → Session Behavior →
+  "Let users reopen their earlier chats" on, the start screen lists the
+  user's own recent chats, and opening one shows its transcript. Nothing in it
+  can be acted on, and typing asks in the current chat. Only the signed-in
+  user's chats from the last 30 days are listed, never past the application's
+  retention period. Off for every application until turned on; turn it on
+  only if each person signs in as themselves.
+  `appearance.chrome.startScreen.recentChats` sets the number of rows
+  (`{ limit: 1–5 }`, 3 by default), and `false` hides them.
+- **Minimise the chat during a guide.** With
+  `appearance.chrome.guide.minimize: true`, the chat header has a Minimize
+  button while a guide runs, and so does the strip that says the highlight is
+  behind the panel. Minimised, the panel is its header and the guide bar, and
+  Next sits in the bar. The draft and scroll position are kept. Floating
+  panels only. Off unless set.
+- **A hint on steps that wait for Next.** When nothing on the page ends a
+  guide step, a hint says "Click Next when you're ready." When Next sits
+  only beside the input (`appearance.chrome.guide.nextInBar: false`), the
+  hint is a speech bubble above Next. When Next is in the guide bar, or the
+  chat is minimised, the hint is in the bar. Once the guide ends, there's no
+  hint.
+- **Live steps in the loader.** With `streamActivity: true` and
+  `appearance.chrome.loader: 'steps'`, the loader shows the steps Moss takes
+  for a turn as it takes them, such as searching help articles or preparing a
+  ticket, each with a short line of what it found. After the answer, a closed
+  "Worked on your request" box lists them. The steps arrive as Server-Sent
+  Events. Self-hosted: every proxy on the path must pass them unbuffered and
+  uncompressed, with an idle timeout of at least 270 seconds;
+  `GET /api/v1/activity/probe` checks the path. If a proxy blocks the
+  stream, the SDK falls back to ordinary requests and the loader's fixed rows
+  by itself. Optional, and off unless set.
+- **Data & privacy.** Configure → Data & privacy shows what Moss collects,
+  sets a period each for Conversations, Screenshots, Recordings, Page
+  snapshots and API logs, and has one **Automatic deletion** switch per
+  application, Off by default. Turning it on lists every period and asks for a
+  confirmation, and saving deletes nothing until the scheduler runs. Admins
+  can also delete a user's data there or from the user's page, follow the
+  request, and retry a failed one. Change history opens the audit log
+  filtered to retention changes.
+- **API logs under Analyze.** Analyze → API logs has the Record API logs
+  switch, and views, exports and deletes logs by time range, with a
+  minimum-duration filter and a sort by time.
+- **Your own hosts in replies.** The SDK option `replyLinks.allowedHosts`, and
+  the same key in the application's configuration, add hosts that replies may
+  link to and load images from (see Changed).
+- **Moss's MCP server for AI assistants.** Off until an operator sets
+  `MCP_ENABLED` and `MCP_PUBLIC_URL`, and an organization admin enables it
+  on the AI assistants page.
+- **Beta: an attach button in the chat input.**
+  `appearance.chrome.attachments: true` turns it on. It's off by default, and
+  the key is beta, so it may change. With it off there's no attach button, no
+  file input and no drop target. With it on, users can attach PDF, PNG and
+  JPEG files, up to 5 a message and 10 MiB each, and `sendMessage` rejects a
+  sixth with `TooManyAttachmentsError` before any request. Files go only to
+  tools that take a file, such as an API action; Moss's answer doesn't read
+  them.
+- **More chat models (self-hosted).** Gemini 4 Hydrogen (`gemini-4-hydrogen`)
+  and GPT-6.1 Terra (`gpt-6.1-terra`) can be the chat model. Set
+  `LLM_THINKING` for either; a `gpt-6.1-terra` model without it stops the
+  backend at startup. GPT-6.1 Terra needs OpenAI's own API or Azure OpenAI,
+  which `LLM_CLIENT_TYPE=azure_openai` adds as a provider:
+  `LLM_MODEL_NAME` is the deployment's name, and `LLM_API_BASE` must be the
+  resource's v1 endpoint, `https://<resource>.openai.azure.com/openai/v1/`,
+  or the backend doesn't start.
+- **Azure OpenAI on more hosts (self-hosted).** An `azure_openai` endpoint can
+  also be on `<resource>.openai.azure.us`, or on
+  `<resource>.services.ai.azure.com`, where a Foundry project's
+  `/api/projects/<project>/openai/v1/` path works too, or on a gateway host
+  listed in `LLM_AZURE_OPENAI_GATEWAY_HOSTS`. Any other host stops the backend
+  at startup. The Model card shows a model on a gateway as a custom endpoint
+  and names no data processor.
+- **Azure OpenAI without a key (self-hosted).** A resource with key auth
+  turned off can be reached with an Entra ID token from the pod's Azure
+  workload identity: set `LLM_AZURE_OPENAI_AUTH=workload_identity`, or
+  `"auth": "workload_identity"` on a profile. It works with endpoints on
+  `<resource>.openai.azure.com` or a listed gateway.
+- **A model for each application.** Where more than one model is offered to
+  an application, Configure → Behavior has a Model card for choosing the one
+  that answers it. A switch asks first and names the data processor before
+  and after. The choice covers chat answers, Copilot, conversation insights,
+  monitors, procedure authoring, actions users confirm in chat,
+  self-healing (its diagnosis step can run on a separate model set on the
+  server), evaluation scores and guide-edit planning. It doesn't cover
+  search and embeddings, knowledge-base image descriptions or the screenshot
+  analyzer, so it isn't a data-residency control. When the chosen model
+  can't answer, the default model does, unless the chosen one is set never
+  to fall back. Self-hosted: operators offer the models in `LLM_PROFILES`,
+  with the same value on both backends.
+- **Which model answered.** In session detail, each reply made while the
+  application had chosen a model shows "Answered by" and, when the default
+  answered in its place, why. The Audit Log records each model change with
+  the data processor before and after, when the default starts and stops
+  answering in place of the chosen model, and requests the default answered
+  because the chosen model refused them; those about the default appear
+  about ten minutes after the reply, later when an application has many at
+  once. "Answered by", the Model card's notices and these entries cover chat
+  answers only.
+
+### Changed
+
+- **Dashboard AI features on Vertex AI (self-hosted).** With
+  `GOOGLE_AUTH_MODE=vertex`, Copilot, insights, monitors, procedure
+  authoring, self-healing and session evaluations now call Vertex AI in your
+  project and location, as chat does, instead of the Gemini Developer API with
+  `LLM_API_KEY`. Give dashboard-backend the same Vertex AI access as
+  sdk-backend. If you turned off `INSIGHT_SWEEP_ENABLED` for the 0.16.19
+  known issue, you can turn it back on. The default `api_key` mode is
+  unchanged.
+- **Header button names (English).** The New chat button is now named
+  "New AI chat", and "Close Chat" is now "Close chat". Korean names are
+  unchanged. If your tests or analytics find these buttons by name, update
+  them.
+- **Procedure descriptions.** The separate `description` field is no longer
+  used by the editor, APIs, MCP procedure tools or bundle exports. Existing
+  database values remain, and bundle import still accepts the old field.
+  Use the trigger description to describe when a procedure applies.
+- **Session Replay records only when it's saved as on.** Applications that
+  never saved Enable Session Replay recorded sessions until now, and stop
+  recording at the upgrade. Applications saved as on or off are unchanged.
+  Right after the upgrade, for each application that should keep recording,
+  open Configure → Data & privacy, choose "Change in Behavior" under What Moss
+  collects, and turn on "Enable Session Replay" under Core Features. Until
+  then its label reads "Default (off)".
+- **SDK request limits are on by default.** Each SDK user gets 30 session
+  starts and 60 questions a minute per application, each chat 120
+  guided-step completions a minute, and each session 10 recording uploads a
+  minute, counted in Redis. A request over a limit gets 429 with
+  `Retry-After`. On a question or a guided step, the SDK shows "Too many
+  requests. Try again shortly." with Retry; a new chat over the limit
+  retries for about 30 seconds, then shows the connection error.
+  `SDK_RATE_LIMITS_ENABLED` (default `true`; the chart sets it on
+  sdk-backend) set to `false` turns all four off, for example when users
+  share one token `sub`. The MCP server's own limits aren't affected.
+- **Before you upgrade (self-hosted).**
+  - **Rows the migrations would stop on.** One migration stops the upgrade if
+    a row belongs to a different application than the row it points to; it
+    never rewrites data. This read-only query counts those rows, one line per
+    link, and every count should be 0. If any isn't, send it to us before
+    upgrading. With `DATABASE_SCHEMA` set, run it with `search_path` set to
+    that schema.
+
+    ```sql
+    SELECT link, mismatches FROM (
+      SELECT 'retrieval_quality.chat_session_id' AS link, count(*) AS mismatches
+        FROM retrieval_quality c JOIN chat_sessions p ON c.chat_session_id = p.id
+        WHERE c.application_id IS DISTINCT FROM p.application_id
+      UNION ALL SELECT 'api_actions.connection_id', count(*)
+        FROM api_actions c JOIN api_connections p ON c.connection_id = p.id
+        WHERE c.application_id IS DISTINCT FROM p.application_id
+      UNION ALL SELECT 'monitor_flags.monitor_id', count(*)
+        FROM monitor_flags c JOIN monitors p ON c.monitor_id = p.id
+        WHERE c.application_id IS DISTINCT FROM p.application_id
+      UNION ALL SELECT 'monitor_flags.chat_session_id', count(*)
+        FROM monitor_flags c JOIN chat_sessions p ON c.chat_session_id = p.id
+        WHERE c.application_id IS DISTINCT FROM p.application_id
+      UNION ALL SELECT 'conversation_insights.chat_session_id', count(*)
+        FROM conversation_insights c JOIN chat_sessions p ON c.chat_session_id = p.id
+        WHERE c.application_id IS DISTINCT FROM p.application_id
+      UNION ALL SELECT 'dom_snapshots.chat_session_id', count(*)
+        FROM dom_snapshots c JOIN chat_sessions p ON c.chat_session_id = p.id
+        WHERE c.application_id IS DISTINCT FROM p.application_id
+      UNION ALL SELECT 'user_actions.chat_session_id', count(*)
+        FROM user_actions c JOIN chat_sessions p ON c.chat_session_id = p.id
+        WHERE c.application_id IS DISTINCT FROM p.application_id
+      UNION ALL SELECT 'ticket_handoffs.chat_session_id', count(*)
+        FROM ticket_handoffs c JOIN chat_sessions p ON c.chat_session_id = p.id
+        WHERE c.application_id IS DISTINCT FROM p.application_id
+      UNION ALL SELECT 'ticket_handoffs.procedure_id', count(*)
+        FROM ticket_handoffs c JOIN procedures p ON c.procedure_id = p.id
+        WHERE c.application_id IS DISTINCT FROM p.application_id
+      UNION ALL SELECT 'conversation_insights.canonical_tag_id', count(*)
+        FROM conversation_insights c JOIN intent_tags p ON c.canonical_tag_id = p.id
+        WHERE p.application_id IS NOT NULL AND c.application_id IS DISTINCT FROM p.application_id
+      UNION ALL SELECT 'intent_tags.merged_into_tag_id', count(*)
+        FROM intent_tags c JOIN intent_tags p ON c.merged_into_tag_id = p.id
+        WHERE p.application_id IS NOT NULL AND c.application_id IS DISTINCT FROM p.application_id
+    ) AS t;
+    ```
+  - **Count the URL rules 0.17.0 won't run.** Before the upgrade, run
+    `scripts/check_url_rules.py` from the 0.17.0 backend image. It's
+    read-only and lists guides whose URL rules use a pattern 0.17.0 no
+    longer runs (for example a lookahead or `(?i)`). Those guides stop
+    appearing on that page until the rule is rewritten. It reads the
+    backend's own connection settings, RDS IAM auth and `DATABASE_SCHEMA`
+    included.
+
+    On Helm, the running pods are still on the old image, which doesn't
+    have the script. Find the sdk-backend deployment with
+    `kubectl get deploy -n <namespace> -l app.kubernetes.io/instance=<release>`
+    (the one ending in `sdk-backend`), then run the 0.17.0 image once as a
+    pod that copies it:
+
+    ```
+    kubectl get deploy -n <namespace> <sdk-backend deployment> -o json \
+      | jq --arg img "ghcr.io/viamoss/moss-backend:0.17.0" '{apiVersion:"v1",kind:"Pod",metadata:{name:"moss-url-rules-check",namespace:.metadata.namespace},spec:(.spec.template.spec | .restartPolicy="Never" | .containers=[.containers[0] | .image=$img | .command=["python","scripts/check_url_rules.py","--json"] | del(.args,.livenessProbe,.readinessProbe,.startupProbe,.ports)])}' \
+      | kubectl apply -f -
+    kubectl wait -n <namespace> --for=jsonpath='{.status.phase}'=Succeeded pod/moss-url-rules-check --timeout=300s
+    kubectl logs -n <namespace> moss-url-rules-check
+    kubectl delete pod -n <namespace> moss-url-rules-check
+    ```
+
+    If the wait times out, the check failed; `kubectl logs` says why. Delete
+    the pod before running it again. After the upgrade, run it in the
+    upgraded sdk-backend:
+
+    ```
+    kubectl exec -n <namespace> deploy/<sdk-backend deployment> -- python scripts/check_url_rules.py --json
+    ```
+  - **Upgrade the backend before the SDK or the extension.** An older backend
+    refuses a star rating, so the session's rating isn't recorded, and drops a
+    thumbs-down's reason and comment without an error.
+  - **Data retention.** From 0.16.x there's nothing to set on the
+    migrations: every application comes up with Automatic deletion Off.
+    Nothing is deleted until the chart's retention CronJob is set up
+    (`lifecycle.*`, off by default) and an application's admin turns
+    Automatic deletion on. The CronJob also finishes user deletions that
+    can't run at once. The chart README's Data retention section has the
+    steps. With `lifecycle.provisionRole: true`, the migration credential
+    needs `CREATEROLE`. An API-log period chosen on 0.16.x isn't carried
+    over, since 0.16.x never applied it; choose the period in Data & privacy.
+  - **Bucket names.** The chart's bucket check also covers
+    `DOM_SNAPSHOTS_BUCKET` (`global.storageBuckets.domSnapshots`). Render the
+    chart with your values before upgrading.
+  - **Reply images on shared storage.** With a shared S3 endpoint, rehosted
+    knowledge-base images show in replies only from the bucket that's named.
+    With Helm, that's `global.storageBuckets.kbImages`, or automatic when the
+    worker's `STORAGE_BUCKET` is in `worker.env`. Otherwise set
+    `KB_IMAGES_BUCKET` on sdk-backend. Unset means those images show as alt
+    text, and a startup warning says so.
+  - **Outbound addresses.** API actions and MCP connections to hosts in
+    100.64.0.0/10 (CGNAT, also used by some VPC setups), fec0::/10 or
+    168.63.129.16 are now refused; an API action then runs as a dry run.
+  - **Zendesk.** Without a proxy, Moss refuses to contact a Zendesk host
+    whose DNS answer is a non-public address, and the message names
+    `ZENDESK_ALLOW_PRIVATE_RESOLUTION`. Turn that setting on only if your
+    network sends zendesk.com to an internal address on purpose. It never
+    admits link-local, loopback or cloud metadata addresses.
+  - The upgrade applies 26 application-database migrations and one knowledge-base
+    migration, which handle databases created by older versions. They can't be
+    reversed, so back up the database first. `helm rollback` to 0.16.25 is supported without
+    restoring the database; remove any Intercom knowledge sources first, and
+    unset any saved `chrome.header.newChatStyle`. That new key is refused by the
+    older chrome schema and can drop the whole chrome configuration on reads.
+    The PII filter is inactive on 0.16.25: text is stored and sent to the model
+    unfiltered until you upgrade again.
+  - **The long step.** One migration copies chats recorded in the older
+    session format to the current one; on a big database it's the step
+    that takes longest. Before upgrading, count the sessions still on the
+    legacy session log:
+    `SELECT count(*) FROM chat_sessions WHERE session_model <> 'new'`. Run
+    `helm upgrade` with `--timeout <N>m`, where N is 10 plus that count
+    divided by 1,000 (and at least 30). If the upgrade still times out, the
+    migrate Job keeps running. Find its name with
+    `kubectl get job -n <namespace> -l app.kubernetes.io/component=migrate`,
+    wait for it with
+    `kubectl wait --for=condition=complete job/<migrate job> -n <namespace> --timeout=2h`,
+    then run the same `helm upgrade` again. The migration resumes where it
+    stopped and copies nothing twice.
+- **URL rules.** Every guide's URL rules run on a matcher whose time grows
+  only with the address's length, on the server and in the browser, against
+  the address's first 4,096 characters. Rules are regular expressions in a
+  stricter form, at most 500 characters. A stored rule outside that form isn't
+  rewritten: it stops matching, so its guide won't start on that page, and
+  its card isn't delivered, until the rule is rewritten. Saving one is
+  refused with a message naming the unsupported part.
+- **Links and images in replies.** Replies open links and load images only
+  from the page's own origin, the hosts of the articles the reply cites, the
+  application's allowed domains and knowledge-base hosts, and hosts added in
+  `replyLinks.allowedHosts`. Any other link shows as its text and any other
+  image as its alt text, with no request made. On storage hosts that many
+  owners share, only the application's own bucket is allowed.
+- **Audit and deletion-proof periods are operator settings,**
+  `AUDIT_RETENTION_DAYS` and `DELETION_PROOF_RETENTION_DAYS` on
+  dashboard-backend. A new `AUDIT_MINIMUM_DAYS` keeps content-free admin audit
+  events younger than that when a user's data is deleted. dashboard-backend
+  won't start if it's larger than `AUDIT_RETENTION_DAYS` or a set
+  `DELETION_PROOF_RETENTION_DAYS`.
+- **API logs.**
+  - Reading and exporting logs is recorded in the audit log. If that record
+    can't be written, the read or export is refused with 503
+    `audit_unavailable`.
+  - The API log access key (`X-Traffic-API-Key`) only reads. Deleting logs or
+    changing their setting with it returns 403 `api_key_read_only`.
+  - A delete needs both ends of the range. A legal hold refuses it with 423,
+    and logs inside an operator minimum are kept.
+  - Stored bodies also mask phone numbers written with a `+` and a country
+    code.
+- **Size limits.**
+  - Screenshots over 10 MiB aren't uploaded, and the turn answers without the
+    screenshot.
+  - Session recordings: 16 MiB and 12,000 events per upload; per session,
+    64 MiB, 100,000 events and 720 uploads. Past a session limit the SDK stops
+    uploading for that session.
+  - One knowledge upload (Markdown files sent in one request) is limited to
+    10 MiB. Split a larger upload across several requests.
+- **Ingestion API.** Job ids are `<source id>:<UUID>`, and a job started
+  before the upgrade answers 404 on status and cancel. A 500's `detail` is an
+  object, `{code, message, reference}`, where it was a string. Leave out
+  `steps` and `chunking_strategy`; the server picks the pipeline. Requests
+  that set them, `trigger-step` and the per-source job history return 403.
+- **Session CSV export** adds `session_score`, `message_feedback_reason` and
+  `message_feedback_comment` after the existing columns.
+- **Choice steps picked by a decision provider** name their options in one
+  sentence when step badges are on: "click **Team** or **Company**."
+- **Gemini thinking level.** With `LLM_THINKING` unset, Gemini models now use
+  their lowest thinking level, except Gemini 4 Hydrogen, which gets Google's
+  default. Set `LLM_THINKING` to choose the level. A
+  number in `LLM_THINKING`, or `LLM_CLIENT_TYPE=openrouter`, now stops the
+  backend at startup.
+- **`LLM_THINKING` with `LLM_CLIENT_TYPE=openai`.** On OpenAI's own API it's
+  now sent as the reasoning effort, through the Responses API, where it was
+  ignored. Leave it unset for a model that doesn't reason. On an OpenAI-type
+  install, the backend's other model calls use the same `LLM_API_BASE`,
+  `LLM_ADDITIONAL_HEADERS` and effort.
+- **Session replays mask form fields.** With `redactAllInputs` unset (it's on
+  by default), replays show every input, textarea, select and editable
+  region, and every redacted region, as a blank box. `data-moss-unredact`
+  doesn't apply to replays, and one invalid `redactionSelectors` entry stops
+  that session's recording, with a console error only.
+- **Removed SDK options:** `displayMode: 'headless'`, `headless`,
+  `forcedActivationFlow` and `useAgent().displayMode`. TypeScript reports
+  them; at runtime they're ignored and the chat works as usual.
+- **Procedure instructions** are limited to 8,000 characters; a longer one
+  must be shortened before it can be saved. Up to that length they now reach
+  the model in full, where 0.16.25 used the first 4,000.
+- **Website sources:** adding one finds pages from its robots.txt, sitemap
+  and links, up to 300, and skips paths robots.txt disallows.
+- **The dashboard's Guidance Flows pages are removed.** Guides already saved
+  keep running.
+- **The chat stays open after a support ticket.** After a ticket is filed,
+  the host's `onSupportTicket` handler reports a failure, or the handler gives
+  no answer, the input stays and further questions go to the same
+  conversation. The ticket card keeps its result line and, on a failure, the
+  host's "Open a ticket" link (`chrome.footer.openTicket`). A failed ticket
+  no longer offers "Try again"; asking again drafts a new one. A guide the
+  ticket interrupted still ends.
+
+### Fixed
+
+- **Chat scroll during dialogs.** The message list keeps its place when the
+  widget moves into or out of a native modal dialog or its host is reattached.
+- **Procedures on large pages.** A large page read no longer ends the procedure
+  early by consuming the separate tool-result budget. Confirmation cards
+  no longer display raw results returned by their actions.
+- **"It didn't help" no longer starts an offered guide.** A reply that only
+  declines the offer or says the answer didn't help is answered, and the guide
+  stays offered.
+- **A reply that came back as plain text** kept its words but lost its
+  highlight, guide offer and plan. Moss now asks once more for the structure,
+  keeping the words as written.
+- **Zendesk ticket values** that were lists or objects were filed as code-like
+  text. Lists are now filed as text, joined with "; ", and a value that can't
+  be read as text is treated as not provided.
+- **A guide no longer resumes behind a support-ticket card** after a reload or
+  a link. It waits until the card is sent, declined or dismissed.
+- **Guides promoted from a session** didn't match their own page. Their page
+  is now stored as a path pattern and matched as one, so they can start
+  appearing on those pages.
+- **Retry failed** also re-runs pages that loaded but failed indexing, and
+  the dashboard offers it when those are a source's only failures.
+- **Analytics day and hour charts** use the viewer's time zone on every
+  install. On some self-hosted installs they were shifted by the viewer's
+  offset from UTC.
+- **Next beside the input box** is the input's height.
+- **The "Shift+Enter for a new line" hint** ends at the input box's right
+  edge. With Next beside the input, it ran under Next. In the layout without
+  the input pill, it sits just under the text box. Nothing else in the input
+  bar moves.
+- **A Next or Done on a form with controls named after browser methods** no
+  longer stops the step.
+- **API logs.** A delete with an unknown filter value removed every log in the
+  range; it's now refused with 422. An export that fails partway ends with an
+  error instead of a complete-looking file, and the dashboard saves nothing
+  when the file comes up short.
+- **The Audit Log** didn't show admins west of UTC the entries from the last
+  few hours. It now sends its time window in UTC.
+- **An Audit Log entry's Metadata block** was always empty. It now shows the
+  entry's metadata, as the audit export already did.
+
+### Security
+
+- **Guide URL rules** run in time that grows only with the address's length,
+  so a crafted rule or address can't hold up the server or a user's tab.
+- **Guide step completions** are accepted only for a step Moss gave that chat,
+  once, and, with the SDK request limits on, at most 120 a minute per chat.
+- **Screenshots:** a question can use only a screenshot uploaded for its own
+  chat, and screenshot and attachment reads stop at 10 MiB.
+- **Session recording uploads** are bounded per request and per session.
+- **The dashboard's API proxy** keeps every request under `/api/v1`, and
+  refuses a body over 10 MiB before reading it.
+- **Outbound addresses:** API actions, MCP connections and Zendesk check every
+  address with one rule for public addresses, and Zendesk follows a next page
+  only on the account's ticket-forms endpoint.
+- **Ingestion:** job status and cancel answer only for the caller's
+  organization, and error responses no longer include internal error text.
+- **Replies** open links and load images only from allowed hosts.
+- **Page text, help articles and tool results** are treated as content to
+  answer from, never as instructions.
+- **Promoted guides** only go to web pages on your own site.
+- **In-widget debug tools** turn on only from the host page's `debugMode`;
+  the dashboard's Debug switch is removed.
+- **`CORS_ALLOWED_ORIGINS` no longer narrows the SDK routes;** it covers
+  dashboard routes only. Each application's allowed domains are the gate.
+  Fill them in for every application, and set `SDK_REQUIRE_ORIGIN=true`,
+  which refuses SDK requests with no Origin or Referer, and every request for
+  an application with no allowed domains.
+- **API keys** go only to the host they're configured for. On a self-hosted
+  install, some combinations of self-healing and screenshot-analyzer
+  settings sent one provider's key to another provider.
+
+### Known issues
+
+- The server's check that keeps "it didn't help" from starting an offered
+  guide reads English only. In other languages, only the model's
+  instructions stop it.
+
 ## 0.16.26 — 2026-11-18
 
 SDK only: `@viamoss/moss-sdk` 0.16.26 is on npm. There are no new server
