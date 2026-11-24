@@ -9,6 +9,441 @@ icon: "clock-rotate-left"
 Moss SDK(`@viamoss/moss-sdk`)와 Moss 대시보드에서 고객에게 드러나는 주요 변경
 사항입니다. v0.13.0부터 SDK 버전은 Moss 플랫폼 버전을 따릅니다.
 
+## 0.17.0 — 2026-11-24
+
+0.17.0은 데이터 보존 기능을 새로 구성하고, 피드백, 이전 대화, 가이드 관련
+제어를 추가하며, 애플리케이션 DB 마이그레이션 26개와 지식 DB 마이그레이션
+1개를 적용합니다. 자체 호스팅
+환경은 변경 항목의 **업그레이드 전(자체 호스팅)** 항목을 먼저 읽으세요.
+
+### 추가
+
+- **이름이 표시되는 새 채팅 버튼.**
+  `appearance.chrome.header.newChatStyle: 'outline'`을 설정하면 기본 색상의
+  아이콘과 번역된 이름을 함께 표시합니다. 설정하지 않으면 아이콘만 유지합니다.
+  좁은 헤더에서는 닫기 버튼을 가리지 않도록 아이콘만 표시합니다.
+- **한곳에서 편집하고 테스트하는 프로시저.** AI 초안으로 시작하거나 직접
+  작성하고, 지침과 도구를 함께 편집합니다. 문서 옆에서 테스트, 제안, 성능을
+  확인합니다. 플레이그라운드는 파일 이름을 전달하고 확인 카드를 미리 보여주며,
+  파일을 업로드하거나 제안된 쓰기 작업을 실행하지 않습니다. 이 첨부 기능은
+  SDK 채팅의 선택적 첨부 버튼과 별개입니다.
+- **도움이 되지 않은 답변에 이유를 묻습니다.**
+  `appearance.chrome.feedback.askWhatWentWrong: true`를 지정하면, 답변에
+  "도움안됨"을 누를 때 이유 칩, 선택 의견, 건너뛰기와 함께 어떤 점이
+  문제였는지 묻습니다. 가이드에서는 가이드 완료 카드에서만 묻고, 가이드의
+  마지막 답변을 평가합니다. 지정하지 않으면 꺼져 있습니다.
+- **1~5점 세션 평가.** `appearance.chrome.feedback.sessionRating: 'stars'`를
+  지정하면, 세션 카드가 엄지 버튼 대신 별 1~5개로 평가를 받고, 점수와 관계없이
+  선택 의견을 남길 수 있습니다. 4~5점은 도움됨, 1~2점은 도움안됨, 3점은
+  어느 쪽도 아님으로 저장되며, 3점도 평가한 것으로 셉니다. 대시보드는 점수를
+  세션 화면과 세션 표에 표시하고, 피드백 탭의 카드에 평균, 분포, 이유를
+  보여 줍니다. 지정하지 않으면 꺼져 있습니다.
+- **이전 대화를 읽기 전용으로 다시 열 수 있습니다.** 구성 → 동작 → 세션 동작의
+  "사용자가 이전 대화를 다시 열 수 있도록 허용"을 켜면, 시작 화면에 사용자
+  본인의 최근 대화가 표시되고, 하나를 열면 그 대화 내용을 보여 줍니다. 그
+  안의 어떤 것도 실행할 수 없으며, 입력한 질문은 현재 대화에서 처리됩니다.
+  로그인한 사용자의 최근 30일 대화만 표시되고, 애플리케이션의 보관 기간을
+  넘는 대화는 표시되지 않습니다. 모든 애플리케이션에서 켜기 전까지는 꺼져
+  있으며, 사용자마다 본인 계정으로 로그인하는 경우에만 켜세요.
+  `appearance.chrome.startScreen.recentChats`로 표시할 행 수(`{ limit: 1–5 }`,
+  기본값 3)를 정하고, `false`로 숨깁니다.
+- **가이드 중 채팅 최소화.** `appearance.chrome.guide.minimize: true`를
+  지정하면, 가이드가 진행되는 동안 채팅 헤더에 최소화 버튼이 표시되고,
+  하이라이트가 패널 뒤에 있다고 알리는 줄에도 최소화가 표시됩니다. 최소화하면
+  패널은 헤더와 가이드 바만 남고, Next는 가이드 바에 표시됩니다. 입력 중인
+  내용과 스크롤 위치는 유지됩니다. 떠 있는(floating) 패널에만 적용됩니다.
+  지정하지 않으면 꺼져 있습니다.
+- **Next를 기다리는 단계의 안내.** 페이지의 동작으로 끝나지 않는 가이드
+  단계에서는 "이 단계를 마쳤으면 다음을 눌러 계속하세요."라는 안내가
+  표시됩니다. `appearance.chrome.guide.nextInBar: false`로 Next가 입력란
+  옆에만 있으면, 안내는 Next 위의 말풍선으로 표시됩니다. Next가 가이드 바에
+  있거나 채팅을 최소화하면 안내는 가이드 바에 표시됩니다. 가이드가 끝나면
+  안내가 표시되지 않습니다.
+- **로더에 실시간 단계 표시.** `streamActivity: true`와
+  `appearance.chrome.loader: 'steps'`를 함께 지정하면, 로더가 한 턴에서 Moss가
+  거치는 단계를 진행되는 대로 보여 줍니다. 도움말 문서 검색이나 티켓 준비 같은
+  단계마다 찾은 내용이 한 줄씩 붙습니다. 답변이 끝나면 접힌 "요청 처리 완료"
+  상자에 단계가 정리됩니다. 단계는 Server-Sent Events로 전달됩니다. 자체
+  호스팅: 경로의 모든 프록시가 버퍼링과 압축 없이 전달해야 하고, 유휴 제한
+  시간은 270초 이상이어야 합니다. `GET /api/v1/activity/probe`로 경로를
+  확인할 수 있습니다. 프록시가 스트림을 막으면 SDK가 알아서 일반 요청과
+  로더의 고정된 행으로 돌아갑니다. 선택 사항이며, 지정하지 않으면 꺼져
+  있습니다.
+- **데이터 및 개인정보.** 구성 → 데이터 및 개인정보에서 Moss가 수집하는
+  데이터를 확인하고, 대화, 스크린샷, 녹화(세션 리플레이), 페이지 스냅샷,
+  API 로그의 보관 기간을 각각 정합니다. 애플리케이션마다 **자동 삭제** 스위치가
+  하나 있으며, 기본값은 꺼짐입니다. 켜면 모든 보관 기간을 보여 주고 확인을
+  받으며, 저장만으로는 아무것도 삭제되지 않고 스케줄러가 실행될 때 삭제됩니다.
+  관리자는 이 화면이나 사용자 페이지에서 사용자 데이터를 삭제하고, 요청 상태를
+  확인하고, 실패한 요청을 다시 시도할 수 있습니다. 변경 기록은 보존 설정
+  변경으로 필터링한 감사 로그를 엽니다.
+- **분석 메뉴의 API 로그.** 분석 → API 로그에서 API 로그 기록 스위치를 켜고
+  끄며, 시간 범위로 로그를 조회, 내보내기, 삭제합니다. 최소 소요 시간 필터와
+  시간순 정렬이 있습니다.
+- **답변에 허용할 호스트 추가.** SDK 옵션 `replyLinks.allowedHosts`와
+  애플리케이션 설정의 같은 키로, 답변이 링크하고 이미지를 불러올 수 있는
+  호스트를 추가합니다(변경 참고).
+- **AI 어시스턴트용 Moss MCP 서버.** 운영자가 `MCP_ENABLED`와
+  `MCP_PUBLIC_URL`을 설정하고, 조직 관리자가 AI 어시스턴트 페이지에서 켜기
+  전까지는 꺼져 있습니다.
+- **베타: 채팅 입력란의 첨부 버튼.** `appearance.chrome.attachments: true`로
+  켭니다. 기본값은 꺼짐이며, 베타 설정이라 바뀔 수 있습니다. 꺼져 있으면 첨부
+  버튼, 파일 입력, 파일을 끌어다 놓는 영역이 모두 없습니다. 켜면 사용자는
+  PDF, PNG, JPEG 파일을 메시지당 5개, 개당 10MiB까지 첨부할 수 있으며,
+  `sendMessage`는 여섯 번째 파일을 요청 전에 `TooManyAttachmentsError`로
+  거부합니다. 파일은 API 액션처럼 파일을 받는 도구에만 전달되며, Moss의
+  답변은 파일 내용을 읽지 않습니다.
+- **채팅 모델 추가(자체 호스팅).** Gemini 4 Hydrogen(`gemini-4-hydrogen`)과
+  GPT-6.1 Terra(`gpt-6.1-terra`)를 채팅 모델로 쓸 수 있습니다. 두 모델 모두
+  `LLM_THINKING`을 설정하세요. 설정하지 않은 `gpt-6.1-terra` 모델에서는
+  백엔드가 시작되지 않습니다. GPT-6.1 Terra는 OpenAI 자체 API나 Azure
+  OpenAI에서만 쓸 수 있습니다. `LLM_CLIENT_TYPE=azure_openai`를 지정하면 Azure
+  OpenAI를 제공자로 쓰며, 이때 `LLM_MODEL_NAME`은 배포 이름이고
+  `LLM_API_BASE`는 리소스의 v1 엔드포인트인
+  `https://<resource>.openai.azure.com/openai/v1/`로 지정해야 합니다. 그렇지
+  않으면 백엔드가 시작되지 않습니다.
+- **더 많은 호스트의 Azure OpenAI(자체 호스팅).** `azure_openai` 엔드포인트는
+  `<resource>.openai.azure.us`나 `<resource>.services.ai.azure.com`에 둘 수도
+  있으며, 후자에서는 Foundry 프로젝트의 `/api/projects/<project>/openai/v1/`
+  경로도 쓸 수 있습니다. `LLM_AZURE_OPENAI_GATEWAY_HOSTS`에 나열한 게이트웨이
+  호스트에 둘 수도 있습니다. 그 밖의 호스트를 쓰면 백엔드가 시작되지
+  않습니다. 게이트웨이에 둔 모델은 모델 카드에 사용자 지정 엔드포인트로
+  표시되며, 데이터 처리자를 밝히지 않습니다.
+- **키 없는 Azure OpenAI(자체 호스팅).** 키 인증을 끈 리소스에도 파드의
+  Azure 워크로드 ID로 받은 Entra ID 토큰으로 연결할 수 있습니다.
+  `LLM_AZURE_OPENAI_AUTH=workload_identity`를 설정하거나, 프로필에
+  `"auth": "workload_identity"`를 지정하세요. 엔드포인트가
+  `<resource>.openai.azure.com`이거나 목록에 등록한 게이트웨이일 때만
+  사용할 수 있습니다.
+- **애플리케이션마다 모델 선택.** 애플리케이션에 제공되는 모델이 둘 이상이면
+  구성 → 동작에 모델 카드가 표시되며, 여기서 그 애플리케이션에 답변할 모델을
+  고릅니다. 모델을 바꿀 때는 먼저 확인을 받고, 바꾸기 전과 후의 데이터
+  처리자를 알려 줍니다. 이 선택은 채팅 답변, 코파일럿, 대화 인사이트, 모니터,
+  프로시저 작성, 사용자가 채팅에서 확인한 작업, 셀프 힐링(진단 단계는 서버에
+  설정된 별도 모델을 쓸 수 있음), 평가 점수, 가이드 수정 계획에 적용됩니다.
+  검색과 임베딩, 지식 베이스 이미지 설명, 스크린샷 분석에는 적용되지 않으므로,
+  데이터 상주(data residency)를 통제하는 수단이
+  아닙니다. 고른 모델이 답하지 못하면 기본 모델이 대신 답하며, 대체하지
+  않도록 설정된 모델은 예외입니다. 자체 호스팅: 운영자가 `LLM_PROFILES`로
+  모델을 제공하며, 두 백엔드에 같은 값을 설정합니다.
+- **어떤 모델이 답했는지 표시.** 세션 상세에서는 애플리케이션이 모델을 고른
+  동안의 답변마다 답변한 모델이 표시되고, 기본 모델이 대신 답했다면 그 이유도
+  표시됩니다. 감사 로그는 모델 변경을 바꾸기 전과 후의 데이터 처리자와 함께
+  기록하고, 기본 모델이 고른 모델 대신 답하기 시작하고 멈춘 때와, 고른 모델이
+  거부해 기본 모델이 답한 요청도 기록합니다. 기본 모델에 관한 항목은 답변
+  뒤 10분쯤 지나 나타나며, 한 애플리케이션에 항목이 한꺼번에 많으면 더 늦게
+  나타납니다. 답변 모델 표시, 모델 카드의 알림, 이 감사 항목은 채팅 답변만
+  다룹니다.
+
+### 변경
+
+- **Vertex AI의 대시보드 AI 기능(자체 호스팅).** `GOOGLE_AUTH_MODE=vertex`이면
+  코파일럿, 인사이트, 모니터, 프로시저 작성, 셀프 힐링, 세션 평가가 이제
+  `LLM_API_KEY`로 Gemini Developer API를 호출하지 않고, 채팅처럼 설정한
+  프로젝트와 위치의 Vertex AI를 호출합니다. dashboard-backend에 sdk-backend와
+  같은 Vertex AI 접근 권한을 주세요. 0.16.19 알려진 문제 때문에
+  `INSIGHT_SWEEP_ENABLED`를 껐다면 다시 켤 수 있습니다. 기본값인 `api_key`
+  모드는 바뀌지 않습니다.
+- **영어 헤더 버튼 이름.** 영어 UI에서 새 채팅 버튼의 이름이 "New AI chat"으로,
+  "Close Chat"이 "Close chat"으로 바뀌었습니다. 한국어 이름은 그대로입니다.
+  테스트나 분석 도구가 이 버튼을 이름으로 찾는다면 새 이름으로 바꾸세요.
+- **프로시저 설명 필드.** 별도의 `description` 필드는 편집기, API, MCP
+  프로시저 도구와 번들 내보내기에서 더 이상 사용하지 않습니다. 기존 DB 값은
+  유지하며, 번들 가져오기는 이전 필드를 계속 받습니다. 프로시저가 쓰이는
+  상황은 트리거 설명에 작성합니다.
+- **세션 리플레이는 켜짐으로 저장한 경우에만 녹화합니다.** "세션 리플레이
+  활성화"를 저장한 적이 없는 애플리케이션은 지금까지 세션을 녹화했지만,
+  업그레이드하면 녹화를 멈춥니다. 켜짐이나 꺼짐으로 저장한 애플리케이션은
+  바뀌지 않습니다. 녹화를 계속해야 하는 애플리케이션마다 업그레이드 직후 구성
+  → 데이터 및 개인정보를 열고, "Moss가 수집하는 데이터"에서 "동작에서 변경"을
+  누른 뒤, 주요 기능의 "세션 리플레이 활성화"를 켜세요. 켜기 전까지는
+  "기본값 (OFF)"로 표시됩니다.
+- **SDK 요청 한도가 기본으로 켜져 있습니다.** SDK 사용자마다 애플리케이션별로
+  분당 세션 시작 30회와 질문 60개, 대화마다 분당 가이드 단계 완료 120회,
+  세션마다 분당 녹화 업로드 10회까지이며, Redis에서 셉니다. 한도를 넘은
+  요청은 `Retry-After`와 함께 429를 받습니다. 질문이나 가이드 단계에서는
+  SDK가 "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요."와 다시 시도
+  버튼을 표시하고, 한도를 넘은 새 대화는 30초쯤 다시 시도한 뒤 연결 오류를
+  표시합니다. `SDK_RATE_LIMITS_ENABLED`(기본값 `true`, 차트는 sdk-backend에
+  설정)를 `false`로 하면 네 한도가 모두 꺼집니다. 예를 들어 여러 사용자가
+  토큰의 `sub` 하나를 함께 쓸 때 끄세요. MCP 서버 자체의 한도에는 영향이
+  없습니다.
+- **업그레이드 전(자체 호스팅).**
+  - **마이그레이션을 멈추게 할 행.** 마이그레이션 하나는 어떤 행이 가리키는
+    행과 다른 애플리케이션에 속하면 업그레이드를 멈추며, 데이터를 고쳐 쓰지는
+    않습니다. 아래 읽기 전용 쿼리는 그런 행을 연결마다 한 줄씩 셉니다. 모든
+    값이 0이어야 하며, 0이 아닌 값이 있으면 업그레이드 전에 알려 주세요.
+    `DATABASE_SCHEMA`를 설정했다면 `search_path`를 그 스키마로 지정하고
+    실행하세요.
+
+    ```sql
+    SELECT link, mismatches FROM (
+      SELECT 'retrieval_quality.chat_session_id' AS link, count(*) AS mismatches
+        FROM retrieval_quality c JOIN chat_sessions p ON c.chat_session_id = p.id
+        WHERE c.application_id IS DISTINCT FROM p.application_id
+      UNION ALL SELECT 'api_actions.connection_id', count(*)
+        FROM api_actions c JOIN api_connections p ON c.connection_id = p.id
+        WHERE c.application_id IS DISTINCT FROM p.application_id
+      UNION ALL SELECT 'monitor_flags.monitor_id', count(*)
+        FROM monitor_flags c JOIN monitors p ON c.monitor_id = p.id
+        WHERE c.application_id IS DISTINCT FROM p.application_id
+      UNION ALL SELECT 'monitor_flags.chat_session_id', count(*)
+        FROM monitor_flags c JOIN chat_sessions p ON c.chat_session_id = p.id
+        WHERE c.application_id IS DISTINCT FROM p.application_id
+      UNION ALL SELECT 'conversation_insights.chat_session_id', count(*)
+        FROM conversation_insights c JOIN chat_sessions p ON c.chat_session_id = p.id
+        WHERE c.application_id IS DISTINCT FROM p.application_id
+      UNION ALL SELECT 'dom_snapshots.chat_session_id', count(*)
+        FROM dom_snapshots c JOIN chat_sessions p ON c.chat_session_id = p.id
+        WHERE c.application_id IS DISTINCT FROM p.application_id
+      UNION ALL SELECT 'user_actions.chat_session_id', count(*)
+        FROM user_actions c JOIN chat_sessions p ON c.chat_session_id = p.id
+        WHERE c.application_id IS DISTINCT FROM p.application_id
+      UNION ALL SELECT 'ticket_handoffs.chat_session_id', count(*)
+        FROM ticket_handoffs c JOIN chat_sessions p ON c.chat_session_id = p.id
+        WHERE c.application_id IS DISTINCT FROM p.application_id
+      UNION ALL SELECT 'ticket_handoffs.procedure_id', count(*)
+        FROM ticket_handoffs c JOIN procedures p ON c.procedure_id = p.id
+        WHERE c.application_id IS DISTINCT FROM p.application_id
+      UNION ALL SELECT 'conversation_insights.canonical_tag_id', count(*)
+        FROM conversation_insights c JOIN intent_tags p ON c.canonical_tag_id = p.id
+        WHERE p.application_id IS NOT NULL AND c.application_id IS DISTINCT FROM p.application_id
+      UNION ALL SELECT 'intent_tags.merged_into_tag_id', count(*)
+        FROM intent_tags c JOIN intent_tags p ON c.merged_into_tag_id = p.id
+        WHERE p.application_id IS NOT NULL AND c.application_id IS DISTINCT FROM p.application_id
+    ) AS t;
+    ```
+  - **0.17.0이 실행하지 않는 URL 규칙을 확인하세요.** 업그레이드 전에 0.17.0
+    백엔드 이미지에서 `scripts/check_url_rules.py`를 실행합니다. 읽기
+    전용이며, 0.17.0이 더 이상 실행하지 않는 패턴(예: lookahead나
+    `(?i)`)을 URL 규칙에 쓴 가이드를 나열합니다. 그런 가이드는 규칙을 다시
+    작성할 때까지 해당 페이지에 나타나지 않습니다. 백엔드와 같은 연결 설정을
+    읽으므로 RDS IAM 인증과 `DATABASE_SCHEMA`에도 동작합니다.
+
+    Helm에서는 실행 중인 파드가 아직 이전 이미지라 이 스크립트가 없습니다.
+    `kubectl get deploy -n <namespace> -l app.kubernetes.io/instance=<release>`로
+    sdk-backend 디플로이먼트(이름이 `sdk-backend`로 끝나는 것)를 찾은 뒤,
+    그 파드를 복사한 파드로 0.17.0 이미지를 한 번 실행하세요.
+
+    ```
+    kubectl get deploy -n <namespace> <sdk-backend deployment> -o json \
+      | jq --arg img "ghcr.io/viamoss/moss-backend:0.17.0" '{apiVersion:"v1",kind:"Pod",metadata:{name:"moss-url-rules-check",namespace:.metadata.namespace},spec:(.spec.template.spec | .restartPolicy="Never" | .containers=[.containers[0] | .image=$img | .command=["python","scripts/check_url_rules.py","--json"] | del(.args,.livenessProbe,.readinessProbe,.startupProbe,.ports)])}' \
+      | kubectl apply -f -
+    kubectl wait -n <namespace> --for=jsonpath='{.status.phase}'=Succeeded pod/moss-url-rules-check --timeout=300s
+    kubectl logs -n <namespace> moss-url-rules-check
+    kubectl delete pod -n <namespace> moss-url-rules-check
+    ```
+
+    wait가 시간 초과되면 확인이 실패한 것이며, `kubectl logs`에 이유가
+    나옵니다. 다시 실행하기 전에 파드를 지우세요. 업그레이드 뒤에는
+    업그레이드한 sdk-backend에서 실행합니다.
+
+    ```
+    kubectl exec -n <namespace> deploy/<sdk-backend deployment> -- python scripts/check_url_rules.py --json
+    ```
+  - **SDK나 확장 프로그램보다 백엔드를 먼저 업그레이드하세요.** 이전
+    백엔드는 별점 평가를 거부하므로 세션 평가가 기록되지 않고, 도움안됨에
+    붙은 이유와 의견은 오류 없이 버립니다.
+  - **데이터 보존.** 0.16.x에서는 마이그레이션에 설정할 것이 없으며, 모든
+    애플리케이션의 자동 삭제가 꺼진 상태로 올라옵니다. 차트의 보존
+    CronJob(`lifecycle.*`, 기본값 꺼짐)을 설정하고 애플리케이션 관리자가 자동
+    삭제를 켜기 전까지는 아무것도 삭제되지 않습니다. CronJob은 바로 실행되지
+    못한 사용자 데이터 삭제도 마무리합니다. 절차는 차트 README의 Data
+    retention 절에 있습니다. `lifecycle.provisionRole: true`를 쓰면
+    마이그레이션 자격 증명에 `CREATEROLE` 권한이 필요합니다. 0.16.x에서 정한
+    API 로그 보관 기간은 0.16.x가 적용한 적이 없으므로 옮겨지지 않습니다.
+    데이터 및 개인정보에서 기간을 정하세요.
+  - **버킷 이름.** 차트의 버킷 검사가 `DOM_SNAPSHOTS_BUCKET`
+    (`global.storageBuckets.domSnapshots`)도 확인합니다. 업그레이드 전에
+    사용 중인 values로 차트를 렌더링해 보세요.
+  - **공유 스토리지의 답변 이미지.** 공유 S3 엔드포인트를 쓰면, 다시 호스팅한
+    지식 베이스 이미지는 지정한 버킷의 것만 답변에 표시됩니다. Helm에서는
+    `global.storageBuckets.kbImages`로 지정하며, 워커의 `STORAGE_BUCKET`이
+    `worker.env`에 있으면 자동으로 정해집니다. 그 밖에는 sdk-backend에
+    `KB_IMAGES_BUCKET`을 설정합니다. 설정하지 않으면 해당 이미지는 대체
+    텍스트로 표시되고, 시작 시 경고가 이를 알립니다.
+  - **외부 주소.** 100.64.0.0/10(CGNAT이며 일부 VPC 구성에서도 씀),
+    fec0::/10, 168.63.129.16에 있는 호스트로의 API 액션과 MCP 연결은 이제
+    거부됩니다. 이때 API 액션은 시험 실행(dry run)으로 처리됩니다.
+  - **Zendesk.** 프록시 없이 연결할 때, Zendesk 호스트의 DNS 응답이 공인
+    주소가 아니면 Moss는 연결하지 않으며, 메시지에
+    `ZENDESK_ALLOW_PRIVATE_RESOLUTION`이 표시됩니다. 네트워크가 의도적으로
+    zendesk.com을 내부 주소로 보내는 경우에만 이 설정을 켜세요. 이 설정을
+    켜도 링크 로컬, 루프백, 클라우드 메타데이터 주소는 허용되지 않습니다.
+  - 업그레이드는 애플리케이션 DB 마이그레이션 26개와 지식 DB 마이그레이션
+    1개를 적용하며, 이전 버전에서
+    만든 데이터베이스도 처리합니다. 되돌릴 수 없으므로 먼저 데이터베이스를
+    백업하세요. 0.16.25로의 `helm rollback`은 데이터베이스를 복원하지 않고도
+    지원됩니다. 먼저 Intercom 지식 소스를 모두 지우고, 저장된
+    `chrome.header.newChatStyle`도 해제하세요. 이전 chrome 스키마가 새 키를
+    거부하면 조회할 때 chrome 설정 전체가 빠질 수 있습니다. 0.16.25에서는 PII
+    필터가 동작하지 않으므로, 다시 업그레이드할 때까지 텍스트가 필터 없이
+    저장되고 모델에 전달됩니다.
+  - **오래 걸리는 단계.** 마이그레이션 하나가 이전 세션 형식으로 기록된
+    대화를 현재 형식으로 복사하며, 데이터베이스가 크면 가장 오래 걸리는
+    단계입니다. 업그레이드 전에 이전 세션 로그에 남은 세션 수를 세세요:
+    `SELECT count(*) FROM chat_sessions WHERE session_model <> 'new'`.
+    `helm upgrade`는 `--timeout <N>m`으로 실행하며, N은 10에 그 수를
+    1,000으로 나눈 값을 더한 것입니다(최소 30). 그래도 시간이 초과되면
+    마이그레이션 Job은 계속 실행됩니다.
+    `kubectl get job -n <namespace> -l app.kubernetes.io/component=migrate`로
+    Job 이름을 찾고,
+    `kubectl wait --for=condition=complete job/<migrate job> -n <namespace> --timeout=2h`로
+    끝나기를 기다린 뒤, 같은 `helm upgrade`를 다시 실행하세요.
+    마이그레이션은 멈춘 곳에서 이어지며, 같은 것을 두 번 복사하지 않습니다.
+- **URL 규칙.** 모든 가이드의 URL 규칙은 서버와 브라우저 모두에서, 주소
+  길이에만 비례하는 시간 안에 실행되는 매처로 주소의 앞 4,096자에 대해
+  확인합니다. 규칙은 더 엄격한 형식의 정규식이며 최대 500자입니다. 이 형식을
+  벗어난 저장된 규칙은 다시 쓰이지 않고 일치하지 않게 되므로, 규칙을 다시
+  작성할 때까지 그 가이드는 해당 페이지에서 시작되지 않고 카드도 전달되지
+  않습니다. 그런 규칙을 저장하면 지원하지 않는 부분을 밝히며 거부됩니다.
+- **답변의 링크와 이미지.** 답변은 페이지 자체의 출처, 답변이 인용한 문서의
+  호스트, 애플리케이션의 허용 도메인과 지식 베이스 호스트,
+  `replyLinks.allowedHosts`에 추가한 호스트에서만 링크를 열고 이미지를
+  불러옵니다. 그 밖의 링크는 텍스트로, 이미지는 대체 텍스트로 표시되며 요청을
+  보내지 않습니다. 여러 소유자가 함께 쓰는 스토리지 호스트에서는
+  애플리케이션 자체의 버킷만 허용합니다.
+- **감사 이벤트와 삭제 증명의 보관 기간은 운영자 설정입니다.** dashboard-backend의
+  `AUDIT_RETENTION_DAYS`와 `DELETION_PROOF_RETENTION_DAYS`로 정합니다. 새 설정
+  `AUDIT_MINIMUM_DAYS`는 사용자 데이터를 삭제할 때, 그 일수보다 최근의 내용
+  없는 관리자 감사 이벤트를 남깁니다. 이 값이 `AUDIT_RETENTION_DAYS`나
+  설정된 `DELETION_PROOF_RETENTION_DAYS`보다 크면 dashboard-backend가 시작되지
+  않습니다.
+- **API 로그.**
+  - 로그를 조회하거나 내보내면 감사 로그에 기록됩니다. 이 기록을 남기지
+    못하면 조회나 내보내기는 503 `audit_unavailable`로 거부됩니다.
+  - API 로그 접근 키(`X-Traffic-API-Key`)는 읽기 전용입니다. 이 키로 로그를
+    삭제하거나 기록 설정을 바꾸면 403 `api_key_read_only`를 받습니다.
+  - 삭제에는 시간 범위의 양 끝이 모두 필요합니다. 법적 보존 중이면 423으로
+    거부되고, 운영자가 정한 최소 기간 안의 로그는 남습니다.
+  - 저장된 본문은 `+`와 국가 번호로 쓴 전화번호도 가립니다.
+- **크기 제한.**
+  - 10MiB가 넘는 스크린샷은 업로드하지 않으며, 그 턴은 스크린샷 없이
+    답합니다.
+  - 세션 녹화: 업로드당 16MiB와 이벤트 12,000개, 세션당 64MiB, 이벤트
+    100,000개, 업로드 720회까지입니다. 세션 한도를 넘으면 SDK는 그 세션의
+    업로드를 멈춥니다.
+  - 지식 업로드 한 번(한 요청으로 보내는 Markdown 파일)은 10MiB까지입니다.
+    더 큰 업로드는 여러 요청으로 나누세요.
+- **수집(ingestion) API.** 작업 ID는 `<source id>:<UUID>` 형식이며, 업그레이드
+  전에 시작한 작업은 상태 조회와 취소에 404를 받습니다. 500 응답의 `detail`은
+  문자열 대신 `{code, message, reference}` 객체입니다. `steps`와
+  `chunking_strategy`는 빼세요. 파이프라인은 서버가 정합니다. 이 값을 지정한
+  요청, `trigger-step`, 소스별 작업 기록 조회는 403을 받습니다.
+- **세션 CSV 내보내기**에 `session_score`, `message_feedback_reason`,
+  `message_feedback_comment` 열이 기존 열 뒤에 추가됩니다.
+- **판단 제공자가 고른 선택 단계**는 단계 배지가 켜져 있으면 선택지를 한
+  문장으로 알려 줍니다. 예: "**Team** 또는 **Company**를 클릭하세요."
+- **Gemini 사고 수준.** `LLM_THINKING`을 설정하지 않으면 Gemini 모델은 이제
+  가장 낮은 사고 수준을 씁니다. 단, Gemini 4 Hydrogen은 Google의 기본 수준을
+  씁니다. 수준을 정하려면 `LLM_THINKING`을 설정하세요.
+  `LLM_THINKING`에 숫자를 넣거나 `LLM_CLIENT_TYPE=openrouter`를 쓰면 이제
+  백엔드가 시작되지 않습니다.
+- **`LLM_CLIENT_TYPE=openai`에서의 `LLM_THINKING`.** 이전에는 무시되었지만,
+  이제 OpenAI 자체 API에서는 Responses API를 통해 추론 강도(reasoning
+  effort)로 전달됩니다. 추론하지 않는 모델에서는 설정하지 마세요. OpenAI
+  유형 설치에서는 백엔드의 다른 모델 호출도 같은 `LLM_API_BASE`,
+  `LLM_ADDITIONAL_HEADERS`, 추론 강도를 씁니다.
+- **세션 리플레이는 폼 필드를 가립니다.** `redactAllInputs`를 지정하지 않으면
+  (기본값은 켜짐), 리플레이는 모든 입력란, 텍스트 영역, 선택 목록, 편집 가능한
+  영역과 가림 처리한 영역을 빈 상자로 보여 줍니다. `data-moss-unredact`는
+  리플레이에 적용되지 않으며, 잘못된 `redactionSelectors` 항목이 하나라도
+  있으면 그 세션의 녹화가 멈추고 콘솔 오류만 남습니다.
+- **제거된 SDK 옵션:** `displayMode: 'headless'`, `headless`,
+  `forcedActivationFlow`, `useAgent().displayMode`. TypeScript에서는 오류로
+  표시되고, 실행 중에는 무시되며 채팅은 평소대로 동작합니다.
+- **프로시저 지침**은 8,000자까지입니다. 더 긴 지침은 줄여야 저장할 수
+  있습니다. 그 길이까지는 이제 모델에 모두 전달되며, 0.16.25는 앞 4,000자만
+  썼습니다.
+- **웹사이트 소스:** 추가하면 robots.txt, 사이트맵, 링크에서 페이지를 최대
+  300개까지 찾고, robots.txt가 막은 경로는 건너뜁니다.
+- **대시보드의 Guidance Flows 페이지가 제거되었습니다.** 이미 저장된
+  가이드는 계속 동작합니다.
+- **지원 티켓 뒤에도 대화가 이어집니다.** 티켓이 접수되거나, 호스트의
+  `onSupportTicket` 처리기가 실패를 알리거나, 처리기가 응답하지 않아도
+  입력란은 그대로 있고, 이어지는 질문은 같은 대화로 전달됩니다. 티켓 카드는
+  결과 줄을 유지하며, 실패하면 호스트의 티켓 링크(`chrome.footer.openTicket`)도
+  표시합니다. 실패한 티켓에는 더 이상 다시 시도 버튼이 없으며, 다시 요청하면
+  새 티켓 초안을 만듭니다. 티켓 때문에 멈춘 가이드는 그대로 끝납니다.
+
+### 수정
+
+- **대화상자를 열고 닫을 때의 채팅 스크롤.** 위젯이 기본 모달 대화상자 안팎으로
+  이동하거나 호스트가 다시 연결돼도 메시지 목록의 위치를 유지합니다.
+- **큰 페이지에서 실행하는 프로시저.** 큰 페이지를 읽은 결과가 별도의 도구
+  결과 한도를 소진해 프로시저를 일찍 끝내지 않습니다. 확인 카드에는 액션이
+  반환한 원본 결과가 더 이상 표시되지 않습니다.
+- **"도움이 안 됐어요"라는 답장으로 제안된 가이드가 시작되지 않습니다.**
+  제안을 거절하거나 답변이 도움이 되지 않았다고만 말하는 답장에는 답변하고,
+  가이드는 제안된 상태로 남습니다.
+- **일반 텍스트로 돌아온 답변**은 글은 남았지만 하이라이트, 가이드 제안,
+  계획을 잃었습니다. 이제 Moss가 구조를 한 번 더 요청하며, 글은 그대로
+  유지합니다.
+- **목록이나 객체인 Zendesk 티켓 값**이 코드처럼 보이는 텍스트로
+  접수되었습니다. 이제 목록은 "; "로 이은 텍스트로 접수하고, 텍스트로 읽을 수
+  없는 값은 제공되지 않은 것으로 처리합니다.
+- **새로 고침이나 링크 이동 뒤에 가이드가 지원 티켓 카드 뒤에서 재개되지
+  않습니다.** 카드를 보내거나, 거절하거나, 닫을 때까지 기다립니다.
+- **세션에서 승격한 가이드**가 자기 페이지에 일치하지 않았습니다. 이제 페이지를
+  경로 패턴으로 저장하고 경로 패턴으로 확인하므로, 해당 페이지에 나타나기
+  시작할 수 있습니다.
+- **실패 항목 다시 시도**는 불러오기는 됐지만 색인에 실패한 페이지도 다시
+  처리하며, 대시보드는 그런 페이지만 실패한 소스에도 이 버튼을 보여 줍니다.
+- **분석의 일별, 시간별 차트**가 모든 설치 환경에서 보는 사람의 시간대를
+  따릅니다. 일부 자체 호스팅 환경에서는 보는 사람의 UTC 시차만큼 밀려
+  있었습니다.
+- **메시지 입력란 옆의 Next**가 입력란과 같은 높이입니다.
+- **"Shift+Enter로 줄바꿈" 안내 문구**가 입력란의 오른쪽 가장자리에서
+  끝납니다. Next가 입력란 옆에 있으면 Next 아래까지 이어졌습니다. 입력란
+  필(pill)이 없는 레이아웃에서는 텍스트 상자 바로 아래에 표시됩니다. 입력
+  막대의 다른 요소는 움직이지 않습니다.
+- **브라우저 메서드 이름을 가진 컨트롤이 있는 폼**에서 Next나 Done을 눌러도
+  단계가 멈추지 않습니다.
+- **API 로그.** 알 수 없는 필터 값으로 삭제하면 범위의 로그가 모두
+  삭제되었습니다. 이제 422로 거부됩니다. 도중에 실패한 내보내기는 완전해
+  보이는 파일 대신 오류로 끝나며, 파일이 모자라면 대시보드는 아무것도 저장하지
+  않습니다.
+- **감사 로그**가 UTC보다 서쪽 시간대의 관리자에게 최근 몇 시간의 항목을
+  보여 주지 않았습니다. 이제 시간 범위를 UTC 시각으로 보냅니다.
+- **감사 로그 항목의 메타데이터 블록**이 항상 비어 있었습니다. 이제 감사
+  내보내기에서처럼 항목의 메타데이터를 보여 줍니다.
+
+### 보안
+
+- **가이드 URL 규칙**은 주소 길이에만 비례하는 시간 안에 실행되므로, 조작된
+  규칙이나 주소가 서버나 사용자의 탭을 붙잡아 둘 수 없습니다.
+- **가이드 단계 완료**는 Moss가 그 대화에 준 단계에 대해서만 한 번 받으며,
+  SDK 요청 한도가 켜져 있으면 대화당 분당 120회까지 받습니다.
+- **스크린샷:** 질문은 해당 대화에 업로드한 스크린샷만 쓸 수 있으며,
+  스크린샷과 첨부 파일은 10MiB까지만 읽습니다.
+- **세션 녹화 업로드**는 요청당, 세션당 한도가 있습니다.
+- **대시보드의 API 프록시**는 모든 요청을 `/api/v1` 아래로 제한하고, 10MiB가
+  넘는 본문은 읽기 전에 거부합니다.
+- **외부 주소:** API 액션, MCP 연결, Zendesk는 모든 주소를 공인 주소에 관한
+  하나의 규칙으로 확인하며, Zendesk는 계정의 티켓 양식 엔드포인트에서만 다음
+  페이지를 따라갑니다.
+- **수집(ingestion):** 작업 상태 조회와 취소는 호출한 조직에 대해서만
+  응답하며, 오류 응답에는 내부 오류 문구가 들어가지 않습니다.
+- **답변**은 허용된 호스트에서만 링크를 열고 이미지를 불러옵니다.
+- **페이지 텍스트, 도움말 문서, 도구 결과**는 답변의 근거가 되는 내용으로만
+  다루며, 지시로 따르지 않습니다.
+- **승격한 가이드**는 애플리케이션 자체 사이트의 웹 페이지로만 이동합니다.
+- **위젯 안의 디버그 도구**는 호스트 페이지의 `debugMode`로만 켜집니다.
+  대시보드의 디버그 스위치는 제거되었습니다.
+- **`CORS_ALLOWED_ORIGINS`는 더 이상 SDK 경로를 좁히지 않습니다.** 대시보드
+  경로에만 적용됩니다. 각 애플리케이션의 허용 도메인이 관문이므로, 모든
+  애플리케이션에 허용 도메인을 채우고 `SDK_REQUIRE_ORIGIN=true`를 설정하세요.
+  이 설정은 Origin이나 Referer가 없는 SDK 요청과, 허용 도메인이 없는
+  애플리케이션의 모든 요청을 거부합니다.
+- **API 키**는 설정된 호스트로만 전달됩니다. 자체 호스팅 환경에서는 셀프
+  힐링과 스크린샷 분석 설정의 일부 조합이 한 제공자의 키를 다른 제공자에게
+  보냈습니다.
+
+### 알려진 문제
+
+- 제안된 가이드가 "도움이 안 됐어요" 같은 답장으로 시작되지 않게 하는 서버
+  확인은 영어만 읽습니다. 다른 언어에서는 모델에게 준 지시만으로 막습니다.
+
 ## 0.16.26 — 2026-11-18
 
 SDK만 바뀐 릴리스입니다. `@viamoss/moss-sdk` 0.16.26이 npm에 게시되었습니다.
