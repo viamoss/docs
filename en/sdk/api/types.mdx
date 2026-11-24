@@ -1,12 +1,12 @@
 ---
 title: "Types"
-description: "TypeScript interfaces and types exported by the Moss SDK"
+description: "TypeScript types exported by the Moss SDK"
 icon: "brackets-curly"
 ---
 
 # TypeScript Types
 
-The Moss SDK is written in TypeScript and exports all public types for use in your application.
+The npm package ships TypeScript declarations. Import types from the package root:
 
 ```tsx
 import type {
@@ -14,9 +14,12 @@ import type {
   AgentState,
   ChatMessage,
   DefaultModalPosition,
-  LogLevel,
+  StabilityConfig,
 } from '@viamoss/moss-sdk';
+import { LogLevel } from '@viamoss/moss-sdk'; // an enum, so a value import
 ```
+
+The types below match 0.17.0. Your editor shows the same documentation from the package's declarations.
 
 ---
 
@@ -24,50 +27,47 @@ import type {
 
 ### AgentState
 
-The return type of the `useAgent()` hook. Contains all state and methods for controlling the assistant.
+What `useAgent()` returns. See [Hooks](/en/sdk/api/hooks) for how each member behaves.
 
 ```typescript
 interface AgentState {
-  // Connection and chat state
+  // Connection and chat
   isConnected: boolean;
   isChatOpen: boolean;
-
-  // Chat functionality
   messages: ChatMessage[];
-  sendMessage: (text: string) => Promise<void>;
+  sendMessage: (text: string, attachments?: AttachmentRef[]) => Promise<void>; // attachments: from 0.17.0
   openChat: (defaultPosition?: DefaultModalPosition) => void;
   closeChat: () => void;
   toggleChat: (defaultPosition?: DefaultModalPosition) => void;
   startNewChat: () => Promise<void>;
+  activeChatSessionId: string | null;
 
-  // Loading states
+  // Progress
   isWaitingForResponse: boolean;
+  isRetrievalExpected: boolean;
 
-  // Feature flags
+  // Settings in effect
   useVision: boolean;
   debugMode: boolean;
-  isLanguageSelectionEnabled: boolean;
 
-  // Debug only
-  currentApiUrl?: string;
-  captureContext: () => Promise<{
-    screenshotDataUrl: string | null;
-    pageText: string | null;
-  } | null>;
-
-  // Guide mode
+  // Guides
   chatMode: 'chat' | 'guide';
   suggestsGuideMode: boolean;
+  planPhase: 'offered' | 'executing' | null | undefined;
   continueGuide: () => Promise<void>;
   acceptGuideSuggestion: () => Promise<void>;
 }
 ```
 
+<Note>
+    The declared `AgentState` has a few more members, for Moss's own debug tools and for features in development. They are not covered here and can change without notice. From 0.17.0, `displayMode` is gone.
+</Note>
+
 ---
 
 ### ChatMessage
 
-Represents a single message in the conversation.
+One message in the chat.
 
 ```typescript
 interface ChatMessage {
@@ -75,37 +75,80 @@ interface ChatMessage {
   sender: 'user' | 'assistant';
   text: string;
   timestamp: number;
+  userFeedback?: 'helpful' | 'unhelpful';
+  sources?: MessageSource[];
+  isHallucinated?: boolean;
+  attachments?: ChatMessageAttachment[]; // from 0.17.0
+  problem?: MessageProblem;              // from 0.17.0
+  activity?: MessageActivity;            // from 0.17.0
 }
 ```
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `id` | `string` | Unique message identifier |
-| `sender` | `'user' \| 'assistant'` | Who sent the message |
-| `text` | `string` | Message content (may contain Markdown) |
-| `timestamp` | `number` | Unix timestamp in milliseconds |
+| Field | Type | Meaning |
+|-------|------|---------|
+| `id` | `string` | Unique message ID |
+| `sender` | `'user' \| 'assistant'` | Who sent it |
+| `text` | `string` | The text, which may contain Markdown |
+| `timestamp` | `number` | When it was added, in milliseconds since the Unix epoch |
+| `userFeedback` | `'helpful' \| 'unhelpful'` | The user's thumbs up or down on an answer |
+| `sources` | `MessageSource[]` | Help articles the answer cites, shown under it |
+| `isHallucinated` | `boolean` | `true` when the answer pointed at an element Moss couldn't find on the page |
+| `attachments` | `ChatMessageAttachment[]` | Files sent with a user message: `{ filename: string }` each |
+| `problem` | `MessageProblem` | Set on an answer whose turn had a problem |
+| `activity` | `MessageActivity` | The steps Moss took for the turn behind an answer, when the backend reported them (`streamActivity`) |
+
+```typescript
+interface MessageSource {
+  title: string;
+  url?: string | null;
+  source?: string | null;
+  readTimeMinutes?: number | null;
+  linkScope?: 'host' | 'prefix' | null;   // from 0.17.0
+  linkPrefix?: string | null;             // from 0.17.0
+}
+```
+
+From 0.17.0, these types describe a message's problem and the steps behind it:
+
+```typescript
+interface MessageProblem {
+  failed: boolean;                     // the turn gave no answer; the text is the failure
+  notes: string[];                     // what went wrong, one line each
+  fixBy: 'user' | 'admin' | 'moss';    // who can act on it
+  action?: 'retry' | 'continue';       // the step offered while this is the last message
+  reference?: string;                  // what to quote to support
+}
+
+interface MessageActivity {
+  steps: MessageActivityStep[];
+}
+
+interface MessageActivityStep {
+  id: string;
+  kind: string;                        // 'retrieval', a tool's name, or 'tool'
+  state: 'ok' | 'error';
+  result?: { count?: number; titles?: string[]; status?: string };
+}
+
+interface ChatMessageAttachment {
+  filename: string;
+}
+```
 
 ---
 
 ### DefaultModalPosition
 
-Position and size configuration for the chat modal.
+The position and size `openChat()` and `toggleChat()` accept.
 
 ```typescript
 interface DefaultModalPosition {
-  x: number;
-  y: number;
+  x: number;       // from the viewport's left edge, in CSS pixels
+  y: number;       // from the viewport's top edge, in CSS pixels
   width: number;
   height: number;
 }
 ```
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `x` | `number` | Horizontal position from left edge (pixels) |
-| `y` | `number` | Vertical position from top edge (pixels) |
-| `width` | `number` | Modal width (pixels) |
-| `height` | `number` | Modal height (pixels) |
 
 ---
 
@@ -113,87 +156,94 @@ interface DefaultModalPosition {
 
 ### MossSDKConfig
 
-The configuration object passed to `AgentProvider`.
+The `config` prop of `AgentProvider`, and the shape of `window.mossSettings` on the CDN script. See [Configuration](/en/sdk/configuration) for what each option does.
 
 ```typescript
+// Abridged: options reserved for Moss's own tools are left out.
 type MossSDKConfig = {
   // Required
   apiUrl: string;
   userId: string;
+
+  // Authentication
+  jwt?: string;
+  getJwt?: () => Promise<string>;
+  getBridgeCode?: () => Promise<string>;               // from 0.17.0
+
+  // Page data and privacy
+  pageContext?: 'full' | 'metadata' | 'none';
+  redactAllInputs?: boolean;
+  redactionSelectors?: string[];
+  useVision?: boolean;
+  screenshotMode?: ScreenshotMode;
+  enableSessionRecording?: boolean;
+  enableScreenHistoryRecording?: boolean;
+  observeTargetSelector?: string;
+  userMetadata?: Record<string, string | number | boolean | string[]>;
+  collectionEnabled?: boolean;                         // from 0.17.0
+  collectionControl?: MossCollectionControl;           // from 0.17.0
+  pageSanitizationScript?: (document: Document) => void;
+
+  // Behavior
+  language?: 'en' | 'ko';
+  sessionConfig?: {
+    inactivityTimeout?: number;                        // minutes
+    maxSessionAge?: number;                            // hours
+    showNotification?: boolean;
+    onReturnAfterInactivity?: 'new_chat' | 'ask';
+  };
+  stability?: StabilityConfig;
+  closingChatEndsGuide?: boolean;
+  enableProactiveGuides?: boolean;
+  streamActivity?: boolean;                            // from 0.17.0
+  replyLinks?: { allowedHosts?: string[] };            // from 0.17.0
+
+  // Appearance
+  appearance?: AppearanceInput;
+  pageKey?: string;
+
+  // Callbacks
+  onSupportTicket?: (handoff: SupportTicketHandoff) => Promise<SupportTicketOutcome>;
+  onEvent?: (event: MossEvent) => void;
+  eventQueryText?: 'omit' | 'include' | ((text: string) => string);
+  onError?: (error: MossError) => void;                // from 0.17.0
+
+  // Diagnostics
+  logLevel?: LogLevel;
+  debugMode?: boolean;
 } & (
   | { applicationId: string; applicationName?: string }
   | { applicationName: string; applicationId?: string }
-) & {
-  // Authentication
-  getJwt?: () => Promise<string>;
-  jwt?: string;
-
-  // Display
-  language?: 'en' | 'ko';
-  screenshotMode?: ScreenshotMode;
-  appearance?: AppearanceInput;
-  displayMode?: 'chat' | 'headless';
-  headless?: HeadlessConfig;
-
-  // Behavior
-  useVision?: boolean;
-  observeTargetSelector?: string;
-  pageSanitizationScript?: (document: Document) => void;
-  enableSessionRecording?: boolean;
-  enableScreenHistoryRecording?: boolean;
-
-  // Privacy & redaction
-  redactAllInputs?: boolean;
-  redactionSelectors?: string[];
-  userMetadata?: Record<string, string | number | boolean | string[]>;
-
-  // Integrations
-  onSupportTicket?: (handoff: SupportTicketHandoff) => Promise<SupportTicketOutcome>;
-
-  // Session
-  sessionConfig?: SessionConfig;
-
-  // Debug
-  logLevel?: LogLevel;
-  debugMode?: boolean;
-
-  // Stability
-  stability?: StabilityConfig;
-};
+);
 ```
 
-<Info>
-  At least one of `applicationId` or `applicationName` is required.
-</Info>
+At least one of `applicationId` and `applicationName` is required; use `applicationId`. From 0.17.0, `displayMode`, `headless` and `forcedActivationFlow` are gone, and TypeScript rejects them. The exported types `HeadlessConfig`, `ForcedActivationFlowConfig` and `ForcedActivationFlowDefinition` are gone too, so an import of them no longer compiles.
+
+`sessionConfig` has no exported type of its own. Refer to it as `NonNullable<MossSDKConfig['sessionConfig']>`. See [Sessions](/en/sdk/api/session).
 
 ---
 
 ### ScreenshotMode
 
-How screenshots are captured for AI context.
-
 ```typescript
 type ScreenshotMode = 'fullpage' | 'viewport';
 ```
 
-| Value | Description |
-|-------|-------------|
-| `'fullpage'` | Captures the entire scrollable page |
-| `'viewport'` | Captures only the visible viewport |
+It has no effect on chat screenshots in 0.17.0; see [Page data](/en/sdk/page-data#vision-screenshots).
 
 ---
 
 ### LogLevel
 
-Logging verbosity levels.
+Console verbosity. An enum: pass `LogLevel.DEBUG`, not the string `'DEBUG'`.
 
 ```typescript
 enum LogLevel {
   DEBUG = 1,
-  INFO = 2,
+  INFO = 2,    // default
   WARN = 3,
   ERROR = 4,
-  SILENT = 5,  // Disables all logging
+  SILENT = 5,  // no logging
 }
 ```
 
@@ -202,152 +252,137 @@ import { LogLevel } from '@viamoss/moss-sdk';
 
 <AgentProvider config={{
   // ...
-  logLevel: LogLevel.DEBUG,
+  logLevel: LogLevel.WARN,
 }}>
-```
-
----
-
-### SessionConfig
-
-Configuration for session management behavior.
-
-```typescript
-interface SessionConfig {
-  /** Minutes of inactivity before starting new session (default: 30) */
-  inactivityTimeout?: number;
-  /** Hours before forcing new session (default: 2) */
-  maxSessionAge?: number;
-  /** Show notification when auto-starting session (default: true) */
-  showNotification?: boolean;
-}
 ```
 
 ---
 
 ## Stability Types
 
-### StabilityConfig
+See [Stability Tuning](/en/sdk/advanced#stability-tuning) for defaults and behavior.
 
-Configuration for page stability detection before context capture.
+### StabilityConfig
 
 ```typescript
 interface StabilityConfig {
-  /** Maximum total wait time across all layers (default: 15000ms) */
-  maxTotalWaitMs?: number;
-  /** Network idle timeout (default: 10000ms) */
-  networkTimeoutMs?: number;
-  /** Browser idle timeout (default: 500ms) */
-  browserIdleTimeoutMs?: number;
-  /** Enable/disable individual layers */
-  layers?: StabilityLayersConfig;
-  /** Loading indicators layer configuration */
-  loadingIndicators?: LoadingIndicatorsLayerConfig;
-  /** Layout shift layer configuration */
-  layoutShift?: LayoutShiftLayerConfig;
-  /** DOM mutations layer configuration */
-  domMutations?: DOMMutationsLayerConfig;
-  /** Frame readiness layer configuration */
-  frameReadiness?: FrameReadinessLayerConfig;
-  /** Resource quiet layer configuration */
-  resourceQuiet?: ResourceQuietLayerConfig;
-  /** After page reload handling */
   afterReload?: {
-    enabled?: boolean;
-    pendingTTL?: number;
-    storageKey?: string;
+    enabled?: boolean;                  // default false
+    pendingTTL?: number;                // ms, default 30000
   };
+  maxTotalWaitMs?: number;              // default 15000
+  networkTimeoutMs?: number;            // default 10000
+  browserIdleTimeoutMs?: number;        // default 500
+  layers?: StabilityLayersConfig;
+  loadingIndicators?: LoadingIndicatorsLayerConfig;
+  layoutShift?: LayoutShiftLayerConfig;
+  domMutations?: DOMMutationsLayerConfig;
+  frameReadiness?: FrameReadinessLayerConfig;
+  resourceQuiet?: ResourceQuietLayerConfig;
+  placeholderGuard?: PlaceholderGuardConfig;
 }
 ```
-
----
 
 ### StabilityLayersConfig
 
-Toggle individual stability detection layers.
-
 ```typescript
 interface StabilityLayersConfig {
-  /** Wait for network requests to complete (default: true) */
-  networkIdle?: boolean;
-  /** Wait for DOM mutations to stop (default: true) */
-  domMutations?: boolean;
-  /** Wait for loading indicators to disappear (default: false) */
-  loadingIndicators?: boolean;
-  /** Wait for same-origin frame documents to reach readyState 'complete' (default: true) */
-  frameReadiness?: boolean;
-  /** Wait for Resource Timing completions to go quiet (default: true) */
-  resourceQuiet?: boolean;
-  /** Wait for layout shifts to stop (default: false) */
-  layoutShift?: boolean;
-  /** Wait for browser idle via requestIdleCallback (default: true) */
-  browserIdle?: boolean;
-  /** Wait for one animation frame (default: true) */
-  finalFrame?: boolean;
+  networkIdle?: boolean;        // default true
+  domMutations?: boolean;       // default true
+  loadingIndicators?: boolean;  // default false
+  frameReadiness?: boolean;     // default true
+  resourceQuiet?: boolean;      // default true
+  layoutShift?: boolean;        // default false
+  browserIdle?: boolean;        // default true
+  finalFrame?: boolean;         // default true
 }
 ```
+
+### Layer settings
+
+```typescript
+interface DOMMutationsLayerConfig {
+  enabled?: boolean;                 // false turns the layer off
+  quietPeriodMs?: number;            // default 800
+  excludeSelectors?: string[];
+  countQuietBeforeLayer?: boolean;   // default true; from 0.17.0
+}
+
+interface LoadingIndicatorsLayerConfig {
+  enabled?: boolean;                 // false turns the layer off
+  selectors?: string[];              // replaces the built-in list
+  additionalSelectors?: string[];    // adds to the built-in list
+  excludeSelectors?: string[];
+  timeoutMs?: number;                // default 5000
+}
+
+interface LayoutShiftLayerConfig {
+  enabled?: boolean;                 // false turns the layer off
+  quietPeriodMs?: number;            // default 200
+  ignoreThreshold?: number;          // default 0.01
+}
+
+interface FrameReadinessLayerConfig {
+  enabled?: boolean;                 // false turns the layer off
+  quietMs?: number;                  // default 200
+  timeoutMs?: number;                // default 10000
+}
+
+interface ResourceQuietLayerConfig {
+  enabled?: boolean;                 // false turns the layer off
+  quietMs?: number;                  // default 500
+  timeoutMs?: number;                // default 8000
+}
+
+interface PlaceholderGuardConfig {
+  enabled?: boolean;                 // default true
+  timeoutMs?: number;                // default 4000; not counted in maxTotalWaitMs
+  selectors?: string[];
+  additionalSelectors?: string[];
+  excludeSelectors?: string[];
+}
+```
+
+A layer object's `enabled: true` does not turn on a layer that is off by default; use `layers` for that.
 
 ---
 
 ## Appearance Types
 
-### AppearanceInput
-
-Visual theme configuration.
+See [Appearance](/en/sdk/appearance) for what each part controls.
 
 ```typescript
-type AppearanceInput =
-  | 'blue'      // Default theme
-  | 'purple'    // Purple theme
-  | DeepPartial<MossAppearance>;  // Custom overrides
+type AppearanceInput = 'blue' | 'purple' | DeepPartial<MossAppearance>;
+
+type DeepPartial<T> = {
+  [P in keyof T]?: T[P] extends object ? DeepPartial<T[P]> : T[P];
+};
 ```
 
-```tsx
-// Use a preset
-appearance: 'purple'
+`MossAppearance` is the full theme. Its top-level keys are `name`, `colors`, `typography`, `spacing`, `radius`, `shadows`, `effects`, `inputBar`, `progressBar`, `modal`, and the optional `layout`, `chrome`, `zeroState` and `fallbackStates`. Pass only the values you want to change:
 
-// Custom overrides (merged with default)
-appearance: {
-  colors: {
-    primary: '#FF5722',
-  },
-}
+```tsx
+appearance: 'purple'                              // a preset
+
+appearance: { colors: { primary: '#FF5722' } }    // overrides on the default preset
 ```
 
 ---
 
-### MossAppearance
+## Other Exported Types
 
-Full appearance configuration object (for custom themes).
-
-```typescript
-interface MossAppearance {
-  name: string;
-  colors: {
-    primary: string;
-    primaryLight: string;
-    primaryLighter: string;
-    // ... more color tokens
-  };
-  typography: {
-    fontFamily: string;
-    fontSize: Record<string, string>;
-    // ... more typography tokens
-  };
-  spacing: Record<string, string>;
-  radius: Record<string, string>;
-  shadows: Record<string, string>;
-  effects: {
-    glassmorphism: boolean;
-    glassBlur: string;
-  };
-  // ... more configuration
-}
-```
-
-<Tip>
-  Use `DeepPartial<MossAppearance>` when providing custom overrides. Only specify the values you want to change.
-</Tip>
+| Type or value | What it is | Documented in |
+|---------------|------------|---------------|
+| `MossEvent`, `MossEventName`, `MossEventCommonProperties`, `MossEventPropertiesByName`, `MOSS_EVENT_NAMES` | Usage events for `onEvent` | [Events](/en/sdk/events) |
+| `MossError`, `FeedbackReason` | From 0.17.0. Problems for `onError`; thumbs-down reasons | [Events](/en/sdk/events) |
+| `SupportTicketHandoff`, `SupportTicketPayload`, `SupportTicketOutcome` | `onSupportTicket` input and result | [Support ticket handoff](/en/sdk/support-ticket-handoff) |
+| `AskMossOptions`, `AskMossResult`, `FloatingActionBarProps` | `askMoss()` and `FloatingActionBar` | [Guides and navigation](/en/sdk/guides-and-navigation) |
+| `ProactiveGuideConfig`, `ProactiveGuideRules`, `ProactiveGuideFrequency`, `ProactiveShoutOutContent`, `ProactiveUserMetadataPredicate`, `ProactiveCtaType` | Proactive guides set up in the dashboard | [Guides and navigation](/en/sdk/guides-and-navigation) |
+| `MossCollectionControl`, `CollectionIdentity` | From 0.17.0. The collection switch | [Page data](/en/sdk/page-data#collectioncontrol) |
+| `Persona` | `'admin' \| 'customer'`, for suggested-content variants | [Appearance](/en/sdk/appearance) |
+| `AttachmentRef`, `MAX_ATTACHMENT_FILES`, `TooManyAttachmentsError` | From 0.17.0. `sendMessage`'s attachments and their limit (5) | [Hooks](/en/sdk/api/hooks) |
+| `StabilityDiagnostics`, `StabilityLayerResult` | Timings of one stability wait | |
+| `BackendSDKConfig`, `BackendConfigResponse` | `BackendSDKConfig` is the application's dashboard settings, as `fetchAppConfig()` returns them; `BackendConfigResponse` is the HTTP response around it, `{ config, applicationId }` | [Configuration](/en/sdk/configuration#where-settings-come-from) |
 
 ---
 
@@ -360,12 +395,7 @@ import {
   useAgent,
   LogLevel,
 } from '@viamoss/moss-sdk';
-import type {
-  MossSDKConfig,
-  AgentState,
-  ChatMessage,
-  DefaultModalPosition,
-} from '@viamoss/moss-sdk';
+import type { MossSDKConfig, AgentState } from '@viamoss/moss-sdk';
 
 const config: MossSDKConfig = {
   apiUrl: 'https://moss-api.viamoss.ai',

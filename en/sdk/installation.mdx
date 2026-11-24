@@ -1,20 +1,18 @@
 ---
 title: "Installation"
-description: "Install the Moss SDK via NPM or CDN script tag"
+description: "Install the Moss SDK with npm or a CDN script tag"
 icon: "download"
 ---
 
 # Installation
 
-Choose the integration method that fits your application.
+Use the npm package in a React app, and the CDN script tag on any other page.
 
 <Info>
-    You'll need your **Application ID** from the [Moss Dashboard](https://dashboard.viamoss.ai). You'll also need a JWT signing key — see [Authentication](/en/sdk/authentication).
+    You need your **Application ID** from the [Moss Dashboard](https://dashboard.viamoss.ai), under **Configure > General**, and a JWT signing key; see [Authentication](/en/sdk/authentication).
 </Info>
 
-## NPM Package (React)
-
-For React 17+ applications.
+## npm Package (React)
 
 ### Install
 
@@ -22,9 +20,17 @@ For React 17+ applications.
 npm install @viamoss/moss-sdk
 ```
 
+The package is private: the npm account or token you install with needs access to it. If npm refuses the install, contact Moss.
+
+### Requirements
+
+- **React 18** and the matching `react-dom`. The package's peer dependency range also admits React 17, but the SDK is built and tested with React 18, and several features call hooks that only React 18 has (`useSyncExternalStore`, `useId`): the step loader (`appearance.chrome.loader: 'steps'`) and, from 0.17.0, `collectionControl` and the step lists shown with `streamActivity` and in recent chats. React 19 is outside the declared range.
+- **Node 18 or newer** to build. The package ships ES module and CommonJS builds with TypeScript declarations.
+- **A browser.** The SDK can't be imported on a server; see [Server-side rendering](#server-side-rendering).
+
 ### Basic Setup
 
-Add `AgentProvider` and `AssistantButton` to your app. The provider does **not** need to wrap your entire application — just the Moss components.
+Add `AgentProvider` and `AssistantButton` to your app. The provider does not need to wrap your whole app, only the Moss components.
 
 ```tsx App.tsx
 import { AgentProvider, AssistantButton } from '@viamoss/moss-sdk';
@@ -47,84 +53,164 @@ function App() {
 ```
 
 <Tip>
-    `AgentProvider` only needs to wrap the Moss UI components (`AssistantButton`). It observes the full page DOM regardless of where it sits in the React tree.
+    `AgentProvider` reads the whole page (`document.body`, or the element `observeTargetSelector` names) wherever it sits in the React tree. Only components that call `useAgent()` need to be inside it.
 </Tip>
 
-### Peer Dependencies
+### Server-side rendering
 
-The SDK requires React 17 or 18 as a peer dependency:
+The SDK touches browser globals as soon as it is imported, so importing it on the server throws a `ReferenceError` such as `document is not defined`. In a framework that renders on the server, load it in the browser only.
 
-```json
-{
-  "peerDependencies": {
-    "react": "^17.0.0 || ^18.0.0",
-    "react-dom": "^17.0.0 || ^18.0.0"
-  }
+**Next.js (App Router):** put the provider in its own component, and load that component with `dynamic(…, { ssr: false })` from a Client Component. `'use client'` alone is not enough: Next.js still renders Client Components on the server.
+
+```tsx app/moss.tsx
+'use client';
+
+import { AgentProvider, AssistantButton } from '@viamoss/moss-sdk';
+
+export default function Moss({ userId }: { userId: string }) {
+  return (
+    <AgentProvider config={{
+      apiUrl: 'https://moss-api.viamoss.ai',
+      applicationId: 'YOUR_APP_ID',
+      userId,
+      getJwt: () => fetch('/api/moss-token').then(r => r.json()).then(d => d.token),
+    }}>
+      <AssistantButton />
+    </AgentProvider>
+  );
 }
+```
+
+```tsx app/moss-loader.tsx
+'use client';
+
+import dynamic from 'next/dynamic';
+
+// ssr: false is only allowed inside a Client Component.
+const MossLoader = dynamic(() => import('./moss'), { ssr: false });
+
+export default MossLoader;
+```
+
+```tsx app/layout.tsx
+import MossLoader from './moss-loader';
+import { auth } from '@/lib/auth';
+
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const session = await auth();
+
+  return (
+    <html lang="en">
+      <body>
+        {children}
+        <MossLoader userId={session.user.id} />
+      </body>
+    </html>
+  );
+}
+```
+
+**Next.js (Pages Router):** load the same component with `dynamic(() => import('../components/moss'), { ssr: false })` in `_app.tsx`.
+
+**Other frameworks:** use the framework's client-only boundary, or import the SDK with a dynamic `import()` inside code that runs only in the browser.
+
+### Switching users
+
+The SDK reads `apiUrl`, `applicationId`, `jwt` and `getJwt` once, when `AgentProvider` mounts. When a different user signs in without a page load, remount the provider, for example with a `key`:
+
+```tsx
+<AgentProvider key={currentUser.id} config={{ /* ... */ userId: currentUser.id }}>
+  <AssistantButton />
+</AgentProvider>
 ```
 
 ---
 
 ## CDN Script Tag
 
-For any web application, regardless of framework.
+For any web page, whatever its framework.
 
 ### Basic Setup
 
-Add the script tag to your HTML. The SDK auto-initializes and renders the assistant button.
+Add the script tag. The script starts by itself and renders the assistant button.
 
 ```html
+<script>
+  window.mossSettings = {
+    getJwt: () => fetch('/api/moss-token').then(r => r.json()).then(d => d.token),
+  };
+</script>
 <script
   src="https://cdn.viamoss.ai/moss-sdk@latest.min.js?applicationId=YOUR_APP_ID&userId=USER_ID"
   data-api-base="https://moss-api.viamoss.ai"
 ></script>
 ```
 
+- **`applicationId`** comes only from the script URL.
+- **The user ID** comes from, in order: the script URL's `userId`, `window.mossSettings.userId`, the ID the script stored earlier in `localStorage` (`moss_user_id`), or a generated anonymous ID.
+- **The backend URL** comes from the `data-api-base` attribute, else `window.mossSettings.apiUrl`. Set one of them: without a backend URL, the widget can't start a chat.
+- **If you serve the script yourself,** keep `moss-sdk` in its file name. The script finds its own `<script>` tag by that text to read its URL.
+
 ### Configuration via JavaScript
 
-For more control, configure via `window.mossSettings` before the script loads:
+Set `window.mossSettings` before the script loads. It takes the same options as the npm `config`, functions included:
 
 ```html
 <script>
   window.mossSettings = {
     apiUrl: 'https://moss-api.viamoss.ai',
     userId: 'user-123',
-    jwt: 'YOUR_JWT_TOKEN',
+    getJwt: () => fetch('/api/moss-token').then(r => r.json()).then(d => d.token),
+    userMetadata: { plan: 'premium' },
     language: 'en',
   };
 </script>
 <script src="https://cdn.viamoss.ai/moss-sdk@latest.min.js?applicationId=YOUR_APP_ID"></script>
 ```
 
+The script first loads the application's settings from the dashboard, then applies `window.mossSettings` on top, key by key. An object you set, such as `appearance` or `sessionConfig`, replaces the dashboard's whole object for that key. If loading the dashboard settings fails, the script uses built-in defaults. See [Configuration](/en/sdk/configuration#where-settings-come-from).
+
 ### Global API
 
-After initialization, a global `window.MossSDK` object is available:
+Once the script has loaded, `window.MossSDK` is available:
 
 ```javascript
-// Reinitialize with new config
-await window.MossSDK.boot({ userId: 'new-user' });
+// Start again with changed settings. Merges them into window.mossSettings,
+// shuts down the running widget and starts a new one. Returns a promise.
+window.MossSDK.boot({ language: 'ko' });
 
-// Update user identity (triggers reinitialization)
-window.MossSDK.identify('user-456', { plan: 'premium' });
+// Switch user. Stores the ID and restarts the widget.
+window.MossSDK.identify('user-456');
 
-// Update config at runtime
+// Change settings and restart the widget.
 window.MossSDK.updateConfig({ language: 'ko' });
 
-// Tear down completely
+// Remove the widget. It stays off until you call boot().
 window.MossSDK.shutdown();
 ```
+
+- **`identify(userId, traits?)`:** if the script URL carries `userId`, that ID wins and `identify()` has no effect; leave `userId` out of the URL if you call it. The `traits` argument doesn't reach Moss; to describe the user, pass `userMetadata` through `boot()` or `window.mossSettings`.
+- **`boot()`, `identify()` and `updateConfig()` restart the widget** and load the dashboard settings again.
+- **`shutdown()`** unmounts the widget, removes its container and stops the script from starting itself again. Call it before you remove the script tag.
+- From 0.17.0, `window.MossSDK.CollectionControl` is available; see [Page data](/en/sdk/page-data#collectioncontrol).
+
+The CDN script always renders `AssistantButton`. Hooks, `FloatingActionBar`, `askMoss()`, `shouldStartMoss()` and `installModalDialogEscape()` are in the npm package only.
 
 ---
 
 ## Custom Triggers
 
-Open the assistant from any element using the `data-moss-trigger` attribute — no hooks required.
+Open the assistant from any element with the `data-moss-trigger` attribute. No hooks needed.
 
 ```html
-<button data-moss-trigger>Need Help?</button>
+<button data-moss-trigger>Need help?</button>
 ```
 
-This works with any element: buttons, links, nav items, or custom components. The SDK listens for clicks on elements with this attribute and toggles the chat modal.
+A click anywhere inside an element with the attribute opens the chat, or closes it if it is open. This works with both the npm package and the CDN script.
+
+- **The click's default action is prevented**, so an `<a href>` with `data-moss-trigger` opens the chat and does not navigate.
+- **A minimized chat** (from 0.17.0, with `appearance.chrome.guide.minimize`) is restored by a trigger instead of being closed.
+- **Unread badge (from 0.17.0).** If your application shows support conversations in the Moss panel, the SDK adds a small count badge, `<span data-moss-unread-badge>`, inside each trigger while the user has unread replies, and sets `data-moss-unread` on the trigger to the count. It sets `position: relative` on a trigger whose position is `static`, so the badge can sit at its corner.
 
 ### Examples
 
@@ -155,17 +241,15 @@ function HelpButton() {
 }
 ```
 
-<Tip>
-    The attribute works inside React components without needing `useAgent()`. Useful for simple triggers without state management.
-</Tip>
+The trigger doesn't need to be inside `AgentProvider`: the provider listens for clicks on the whole document.
 
 ### Without AssistantButton
 
-You can use custom triggers instead of the built-in button:
+Render the provider without `AssistantButton`, and use your own triggers:
 
 ```tsx
 <AgentProvider config={config}>
-  {/* Custom trigger only - no AssistantButton */}
+  {/* Custom trigger only, no AssistantButton */}
   <nav>
     <button data-moss-trigger>Help</button>
   </nav>
@@ -173,14 +257,18 @@ You can use custom triggers instead of the built-in button:
 </AgentProvider>
 ```
 
+<Note>
+    With `collectionEnabled: false`, or a `collectionControl` that is disabled, the provider renders none of its children. If you use either, keep your app outside the provider.
+</Note>
+
 ### TypeScript Constant
 
-The SDK exports the attribute name for programmatic use:
+The SDK exports the attribute name:
 
 ```tsx
 import { MOSS_TRIGGER_ATTR } from '@viamoss/moss-sdk';
 
-// MOSS_TRIGGER_ATTR = 'data-moss-trigger'
+// MOSS_TRIGGER_ATTR === 'data-moss-trigger'
 <button {...{ [MOSS_TRIGGER_ATTR]: true }}>Help</button>
 ```
 
@@ -190,49 +278,22 @@ import { MOSS_TRIGGER_ATTR } from '@viamoss/moss-sdk';
 
 <Tabs>
   <Tab title="Next.js (App Router)">
-    ```tsx app/layout.tsx
-    import { AgentProvider, AssistantButton } from '@viamoss/moss-sdk';
-    import { auth } from '@/lib/auth';
+    See [Server-side rendering](#server-side-rendering) for the npm package. With the script tag instead:
 
-    export default async function RootLayout({ children }) {
-      const session = await auth();
-
-      return (
-        <html>
-          <body>
-            {children}
-            <MossAssistant userId={session.user.id} />
-          </body>
-        </html>
-      );
-    }
-
-    // Client component for Moss
-    'use client';
-    function MossAssistant({ userId }: { userId: string }) {
-      return (
-        <AgentProvider config={{
-          apiUrl: 'https://moss-api.viamoss.ai',
-          applicationId: 'YOUR_APP_ID',
-          userId,
-          getJwt: () => fetch('/api/moss-token').then(r => r.json()).then(d => d.token),
-        }}>
-          <AssistantButton />
-        </AgentProvider>
-      );
-    }
-    ```
-  </Tab>
-
-  <Tab title="Next.js (Script Tag)">
     ```tsx app/layout.tsx
     import Script from 'next/script';
 
-    export default function RootLayout({ children }) {
+    export default function RootLayout({ children }: { children: React.ReactNode }) {
       return (
-        <html>
+        <html lang="en">
           <body>
             {children}
+            {/* Settings first, so the SDK finds them when it starts */}
+            <Script id="moss-settings" strategy="beforeInteractive">
+              {`window.mossSettings = {
+                getJwt: () => fetch('/api/moss-token').then(r => r.json()).then(d => d.token),
+              };`}
+            </Script>
             <Script
               src="https://cdn.viamoss.ai/moss-sdk@latest.min.js?applicationId=YOUR_APP_ID&userId=USER_ID"
               data-api-base="https://moss-api.viamoss.ai"
@@ -256,7 +317,7 @@ import { MOSS_TRIGGER_ATTR } from '@viamoss/moss-sdk';
       window.mossSettings = {
         apiUrl: 'https://moss-api.viamoss.ai',
         userId: 'USER_ID',
-        jwt: 'YOUR_JWT_TOKEN',
+        getJwt: () => fetch('/api/moss-token').then(r => r.json()).then(d => d.token),
       };
 
       script = document.createElement('script');
@@ -266,6 +327,8 @@ import { MOSS_TRIGGER_ATTR } from '@viamoss/moss-sdk';
     });
 
     onUnmounted(() => {
+      // Unmount the widget first; removing the script tag alone leaves it on the page.
+      window.MossSDK?.shutdown();
       if (script && document.head.contains(script)) {
         document.head.removeChild(script);
       }
@@ -289,7 +352,7 @@ import { MOSS_TRIGGER_ATTR } from '@viamoss/moss-sdk';
         (window as any).mossSettings = {
           apiUrl: 'https://moss-api.viamoss.ai',
           userId: 'USER_ID',
-          jwt: 'YOUR_JWT_TOKEN',
+          getJwt: () => fetch('/api/moss-token').then(r => r.json()).then(d => d.token),
         };
 
         this.script = document.createElement('script');
@@ -299,6 +362,8 @@ import { MOSS_TRIGGER_ATTR } from '@viamoss/moss-sdk';
       }
 
       ngOnDestroy() {
+        // Unmount the widget first; removing the script tag alone leaves it on the page.
+        (window as any).MossSDK?.shutdown();
         if (this.script && document.head.contains(this.script)) {
           document.head.removeChild(this.script);
         }
@@ -315,6 +380,6 @@ import { MOSS_TRIGGER_ATTR } from '@viamoss/moss-sdk';
         Set up JWT token authentication
     </Card>
     <Card title="Configuration" icon="gear" href="/en/sdk/configuration">
-        Configure SDK behavior and options
+        Every SDK option
     </Card>
 </CardGroup>

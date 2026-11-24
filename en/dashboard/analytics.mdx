@@ -1,0 +1,263 @@
+---
+title: "Analytics, Users and API Logs"
+description: "What each Analytics tab measures and how it is counted, the Users page, and API logs"
+icon: "chart-line"
+---
+
+The **Analytics** page shows how an application is used and how well it answers: conversations over time, ratings, the questions people ask, how many conversations look resolved, where the knowledge base falls short, and which articles get used. This page defines every number on it, then covers the **Users** page and **API logs**.
+
+**Analytics** is the first item under **Analyze** in the sidebar, and from 0.17.0 opening an application lands on it; old links to the application's **Overview** page open it too. Admins and members can both use it. It has seven tabs: **Overview**, **Usage**, **Feedback**, **Top Questions**, **Resolution**, **Content Gaps** and **Articles**. Most tabs link to the matching sessions in the [Sessions](/en/dashboard/sessions) list.
+
+The figures below count **sessions** (one chat in the widget; the dashboard also calls them conversations) or **turns** (one answer by the assistant). Each definition says which.
+
+## Date ranges
+
+One range control, at the top right, applies to every tab. Its buttons read **24h**, **7d**, **30d**, **90d** and **Custom**; the default is **30d**. The tab and range you pick are not kept in the page address: a copied link opens **Overview** for the last 30 days. (**Back to Top Questions** on the Sessions page is the one link that restores a tab and range.)
+
+| Button | Covers | Chart buckets |
+|---|---|---|
+| **24h** | The last 24 hours, up to now | Hourly |
+| **7d** | Today and the 6 days before it, from midnight in your time zone, up to now | Daily |
+| **30d** | Today and the 29 days before it | Weekly |
+| **90d** | Today and the 89 days before it | Monthly |
+| **Custom** (from 0.17.0) | Whole days from the start day to the end day, both included, in your time zone. At most 366 days. | Hourly for 1 day, daily up to 31 days, weekly up to 120 days, monthly beyond |
+
+Days begin at midnight in your browser's time zone.
+
+Rates on **Feedback**, **Resolution** and **Content Gaps** show their relative change against the period of the same length just before the selected one: a rate going from 50% to 60% shows +20%, not +10 points. **New** means the earlier period had nothing to compare with.
+
+A session belongs to a range by when it **started**. **Top Questions** counts questions by when they were asked, and **Content Gaps** and **Articles** count answers by when they were given.
+
+## Overview
+
+The four cards at the top. From 0.17.0, the first three count the selected range; earlier versions show **Total Sessions**, **Total Users** and **Conversation Messages** for all time.
+
+| Card | What it counts |
+|---|---|
+| **Total Conversations** | Sessions started in the range. One session counts once however many messages it has, so you can compare it with ticket volume. This count includes sessions with no messages, which the **Sessions** list leaves out, so it can be higher than the list's total. |
+| **Users** | Distinct user IDs that started a session in the range. |
+| **Messages** | The user's questions, the assistant's answers and guide continuations in the sessions above, with about how many per conversation. Internal prompts, retrieval records and diagnostics are not counted. |
+| **Knowledge Base** | How many knowledge sources the application has (a crawled website or a set of uploaded files counts as one source, however many pages it holds). The card's caption says *Documents indexed*, but it counts sources. This card ignores the date range. |
+
+**Activity Overview** has three views:
+
+- **Trends**: sessions and users per bucket over the range. For preset ranges it also shows the sessions started **Today** (compared with a seventh of this week's sessions so far), **This Week** (since Monday, compared with all of last week) and **This Month** (since the 1st, compared with all of last month). Because a part week or month is compared with a whole one, **This Week** and **This Month** usually show a drop early in the week or month.
+- **Engagement**: **Peak Activity Hours**, the sessions started in each hour of the day, in your time zone.
+- **Distribution**: **Top Users (by sessions)**, the five user IDs that started the most sessions.
+
+**Recent Sessions** lists the latest sessions started in the range; **View All** opens them in the **Sessions** list.
+
+## Usage
+
+**Conversations and people over time.**
+
+| Figure | What it counts |
+|---|---|
+| **Conversations** | Sessions started in the range, the same count as **Total Conversations**. |
+| **People** | The most distinct users seen in any one bucket of the chart, for example on the busiest day of a 7-day range. It is not the number of distinct users over the whole range; **Overview > Users** gives that. |
+| **This week** / **This month** | Sessions started since Monday or since the 1st, with the change **vs last week** or **vs last month** (all of it, so early in a week or month this usually shows a drop). Shown for preset ranges only. |
+
+## Feedback
+
+**Feedback** counts the ratings users gave to **whole sessions**, on the widget's rating card, for sessions with at least one message that started in the range. Thumbs on single answers are not counted here: the **Articles** tab counts them for answers that used the knowledge base, and the **Message Rating** filter in the **Sessions** list finds them. The tab's description and tooltips say *answers*, but the figures count whole sessions.
+
+| Figure | How it is computed |
+|---|---|
+| **Helpful rate** | Sessions rated helpful ÷ sessions rated at all. |
+| **Response rate** | Sessions rated at all ÷ all sessions. It tells you how much feedback you have, not how good the answers are. |
+| **Responses** | Sessions rated at all. |
+
+A thumbs up or a score of 4 or 5 counts as helpful; a thumbs down or a score of 1 or 2 as unhelpful. A score of 3 is **Neutral**: it counts as a rating, in both rates' denominators, but not as helpful. The chart stacks helpful, neutral and unhelpful sessions per bucket and draws the helpful rate as a line. **View helpful-rated sessions** and **View unhelpful-rated sessions** open those sessions.
+
+### Scores and reasons
+
+From 0.17.0, a **Scores and reasons** card appears under the chart when the range has at least one score or reason:
+
+- **Average score** and **Scored sessions**: the mean of the 1 to 5 scores given to sessions that started in the range, and how many there were.
+- **Scores**: how many sessions got each score from 1 to 5.
+- **What went wrong**: how often users picked each reason after a thumbs down on an answer, in sessions that started in the range.
+
+Scores and reasons exist only when the widget asks for them, with `chrome.feedback.sessionRating: 'stars'` and `chrome.feedback.askWhatWentWrong: true`. See [Ratings, scores and reasons](/en/dashboard/sessions#ratings-scores-and-reasons) for the list of reasons.
+
+## Top Questions
+
+**What people ask most, in this range.** The tab has two views; **Topics** opens first.
+
+### Questions
+
+Questions are grouped by their exact text after trimming spaces and ignoring case, so "Reset password" and "reset password " are one question, while "How do I reset my password?" is another. Only questions the user typed count, by when they were asked. The tab shows the 20 most asked.
+
+| Figure | What it counts |
+|---|---|
+| **Asked** | How many times the 20 listed questions were asked in total. |
+| **Distinct** | How many questions are listed (at most 20). |
+| **Top-5 share** | The share of **Asked** that the five most asked questions account for. Its tooltip says "of all asked questions", but it is computed over the 20 listed only. |
+
+Questions asked more than once are ranked with bars; the rest are folded into "N more asked just once". Select a question to search the **Sessions** list for its text over the same range. That search also finds sessions where the words appear inside a longer question or in an answer, so its count can differ from **Asked**.
+
+### Topics
+
+**Topics** groups sessions by what the user wanted, as a short label such as a task name. A background job reads each finished session and writes down the user's intent, and similar intents share one topic. Sessions it has not labeled yet fall back to the intent phrase it extracted.
+
+The job works on a sample:
+
+- It reads only sessions that are closed (see [Active and closed](/en/dashboard/sessions#active-and-closed)) and at least 30 minutes old.
+- By default it runs once a day, reads at most 50 sessions per run across the whole deployment, newest first, and skips sessions more than 14 days old.
+
+On a busy application, Topics therefore describe some of your sessions, not all of them. Check **Intents extracted** before you quote a topic's share.
+
+| Figure | What it counts |
+|---|---|
+| **Clustered topics** | How many topics are listed (at most 20). |
+| **Intents extracted** | Sessions that started in the range and have an extracted intent. This is the sample the topics come from. |
+| **Top-topic share** | The share of **Intents extracted** in the most common topic. |
+
+Select a topic to open its sessions. The **Topic** filter in the **Sessions** list uses the same labels.
+
+## Resolution
+
+**Share of conversations that look resolved.** The figure is marked **Proxy** because Moss cannot see whether the user's problem was solved; it uses two signals instead.
+
+A session counts as **resolved** when either:
+
+- a user rated it helpful (a thumbs up, or a score of 4 or 5), or
+- the user reached the end of an interactive guide in it.
+
+Every other session is **unresolved**, including sessions nobody rated.
+
+| Figure | How it is computed |
+|---|---|
+| **Resolved (proxy)** | Resolved sessions ÷ sessions with at least one message that started in the range. |
+| **Resolved** / **Unresolved** | The two counts. |
+
+When the range has no sessions with messages, the tab says "Not enough data in this range yet." **View resolved sessions** and **View unresolved sessions** open the **Sessions** list with the **Resolution** filter set, which uses the same rule.
+
+## Content Gaps
+
+**What people asked that Moss couldn't answer well.** Use it as your content backlog.
+
+On each turn that searches the knowledge base, Moss scores how close the best passage is to the question. A turn is a **content gap** when the search found nothing, or when its best passage scored below **0.4** similarity. On a self-hosted install, the operator can change the threshold with `RAG_ANSWERABLE_SCORE_THRESHOLD`.
+
+| Figure | How it is computed |
+|---|---|
+| **Content-gap rate** | Content-gap turns ÷ turns that searched the knowledge base, in the range. Lower is better. |
+| **Content gaps** | Content-gap turns. |
+| **Total** | Turns that searched the knowledge base. |
+
+Turns that did not search the knowledge base, such as most steps inside a guide, are not counted.
+
+**Content to write next** lists the question the user asked just before each content-gap turn, grouped by exact text and ranked by how often it came up (the top 20). Select a question to search the content-gap sessions for its text (the search also matches the words inside longer questions and answers), or **View all content-gap sessions** for all of them. The [Knowledge Base](/en/dashboard/knowledge-base) page explains how to add the missing content.
+
+## Articles
+
+**Which knowledge-base articles Moss surfaces in answers, and whether they help.** An article is surfaced when the knowledge-base search for an answer returned it. All counts are answers, not sessions: one session can produce several answers.
+
+| Column | What it shows |
+|---|---|
+| **Article** | The article's title and link, as of its most recent use. |
+| **Surfaced** | How many answers surfaced it. |
+| **Answer 👍** | Thumbs up on those exact answers. |
+| **Rate** | Thumbs up ÷ thumbs up and down on those answers. Shown once at least 3 of them were rated. |
+| **Gap** | Surfaced minus **Answer 👍**: uses that did not earn a thumbs up. |
+| **Session 👍** | Sessions rated helpful in which the article was surfaced. This rates the whole conversation, not the answer. |
+
+An article is marked **Underperforming** when it was surfaced at least 10 times and its **Rate** is below 50%. The cards above the table count **Articles surfaced**, **Total surfaces** and **Underperformers**. The table shows 50 articles per page; select the **Surfaced** or **Answer 👍** header to sort by it. **Sessions** on a row opens the sessions that surfaced that article in the range.
+
+If the range has no answers from the knowledge base, **View last 90 days** widens it.
+
+## Users
+
+The **Users** page (**Analyze > Users**) lists the people who have used the widget in this application. A user is a user ID your app passes to Moss; the same ID in two applications is two users.
+
+| Column | What it shows |
+|---|---|
+| **User ID** | The ID your app passed. |
+| **Created** | When Moss first saw this user ID in the application. |
+| **Sessions** | The user's sessions that have at least one message. |
+
+The list shows 20 users per page, the newest first. Select a user to open their page, which shows the **User ID** (with a copy button), when the user was created, their number of sessions, and **Recent Sessions**. **View All Sessions** opens the **Sessions** list filtered by the user ID; that filter matches any ID that contains it, so a short ID can also bring up other users' sessions. Admins also see an **API logs** button, which opens the user's API logs for the last 90 days.
+
+To find one user, filter the **Sessions** list by **User ID**. To delete a user's data, use **Configure > Data & privacy** (see [Data retention and deletion](/en/dashboard/data-privacy)).
+
+## API logs
+
+From 0.17.0, **API logs** (**Analyze > API logs**) shows the requests and responses of an application's calls, for tracing a slow or failed answer. Only admins can open it; members see the item with a lock.
+
+Before 0.17.0, the same logs are under **Configure > Data & Privacy > Traffic Log**, turned on with **Enable Traffic Log**, and the access key is the **Traffic Log API Key** under **Configure > Security**.
+
+### Turn recording on
+
+API logs are recorded only after an admin turns on **Record API logs** at the top of the page. It is off by default, and is the same setting as **Collect detailed API logs** under **Configure > Data & privacy**. The confirmation dialog says what is masked and how long logs are kept. Nothing from before you turn it on is recorded.
+
+| Source | What it records |
+|---|---|
+| **Widget (SDK)** | Requests the widget sends to Moss. |
+| **AI model** | Moss's calls to the AI model, with the model name and tokens in and out. |
+| **Embeddings** | Moss's calls to the embedding model. |
+| **File storage** | Moss's calls to file storage. |
+| **API actions** | Calls that API actions make to your own APIs. |
+
+From 0.17.0, bodies are masked before they are stored (earlier versions hide only the values of keys with secret-like names):
+
+- `[REDACTED]` replaces the values of keys such as tokens and passwords, email addresses, phone numbers (US formats, and international numbers written with `+` and a country code), US Social Security numbers, card numbers and, while **Backend PII filtering** is on for the application, what its masking rules match.
+- `[OMITTED]` marks what is not stored: headers, URLs and paths, page text, HTML, files, text over 2 KB and error details.
+- Names, addresses and other free text are **not** masked.
+
+How long logs are kept follows the **API logs** period under **Configure > Data & privacy**: 90 days by default once automatic deletion is on. While automatic deletion is off, logs stay until you delete them. See [Data retention and deletion](/en/dashboard/data-privacy).
+
+### Find a log
+
+| Filter | Options |
+|---|---|
+| **Time range** | **Last 24 hours**, **Last 7 days** (the default), **Last 30 days**, or **Custom** |
+| **Source** | **Widget (SDK)**, **AI model**, **File storage**, **API actions** |
+| **Result** | **Errors** (logs that recorded an error) or **Slow (5 s or more)** |
+| **ID type** and **Exact ID** | A **Session ID** or **User ID**, matched exactly |
+
+The list shows 50 logs per page, newest first; select the **Time** header to show the oldest first. Each row has **Time**, **Source**, **Endpoint**, **Status** and **Duration**; expand it for the **Request** and **Response**, the session, the user and, for AI model calls, the model and tokens. Counts above 10,000 show as "10,000+".
+
+Three places open this page already filtered: **API logs** on a session's page (that session, from 5 minutes before it started to 5 minutes after its last message), **API logs** on a user's page (that user, last 90 days), and **API log entry** under a failed step in a transcript (that one entry).
+
+### Export and delete
+
+**Export** offers **CSV: metadata only** or **JSON: includes bodies**, for the logs matching the current filters. An export holds at most 10,000 logs; above that, narrow the time range or filters. CSV columns are `id`, `application_id`, `session_id`, `user_id`, `timestamp`, `duration_ms`, `direction`, `target`, `target_provider`, `endpoint`, `method`, `llm_model`, `token_count_input`, `token_count_output`, `response_status`, `error_message` and `created_at`; JSON adds `request_payload` and `response_payload`.
+
+**Delete logs** deletes the logs matching the current filters, after you confirm that they cannot be recovered. Logs inside the application's minimum retention period, and all logs while the application is under a legal hold, are kept; both are set by your Moss administrator.
+
+### Read API logs from your own tools
+
+To pull API logs into your own tools, an admin creates an **API log access key** under **Configure > Security** and selects **Generate key**. The key starts with `traffic_` and is shown once. Send it in the `X-Traffic-API-Key` header to your dashboard's address:
+
+```bash
+curl "https://dashboard.viamoss.ai/api/v1/applications/$APPLICATION_ID/traffic-logs?page=1&page_size=100" \
+  -H "X-Traffic-API-Key: $MOSS_TRAFFIC_KEY"
+```
+
+On a self-hosted install, use the address of your install's dashboard instead of `https://dashboard.viamoss.ai`. The application ID is under **Configure > General**.
+
+| Request | What it returns |
+|---|---|
+| `GET /api/v1/applications/{application_id}/traffic-logs` | One page of logs, newest first. Query parameters: `page`, `page_size` (up to 100, default 50), `start_date`, `end_date` (ISO 8601; without a time zone, UTC), `target` (`sdk`, `llm_provider`, `embedding_api`, `storage`, `api_action`), `session_id`, `user_id`, `has_error`, `min_duration_ms`, `order` (`desc` or `asc`). The response has `items`, `total` (counted up to 10,001) and `total_capped`. |
+| `GET /api/v1/applications/{application_id}/traffic-logs/export` | Up to 10,000 logs as `format=json` (default, with bodies) or `format=csv` (metadata only). `start_date` and `end_date` are required; the other filters are the same. Over 10,000 logs, it answers 400 and asks you to narrow the date range. |
+
+From 0.17.0 the key is read-only: it cannot delete logs or turn recording on or off. On earlier versions it can also delete logs, turn logging on or off and change how long logs are kept. The key belongs to the application, not to a person: anyone who has it can read the logs, so treat it like a password. **Revoke key** stops it at once. Reads and exports are recorded in the application's **Audit Log** under **Configure** (see [Audit logging](/en/security/audit-logging)). If Moss cannot write that record, it refuses the read or export with `503` `audit_unavailable`; retry later.
+
+## Common questions
+
+**What exactly do Resolution rate and Content-gap rate measure?**
+Resolution: sessions rated helpful or in which the user finished a guide, divided by sessions with messages; unrated sessions count as unresolved. Content gap: answers whose knowledge-base search found nothing scoring 0.4 or more, divided by answers that searched. See [Resolution](#resolution) and [Content Gaps](#content-gaps).
+
+**Why is Total Conversations higher than the number of sessions in the list?**
+**Total Conversations** counts every session started in the range, including sessions with no messages. The **Sessions** list, **Feedback** and **Resolution** count only sessions with at least one message.
+
+**Why do Topics cover so few sessions?**
+Topics come from a background job that reads up to 50 closed sessions a day by default, from the last 14 days. **Intents extracted** shows how many sessions the topics describe.
+
+**Where do I see the 1 to 5 scores and thumbs-down reasons?**
+**Feedback > Scores and reasons**, from 0.17.0, once the widget collects them. See [Ratings, scores and reasons](/en/dashboard/sessions#ratings-scores-and-reasons).
+
+**Can I send Moss usage to our own analytics tool?**
+Yes, from the widget with the `onEvent` option: see [Events](/en/sdk/events). For request-level data, use [API logs](#read-api-logs-from-your-own-tools).
+
+**Why can't a member see API logs?**
+API logs hold request and response bodies, so only admins can open the page or create the access key.

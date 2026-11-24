@@ -1,0 +1,278 @@
+---
+title: "모델과 응답 시간"
+description: "자체 호스팅 설치에서 쓸 수 있는 모델 공급자, 모델 트래픽을 한 리전에 유지하는 방법, 답변 시간을 좌우하는 설정"
+icon: "gauge"
+---
+
+이 페이지는 자체 호스팅 설치의 운영자를 위한 것입니다. Moss가 어떤 모델에서
+실행될 수 있는지, 모델 요청이 어디로 가는지, 채팅 답변 시간을 무엇이 좌우하는지
+다룹니다.
+
+채팅 답변에 걸리는 시간의 대부분은 모델이 답하기 전에 추론하는 시간입니다.
+가장 큰 영향을 주는 설정은 `LLM_THINKING`입니다.
+
+## 권장 설정
+
+다음 값을 `sdk-backend`와 `dashboard-backend` 모두에 설정하세요.
+
+| 설정 | 권장 값 | 이유 |
+|---|---|---|
+| `LLM_THINKING` | `low` | 수준이 높을수록 모델이 호출마다 더 오래 추론하므로 답변마다 시간이 더 걸립니다. 모델을 바꾸거나 업그레이드해도 수준이 바뀌지 않도록 명시적으로 설정하세요. |
+| `LLM_MODEL_NAME` | [튜닝된 계열](#지원하는-공급자)의 모델 | Moss의 프롬프트와 요청 설정은 이 계열에 맞춰 튜닝되어 있습니다. |
+| `LLM_TOTAL_TIMEOUT_SECONDS` | 기본값 `240` 그대로 | 이 시간을 넘긴 턴은 "that took too long to answer"로 끝납니다. |
+
+그다음 `sdk-backend` 앞의 모든 프록시가 턴 예산보다 오래 기다리는지 확인하세요.
+[브라우저에 필요한 것](/ko/self-hosting/network#브라우저에-필요한-것)을 참고하세요.
+
+<Warning>
+  Helm 차트에서 각 워크로드의 `env`는 목록이며, values 파일의 목록은 차트의 목록
+  전체를 대체합니다. `sdk-backend.env`나 `dashboard-backend.env`에
+  `LLM_THINKING`을 추가할 때는 그 워크로드에 대한 차트의 기본 항목도 다시
+  적으세요. 방법은 차트 README의 Environment Variables 섹션에 있습니다.
+</Warning>
+
+## 지원하는 공급자
+
+`LLM_CLIENT_TYPE`은 설치 전체에서 쓸 공급자 하나를, `LLM_MODEL_NAME`은 모델을
+정합니다. `LLM_MODEL_NAME`이 없으면 두 백엔드 모두 시작하지 않으며, 차트는 이
+값을 `gemini-3-flash-preview`로 설정합니다.
+
+| `LLM_CLIENT_TYPE` | 공급자 | 인증 | 참고 |
+|---|---|---|---|
+| `google`(기본값) | Gemini Developer API | `LLM_API_KEY` | 기본값인 `GOOGLE_AUTH_MODE=api_key`입니다. |
+| `google` | Vertex AI의 Gemini | 워크로드의 Google Cloud ID. 키는 필요 없음 | `GOOGLE_AUTH_MODE=vertex`, `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`을 설정하세요. [모델 트래픽을 한 리전에 유지하기](#모델-트래픽을-한-리전에-유지하기)를 참고하세요. |
+| `openai` | OpenAI API | `LLM_API_KEY` | `LLM_API_BASE`로 다른 OpenAI 호환 엔드포인트를 가리킬 수 있습니다. 0.17.0부터 `LLM_THINKING`은 OpenAI 자체 API에만 보내며, 0.16.x는 OpenAI에서 이 값을 무시했습니다. |
+| `azure_openai` | 고객사 Azure OpenAI 리소스의 배포 | `LLM_API_KEY`, 또는 Azure 워크로드 ID를 통한 Microsoft Entra ID | 0.17.0부터 지원합니다. [자체 Azure OpenAI 배포 사용하기](#자체-azure-openai-배포-사용하기)를 참고하세요. |
+
+프롬프트 구성과 요청 설정은 모델 계열을 따릅니다. Moss가 튜닝된 계열에는 다음이
+있습니다.
+
+- **Gemini:** `gemini-3-flash`, `gemini-3-pro`, `gemini-3.1-pro`,
+  `gemini-3.1-flash-lite-image`, `gemini-3.5-flash`, `gemini-3.5-flash-lite`,
+  `gemini-3.6-flash`, `gemini-3.7-flash`, `gemini-3.8-flash`,
+  `gemini-4-hydrogen`.
+- **OpenAI와 Azure OpenAI:** `gpt-6.1-terra`.
+
+두 번째 공급자로 자동 전환하는 기능은 없습니다. 공급자가 속도 제한이나 서버
+오류로 거절한 호출은 같은 공급자에 다시 시도하고, 그래도 안 되면 턴이 실패합니다.
+
+0.17.0부터 `LLM_CLIENT_TYPE=openrouter`이면 백엔드가 시작하지 않습니다. 이 값이
+`moss-backend` Secret에 있으면 마이그레이션 Job도 멈추므로, `helm upgrade`가 파드를
+하나도 바꾸기 전에 사전 업그레이드 단계에서 실패합니다. 업그레이드 전에 값을
+바꾸세요.
+
+### 모델 설정이 적용되는 범위
+
+Moss는 세 종류의 모델을 씁니다. 이 중 첫 번째만 `LLM_*` 설정을 따릅니다.
+
+| 모델 | 용도 | 설정 |
+|---|---|---|
+| 채팅 모델 | 채팅 답변과 대시보드의 AI 기능: 코파일럿, 대화 인사이트, 모니터, 프로시저 작성, 자가 치유, 세션 평가 | 두 백엔드의 `LLM_CLIENT_TYPE`, `LLM_MODEL_NAME`, `LLM_THINKING`과 공급자 인증 |
+| 임베딩 모델 | 지식 베이스 검색과 색인 | 애플리케이션을 만들 때 애플리케이션마다 고르며, 이후에는 바꿀 수 없습니다. Voyage `voyage-3.5`(`VOYAGE_API_KEY` 필요), Google `gemini-embedding-2`(`GEMINI_API_KEY`, Vertex AI에서는 필요 없음), OpenAI `text-embedding-3-small`(`OPENAI_API_KEY`) |
+| 이미지 주석 모델 | 워커에서 지식 베이스 페이지 속 이미지를 설명 | `ANNOTATOR_LLM_PROVIDER`(기본값 `google`, 또는 `openai`), `ANNOTATOR_LLM_MODEL`(기본값 `gemini-3.8-flash`), `ANNOTATOR_LLM_API_KEY`(Vertex AI에서는 빼세요) |
+
+Vertex AI 설치에서 대시보드에도 `GOOGLE_AUTH_MODE=vertex`가 설정되어 있으면,
+**새 애플리케이션 생성**의 **임베딩 모델** 필드에 **Google Gemini Embedding 2**가
+미리 선택됩니다. 그 밖의 설치에서는 **Voyage 3.5**가 미리 선택됩니다.
+
+## 모델 트래픽을 한 리전에 유지하기
+
+Vertex AI에서는 `GOOGLE_CLOUD_LOCATION`이 Moss가 모델 요청을 보낼 Google
+엔드포인트를 정합니다. `sdk-backend`, `dashboard-backend`, 워커에 같은 값을
+설정하세요.
+
+| `GOOGLE_CLOUD_LOCATION` | 채팅 모델과 이미지 주석 모델 | `gemini-embedding-2` |
+|---|---|---|
+| `eu` 또는 `us`(멀티 리전) | `aiplatform.eu.rep.googleapis.com` 또는 `aiplatform.us.rep.googleapis.com` | 같은 호스트 |
+| `europe-west4` 같은 리전 | `europe-west4-aiplatform.googleapis.com` 같은 해당 리전의 엔드포인트 | 글로벌 엔드포인트 `aiplatform.googleapis.com`. 이 모델은 단일 리전에서 제공되지 않습니다. |
+| `global` | `aiplatform.googleapis.com` | `aiplatform.googleapis.com` |
+
+모든 모델 요청을 멀티 리전 엔드포인트 하나에 유지하려면 다음과 같이 하세요.
+
+1. 두 백엔드와 워커에 `GOOGLE_AUTH_MODE=vertex`, `GOOGLE_CLOUD_PROJECT`,
+   `GOOGLE_CLOUD_LOCATION=eu`(또는 `us`)를 설정하고, 대시보드에도
+   `GOOGLE_AUTH_MODE=vertex`를 설정하세요. 백엔드 이미지로 실행되는 세 워크로드에
+   Vertex AI 권한이 있는 Google Cloud ID를 부여하세요. GKE 워크로드 아이덴티티,
+   워크로드 아이덴티티 제휴, 키 파일 방식은 차트 README의 "Gemini via Vertex AI
+   (IAM)" 섹션에 있습니다.
+2. 두 백엔드의 `LLM_MODEL_NAME`을 Google이 그 위치에서 제공하는 모델로
+   설정하세요. 차트 기본값인 `gemini-3-flash-preview`는 `eu`나 `us`에서 제공되지
+   않으며, `gemini-3.8-flash`는 제공됩니다.
+3. 모든 애플리케이션을 Google Gemini Embedding 2로 만드세요. Voyage나 OpenAI
+   임베딩을 쓰는 애플리케이션은 질문과 지식 콘텐츠를 그 공급자에 보내며, 임베딩
+   모델은 나중에 바꿀 수 없습니다.
+4. `ANNOTATOR_LLM_PROVIDER`는 `google`로 두고, `ANNOTATOR_LLM_MODEL`이 그
+   위치에서 제공되는지 확인하세요.
+5. `LLM_API_KEY`는 설정하지 마세요. Vertex AI에는 키가 필요 없습니다.
+6. `LLM_PROFILES`를 설정한다면 같은 위치의 Vertex AI 프로필만 넣거나, 다른
+   프로필은 `allowedApplications`로 제한하세요. 다른 프로필을 쓰는 애플리케이션은
+   채팅과 대시보드 AI 기능의 요청을 그 프로필의 엔드포인트로 보냅니다.
+7. 지식은 마크다운 업로드로 추가하거나, Document360에서 또는 0.17.0부터
+   Intercom에서 가져오세요. 웹사이트 소스는 설치 밖의 호스팅 서비스인 Firecrawl을
+   거쳐 가져옵니다([네트워크](/ko/self-hosting/network#지식-소스-가져오기) 참고).
+
+<Note>
+  0.17.0부터 `GOOGLE_AUTH_MODE=vertex`인 설치에서는 코파일럿, 대화 인사이트,
+  모니터, 프로시저 작성, 자가 치유, 세션 평가가 `GOOGLE_CLOUD_LOCATION`의 Vertex
+  AI를 호출합니다. 0.16.x에서는 `LLM_API_KEY`로 Gemini Developer API를 호출했고,
+  키가 없으면 실패했습니다. 이 때문에 `dashboard-backend`에
+  `INSIGHT_SWEEP_ENABLED=false`를 설정했다면 다시 켜도 됩니다. 기본값인
+  `GOOGLE_AUTH_MODE=api_key`에서는 달라지는 것이 없습니다.
+</Note>
+
+이 설정은 Moss가 모델 요청을 보낼 엔드포인트를 정할 뿐입니다. 그 엔드포인트에서
+공급자가 요청을 어떻게 다루는지는 고객사와 해당 공급자 사이의 계약을 따릅니다.
+
+## 자체 Azure OpenAI 배포 사용하기
+
+0.17.0부터 Moss는 고객사 Azure OpenAI 리소스의 배포로 답할 수 있습니다. 두
+백엔드에 다음을 설정하세요.
+
+| 설정 | 값 |
+|---|---|
+| `LLM_CLIENT_TYPE` | `azure_openai` |
+| `LLM_API_BASE` | 리소스의 v1 엔드포인트 `https://<resource>.openai.azure.com/openai/v1/` |
+| `LLM_MODEL_NAME` | 배포 이름 |
+| `LLM_API_KEY` | 리소스의 키. 워크로드 ID를 쓸 때는 설정하지 마세요. |
+| `LLM_THINKING` | `gpt-6.1-terra` 같은 추론 모델에는 필수입니다. 배포 이름이 `gpt-6.1-terra` 모델 이름이면 이 값 없이 백엔드가 시작하지 않습니다. 다른 이름으로는 알아볼 수 없으므로, 배포 이름이 다르다면 직접 설정하세요. |
+| `LLM_LABEL` | 선택 사항입니다. 관리자가 대시보드에서 보는 모델 이름입니다. 설정하지 않으면 Azure 모델은 "기본 모델"로 표시됩니다. |
+
+- **다른 Azure 호스트**: 엔드포인트는 `<resource>.openai.azure.us`나
+  `<resource>.services.ai.azure.com`에 있어도 됩니다. Azure API Management
+  게이트웨이 같은 그 밖의 호스트는 두 백엔드의 `LLM_AZURE_OPENAI_GATEWAY_HOSTS`(호스트
+  이름 또는 IP 주소, 쉼표로 구분)에 넣어야 하며, 그러지 않으면 백엔드가 시작하지
+  않습니다. `LLM_THINKING`을 설정하면 요청이 Responses API를 쓰므로 게이트웨이가
+  이를 통과시켜야 합니다.
+- **키 없이 쓰기**: 키 인증을 끈 리소스라면
+  `LLM_AZURE_OPENAI_AUTH=workload_identity`를 설정하세요. 그러면 백엔드는 파드의
+  Azure 워크로드 ID에서 받은 Microsoft Entra ID 토큰으로 인증합니다. 이 ID에는
+  리소스에 대한 `Cognitive Services OpenAI User` 역할이 필요하고, 두 백엔드가
+  `login.microsoftonline.com`에 연결할 수 있어야 합니다. 이 방식은
+  `<resource>.openai.azure.com`이나 목록에 넣은 게이트웨이에서만 동작합니다. AKS와
+  그 밖의 클러스터 설정 방법은 차트 README의 "Azure OpenAI with workload
+  identity" 섹션에 있습니다.
+- **다른 곳에서 처리되는 것**: 임베딩과 이미지 주석은 Azure OpenAI에서 실행되지
+  않습니다. [모델 설정이 적용되는 범위](#모델-설정이-적용되는-범위)의 공급자로
+  갑니다.
+
+<Warning>
+  0.16.25는 `azure_openai`를 모릅니다. Azure OpenAI를 쓰는 설치를 0.16.25로
+  롤백하기 전에 모델 설정을 0.16.25가 지원하는 공급자로 되돌리세요. 그러지 않으면
+  백엔드와 마이그레이션이 시작 단계에서 멈춥니다.
+</Warning>
+
+### 애플리케이션마다 다른 모델
+
+0.17.0부터 `LLM_PROFILES`로 추가 모델을 제공할 수 있으며, 애플리케이션의 관리자는
+**구성 > 동작**의 **모델** 카드에서 그중 하나를 고를 수 있습니다. 그 밖의 모든
+것은 `LLM_*` 모델로 답하며, 고른 모델이 실패할 때도 이 모델이 대신 답합니다. 단,
+그 프로필에 `noFallback`이 지정되어 있으면 대신 답하지 않습니다. 임베딩과 이미지
+주석은 이 선택을 따르지 않으므로, 프로필을 골라도 애플리케이션의 데이터가 모두 한
+공급자에만 가는 것은 아닙니다. 모든 필드와 대체 규칙은 차트 README의 "Model
+profiles" 섹션에 있습니다.
+
+## 응답 시간에 영향을 주는 설정
+
+| 설정 | 기본값 | 바뀌는 것 | 장단점 |
+|---|---|---|---|
+| `LLM_THINKING` | 설정 안 됨 | 모델이 호출마다 추론할 수 있는 정도: `minimal`, `low`, `medium`, `high` | 수준이 높을수록 모든 턴의 모든 모델 호출이 더 오래 걸립니다. |
+| `LLM_MODEL_NAME` | 차트에서는 `gemini-3-flash-preview` | 채팅 모델 | 가벼운 모델일수록 빨리 답합니다. 바꾸기 전에 실제 사용자 질문으로 시험해 보세요. |
+| `LLM_TOTAL_TIMEOUT_SECONDS` | 0.17.0부터 `240`, 이전에는 `120` | 턴 하나에 쓸 수 있는 시간(초). 모델 호출과 도구 호출을 합친 시간입니다. | 예산이 길면 "took too long"으로 끝나는 느린 턴이 줄지만, 사용자는 그만큼 더 기다립니다. 두 백엔드에 같은 값을 설정하고, 프록시 타임아웃도 그에 맞게 늘리세요. |
+| `LLM_REQUEST_TIMEOUT_SECONDS` | `45` | 채팅 턴에서 Gemini 요청마다 첫 시도에 쓸 수 있는 시간(초). 시간을 넘긴 요청은 남은 턴 예산으로 한 번 더 시도합니다. | 낮추면 멈춘 요청을 더 빨리 알아챕니다. 너무 낮으면 느리기만 했던 요청까지 다시 시도합니다. |
+
+### `LLM_THINKING` 값에 따른 동작
+
+| 공급자 | 설정하지 않았을 때 | 설정했을 때 |
+|---|---|---|
+| 위 목록의 다른 계열에 속한 Gemini | 0.17.0부터 그 모델이 지원하는 가장 낮은 수준(모델에 따라 `minimal` 또는 `low`). 0.16.x에서는 Google 자체 기본 수준. | 설정한 수준. 모델이 지원하지 않는 수준은 가장 가까운 지원 수준으로 바뀌며, 로그에 경고가 남습니다. |
+| Gemini 4 Hydrogen, 또는 Moss가 튜닝된 계열 밖의 Gemini 모델 | 수준을 보내지 않으며, Google 기본값이 적용됩니다. | 설정한 수준 |
+| OpenAI 자체 API 또는 Azure OpenAI | 추론 강도를 보내지 않습니다. `gpt-6.1-terra` 모델이면 백엔드가 시작하지 않습니다. | 0.17.0부터 추론 강도로 보냅니다(`minimal`은 `none`으로 보냄). 0.16.x에서는 OpenAI에서 `LLM_THINKING`을 무시했습니다. |
+| 그 밖의 OpenAI 호환 엔드포인트 | 아무것도 보내지 않습니다. | 아무것도 보내지 않으며, 백엔드가 경고를 로그에 남깁니다. |
+
+`minimal`, `low`, `medium`, `high`만 받습니다. 0.17.0부터 숫자 같은 그 밖의 값은
+백엔드 시작을 막습니다. 그 값이 `moss-backend` Secret에 있으면 마이그레이션 Job도
+멈추므로, `helm upgrade`가 파드를 하나도 바꾸기 전에 사전 업그레이드 단계에서
+실패합니다. 업그레이드 전에 고치세요.
+
+`dashboard-backend`에도 같은 값을 설정하세요. OpenAI와 Azure OpenAI에서는
+대시보드의 AI 기능도 채팅과 같은 추론 강도를 보냅니다. Gemini에서는 코파일럿,
+대화 인사이트, 모니터, 프로시저 작성이 수준을 보내지 않으므로, 이 기능에는 해당
+모델의 Google 기본값이 적용됩니다.
+
+## 시간이 어디에 쓰이는지 확인하기
+
+1. **추적을 켜세요.** `sdk-backend`에 `OTEL_EXPORTER_OTLP_ENDPOINT`를 설정하세요.
+   스팬과 로그 필드는
+   [운영](/ko/self-hosting/operations#느리거나-실패한-요청-추적하기)에 정리되어
+   있습니다.
+2. **느린 턴의 스팬을 비교하세요.** `POST /api/v1/query` 요청 스팬 아래에서
+   `llm.invoke`는 모델 호출을, 도구를 호출하는 턴이라면 그 사이의 도구 호출까지
+   담습니다. `rag.search`는 지식 베이스 검색, `session.hydrate`는 세션 불러오기입니다.
+3. **모델 라운드 수를 세세요.** 도구를 호출할 수 있는 턴에서는 `sdk-backend`가
+   모델 호출마다 `tool_loop_round` 로그 줄을 남기며, 여기에 `model_latency_ms`,
+   토큰 `usage`, 모델이 요청한 `tool_calls`가 들어 있습니다. 도구를 호출하는 턴은
+   라운드마다 모델을 한 번 호출하므로, 도구 라운드가 하나 늘 때마다 모델 대기
+   시간도 그만큼 늘어납니다.
+
+대부분이 모델 시간(`model_latency_ms`의 합)이라면 `LLM_THINKING`을 낮추거나 더
+가벼운 모델을 시험해 보세요. 프로시저가 라운드를 많이 돈다면 지침에서 조회를
+줄이도록 요청하세요. 시간이 도구에서 쓰인다면 도구가 호출하는 API나 MCP 서버를
+살펴보세요.
+
+단계 로더는 Moss가 일하는 동안 각 단계를 사용자에게 보여 줄 수 있습니다. 답변이
+빨라지지는 않습니다. 단계 로더를 쓰려면 SDK에 `streamActivity: true`와
+`appearance.chrome.loader: 'steps'`가 있어야 하고, 네트워크 경로가 Server-Sent
+Events를 통과시켜야 합니다.
+[브라우저에 필요한 것](/ko/self-hosting/network#브라우저에-필요한-것)을 참고하세요.
+
+## "Took too long"과 "high traffic" 답변
+
+| 채팅에 표시되는 문구 | 일어난 일 | 할 일 |
+|---|---|---|
+| "I'm sorry, that took too long to answer. Please try again." | 턴이 `LLM_TOTAL_TIMEOUT_SECONDS`를 다 썼거나, 모델 요청이 시간을 넘기고 한 번의 재시도도 성공하지 못했습니다. | 위 단계로 느린 부분을 찾으세요. `LLM_THINKING`을 낮추거나 턴이 하는 일을 줄이세요. |
+| "I'm sorry, the service is currently experiencing high traffic. Please try again in a few moments." | 모든 시도가 속도 제한(429)이나 서버 오류(5xx)로 거절되었거나, Moss가 공급자에 아예 연결하지 못했습니다. 사용자 트래픽이 아니라 공급자나 공급자까지의 네트워크 경로 문제입니다. 애플리케이션이 고른 모델에 `noFallback`이 지정되어 있고 그 모델이 답하지 못할 때도 표시됩니다. | 공급자의 할당량과 상태를 확인하고, 백엔드가 공급자 호스트에 연결할 수 있는지 확인하세요([네트워크](/ko/self-hosting/network#모델과-임베딩-공급자) 참고). |
+| "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요." | 질문이나 가이드 단계가 SDK 경로에 대한 Moss 자체의 사용자별 제한(`SDK_RATE_LIMITS_ENABLED`, 0.17.0부터 기본으로 켜짐)을 넘었습니다. | [SDK 요청 제한](/ko/self-hosting/overview#sdk-요청-제한)을 참고하세요. |
+| "A safety filter blocked this request, so I can't answer it. …" | Model Armor 같은 모델 공급자의 필터가 요청이나 그 답변을 차단했습니다. | [클라우드 안전 필터와 함께 운영하기](/ko/self-hosting/operations#클라우드-안전-필터와-함께-운영하기)를 참고하세요. |
+
+0.16.23 이전에는 시간을 넘긴 요청에도 "high traffic" 답변이 표시되었습니다.
+
+`sdk-backend` 앞의 프록시가 턴 예산이 끝나기 전에 요청을 닫으면, 사용자는 두
+답변 중 어느 것도 아닌 오류를 봅니다. 경로의 모든 프록시에
+`LLM_TOTAL_TIMEOUT_SECONDS`보다 긴 읽기 타임아웃을 주세요.
+
+## 자주 묻는 질문
+
+**답변이 느립니다. 무엇을 바꿀 수 있나요?**
+기다리는 시간의 대부분은 모델의 추론입니다. 두 백엔드에 `LLM_THINKING=low`를
+설정한 뒤, 다른 것을 바꾸기 전에 [추적 단계](#시간이-어디에-쓰이는지-확인하기)로
+측정하세요.
+
+**0.17.0으로 업그레이드한 뒤 답변이 빨라지거나 달라졌습니다. 왜 그런가요?**
+`LLM_THINKING`을 설정하지 않으면 0.17.0은 Gemini 모델이 지원하는 가장 낮은 수준을
+씁니다. 0.16.x는 수준을 Google에 맡겼습니다. 수준을 직접 고르려면
+`LLM_THINKING`을 설정하세요.
+
+**Moss는 어떤 모델을 쓸 수 있나요?**
+Gemini API나 Vertex AI의 Gemini, OpenAI API, 그리고 0.17.0부터 Azure OpenAI를 쓸
+수 있습니다. 튜닝된 모델 계열은 [지원하는 공급자](#지원하는-공급자)를
+참고하세요.
+
+**모델 트래픽을 EU 안에 유지할 수 있나요?**
+Vertex AI에서 세 워크로드 모두에 `GOOGLE_CLOUD_LOCATION=eu`를 설정하고,
+[모델 트래픽을 한 리전에 유지하기](#모델-트래픽을-한-리전에-유지하기)의
+체크리스트를 따르세요. 임베딩과 이미지 주석은 설정이 따로 있으니 둘 다
+확인하세요.
+
+**고객사 Azure OpenAI 배포를 쓸 수 있나요?**
+네. 0.17.0부터 키 또는 Azure 워크로드 ID로 쓸 수 있습니다.
+[자체 Azure OpenAI 배포 사용하기](#자체-azure-openai-배포-사용하기)를 참고하세요.
+
+**사용자가 거의 없는데 "high traffic"이 표시되었습니다. 왜 그런가요?**
+이 답변은 사용자가 몰렸다는 뜻이 아니라, 모델 공급자가 요청을 계속
+거절했거나(429 또는 5xx) Moss가 공급자에 연결하지 못했다는 뜻입니다. 공급자의
+할당량과 상태를 확인하고, 백엔드가 공급자 호스트에 연결할 수 있는지
+확인하세요([네트워크](/ko/self-hosting/network#모델과-임베딩-공급자) 참고).
+
+**두 번째 공급자로 자동 전환할 수 있나요?**
+아니요. 설치는 `LLM_CLIENT_TYPE`이 지정한 공급자 하나만 씁니다. 대체는
+애플리케이션이 고른 모델 프로필에서 기본 모델로 넘어가는 경우뿐입니다.

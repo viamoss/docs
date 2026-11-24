@@ -1,0 +1,330 @@
+---
+title: "Guides and Navigation"
+description: "How an interactive guide behaves in your app, what ends it, how Moss carries a chat and a guide across reloads, redirects and new tabs, and how to load Moss on demand or open it with a question"
+icon: "route"
+---
+
+A guide is Moss walking a user through a task on your page, one step at a time, by highlighting the element to use next. This page covers what your users see during a guide, what ends one, and what you set up so a chat and a guide survive page loads.
+
+The most common setup: mount `AgentProvider` once near the root of your app, above your router, and turn on `stability.afterReload` so a guide step whose click loads a new page carries on there.
+
+```tsx
+<AgentProvider config={{
+  apiUrl: 'https://moss-api.viamoss.ai',
+  applicationId: 'YOUR_APP_ID',
+  userId: currentUser.id,
+  getJwt: () => fetchMossToken(),
+  stability: {
+    afterReload: { enabled: true },
+  },
+}}>
+  <App />
+  <AssistantButton />
+</AgentProvider>
+```
+
+## How a guide runs
+
+1. **The offer.** When Moss's answer to a question comes with a plan of steps on the page, Moss offers a guide: the answer gets a **Start guide** button. `chrome.guideOffer` changes its label and icon; see [Appearance](/en/sdk/appearance#guide-offer-and-guide).
+2. **The start.** The guide starts when the user clicks **Start guide**, or says yes in the chat. Moss shows the plan in the guide bar and highlights the first step's element.
+3. **Each step.** Moss outlines the element to use and adds a numbered badge when a step has several targets. The user completes the step by using the highlighted element. A step with nothing to click shows **Next** with "Click Next when you're ready."
+4. **Between steps.** Moss waits for the page to settle, then reads it again and highlights the next step. The guide bar shows "Working…" meanwhile.
+5. **The end.** When every step is done, the guide bar shows "Goal Complete!" with a rating and **Done**.
+
+An answer offers a guide only when two dashboard switches are on, both under **Configure > Behavior**:
+
+| Switch | Card | Default | With it off |
+|--------|------|---------|-------------|
+| **On-screen guidance** | **Core Features** | On | Moss answers in the chat only and never highlights an element or offers a guide. |
+| **Enable Planning** | **Plan Progress Tracking** | Off | Moss can still highlight an element in an answer, but its answers offer no guide. |
+
+A new application has **Enable Planning** off, so turn it on to get guides.
+
+### What the user sees
+
+| Element | What it does | Change it with |
+|---------|--------------|----------------|
+| Highlight | An outline and translucent fill on the element to use, red by default | `colors.highlight` |
+| Step badges | Numbers on the targets of a step that has several | `chrome.guide.targetBadges` |
+| Page tint | Optional dimming of the page around the targets | `chrome.guide.pageTint` |
+| Guide bar | At the top of the chat, under the header: the current step's number and title, and a progress bar. Its chevron opens the full step list. | — |
+| **Next** | In the guide bar, and beside the input on steps with nothing to click | `chrome.guide.nextInBar`, `chrome.guide.nextBesideInput` |
+| **Exit guide** | At the end of the guide bar's step list. It asks "Exit this guide?" before it ends the guide. | — |
+| Panel placement | The floating chat window moves aside from the highlighted element. When it can't, a strip says "Highlighted item is behind this panel." with **Move panel**. | `layout`, `modal` |
+| **Minimize** | From 0.17.0, shrinks the floating window to its header and the guide bar while the guide runs | `chrome.guide.minimize` |
+
+The [Appearance](/en/sdk/appearance#guide-offer-and-guide) page has the details of each key.
+
+### Your own guide controls
+
+`useAgent()` exposes the guide state and actions, so your page can show its own controls:
+
+- `planPhase`: `'offered'` while a guide is offered, `'executing'` while it runs, `null` when there is none, and `undefined` until Moss has reported one.
+- `acceptGuideSuggestion()` starts an offered guide, like **Start guide**.
+- `continueGuide()` moves to the next step, like **Next**.
+
+See [Hooks](/en/sdk/api/hooks).
+
+## What ends a guide
+
+| What happens | Result |
+|--------------|--------|
+| The user completes the last step, or clicks **Done** | The guide ends as completed. |
+| The user clicks **Exit guide** and confirms | The guide ends. Its highlight comes off. |
+| The user starts a new chat, your code calls `startNewChat()`, or your code calls `askMoss()` | The conversation ends, and the guide with it. |
+| Moss starts another guide | The new guide replaces the old one. |
+| A support ticket the user files from the guide goes out | The guide ends. |
+| The user closes the chat | By default, the guide carries on: its highlight stays on the page, and reopening the chat continues it. With `closingChatEndsGuide: true`, closing ends the guide as **Exit guide** does. |
+| The user comes back after the session's inactivity timeout | Depends on the session settings. See [Sessions](/en/sdk/api/session#what-happens-past-a-limit). |
+
+### `closingChatEndsGuide`
+
+| Option | Type | Default |
+|--------|------|---------|
+| `closingChatEndsGuide` | `boolean` | `false` |
+
+With the default `false`, a guide keeps running while the chat is closed. That suits a page that shows guide controls of its own while the chat is closed, such as [`FloatingActionBar`](#floatingactionbar). A reload brings the guide back.
+
+With `true`, closing the chat ends a running guide the way **Exit guide** does, however the chat is closed: the chat's close button, `AssistantButton`, a `data-moss-trigger` element, or your code calling `closeChat()` or `toggleChat()`. The highlight comes off, a click on the step's element sends nothing, and a reload doesn't bring the guide back. Reopening the chat continues the conversation with no guide running.
+
+Set it to `true` if your page has no guide controls of its own: otherwise a user who closes the chat mid-guide is left with a highlight and nothing on screen that explains it.
+
+```tsx
+<AgentProvider config={{
+  // ...
+  closingChatEndsGuide: true,
+}}>
+```
+
+## Reloads, redirects and new tabs
+
+Moss keeps its state in the browser, per origin: the chat session in `localStorage`, and the chat's open or closed state and the window's position in `sessionStorage`, which is per tab.
+
+| What happens | What Moss does | Needs |
+|--------------|----------------|-------|
+| Client-side navigation in a single-page app | Nothing changes, as long as `AgentProvider` stays mounted. | Mount it above your router. |
+| A reload or a redirect in the same tab | Moss comes back with the same chat, open if it was open, and with a running guide. | `AgentProvider` on the page that loads |
+| A guide step whose click loads a new page | The step is completed on the page that loads, and the guide carries on there. | `stability.afterReload.enabled: true` |
+| A guide step that sends the user to another page itself | Moss resumes the guide when that page loads. | Nothing extra |
+| A guide step whose click opens a new tab | The guide carries on in the new tab, and Moss opens the chat there if it was open. | `stability.afterReload.enabled: true`, and Moss on the page in the new tab |
+| A tab your page opens with `window.open()` | Starts with the chat closed and no guide. | — |
+| Another tab on the same app | Shares the chat session. A guide runs in one tab; another tab with Moss open shows it in its chat. | — |
+| Another origin or subdomain | Starts fresh: browser storage isn't shared across origins. | — |
+
+### `stability.afterReload`
+
+| Option | Type | Default | What it does |
+|--------|------|---------|--------------|
+| `stability.afterReload.enabled` | `boolean` | `false` | Hands a guide step to the next page when the step's click loads a new page or opens a new tab |
+| `stability.afterReload.pendingTTL` | `number` (ms) | `30000` | How long a handed-over step waits for the next page to load Moss and pick it up |
+
+If the next page takes longer than `pendingTTL` to load Moss, for example behind a slow sign-in redirect, raise it.
+
+## Loading Moss on demand
+
+Some apps mount Moss only when the user asks for it, from a help menu for example. Then a reload or a link to another page leaves Moss unmounted in the middle of a conversation or a guide. `shouldStartMoss()` tells you, as the page loads, whether Moss should be mounted to carry on.
+
+```tsx
+import { useEffect } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
+import { AgentProvider, useAgent } from '@viamoss/moss-sdk';
+import { shouldStartMoss } from '@viamoss/moss-sdk/start';
+
+let root: Root | null = null;
+let openMoss: (() => void) | null = null;
+let openRequested = false;
+
+// Hands the mounted provider's openChat to your menu. A click that comes
+// before the provider has rendered is kept and opens the chat once it renders.
+function MossOpener() {
+  const { openChat } = useAgent();
+  useEffect(() => {
+    openMoss = openChat;
+    if (openRequested) {
+      openRequested = false;
+      openChat();
+    }
+  }, [openChat]);
+  return null;
+}
+
+function mountMoss(openNow: boolean) {
+  if (openNow) {
+    if (openMoss) openMoss();
+    else openRequested = true;
+  }
+  if (root) return;
+  root = createRoot(document.getElementById('moss-root')!);
+  root.render(
+    <AgentProvider config={mossConfig}>
+      <MossOpener />
+    </AgentProvider>,
+  );
+}
+
+// On page load: mount Moss only to bring back what was there.
+if (shouldStartMoss()) mountMoss(false);
+
+// Your help menu item: mount Moss if it isn't yet, and open the chat.
+helpMenuItem.addEventListener('click', () => mountMoss(true));
+```
+
+`mossConfig` is the config you pass `AgentProvider`, with `stability.afterReload.enabled: true`.
+
+`shouldStartMoss()` returns `true` when:
+
+- the chat was open in this tab before the page changed;
+- a question asked with `askMoss()` in this tab is waiting;
+- a guide is running in this tab;
+- a guide step is on its way to this page after a reload or a guide navigation, or a guide step's click opened this page in a new tab.
+
+Rules:
+
+- **Mount once, and leave it alone.** When it returns `true`, mount `AgentProvider` without opening or toggling the chat: Moss reopens the chat and continues the guide by itself, and a toggle would close it. Later, open the chat of the Moss you mounted with `openChat()` instead of mounting again.
+- **It needs `stability.afterReload.enabled: true`** for guide steps to carry over.
+- **If you set `stability.afterReload.pendingTTL`, pass the same value:** `shouldStartMoss({ pendingTTL })`.
+- **Call it in the browser.** On a server, or anywhere without `window`, it returns `false`. With server rendering, call it after hydration.
+- **It only reads.** It reads browser storage that Moss writes, writes nothing and never throws. It returns `false` when storage can't be read. Don't write or clear Moss's storage keys yourself.
+- **Same origin only.** Another host name has its own storage, so the check returns `false` there.
+
+### The `@viamoss/moss-sdk/start` entry point
+
+Import `shouldStartMoss()` and `askMoss()` from `@viamoss/moss-sdk/start`. That entry contains no React and touches no DOM as it loads, so deciding whether to load Moss doesn't load the SDK first. The package root exports both functions too.
+
+These functions are for the npm package. The CDN script mounts Moss on every page it loads on.
+
+## Opening Moss with a question
+
+`askMoss(question)` starts a new chat, opens it, and sends the question as the user's first message, whether or not Moss is mounted yet. Use it when your own help widget or assistant hands a question to Moss.
+
+```tsx
+import { askMoss } from '@viamoss/moss-sdk/start';
+
+function startInteractiveHelp(question: string) {
+  const result = askMoss(question);
+  if (!result.accepted) return; // a blank question, or no browser storage
+  if (result.queued) {
+    // No Moss on this page took the question. Mount it, without opening the
+    // chat: Moss opens the chat with the question as it mounts.
+    mountMoss(false);
+  }
+  // Otherwise the Moss already on this page took it and opened the chat.
+}
+```
+
+| Result | Meaning |
+|--------|---------|
+| `{ accepted: true, queued: false, id }` | A mounted Moss took the question and opens the chat. |
+| `{ accepted: true, queued: true, id }` | No Moss on this page took it. The question waits in this tab; mount Moss within the wait and it sends the question as it mounts. |
+| `{ accepted: false, reason: 'empty' }` | The question was blank or not a string. |
+| `{ accepted: false, reason: 'unavailable' }` | No `window` (as on a server), or this tab's `sessionStorage` can't be written. |
+
+| Option | Type | Default | What it does |
+|--------|------|---------|--------------|
+| `ttlMs` | `number` (ms) | `30000` | How long a queued question waits for Moss to mount. A value that isn't a positive number means the default. |
+
+What Moss does with the question:
+
+- **Any chat or guide in progress ends,** the way the New chat button ends it, with no rating or "continue this chat" prompt first.
+- **It is sent once, in the tab that asked.** If the page reloads or navigates in that tab first, Moss on the next page sends it, within the wait. `shouldStartMoss()` returns `true` while it waits.
+- **It is user text.** Moss trims it, shows it as plain text, never as HTML, and sends it like a typed message.
+- **A later call replaces a question that hasn't been sent yet.** If the user closes the chat or starts a new chat before it is sent, it is dropped.
+- **With `onEvent`,** it fires `Moss Question Asked` with `source: 'host'` as its request goes out. See [Events](/en/sdk/events).
+- **Don't toggle the chat on mount.** Moss opens the chat for the question; a toggle would close it and drop the question.
+- **Same window and origin.** Call `askMoss()` in the same window and on the same origin as Moss. To tell tabs apart, it reads `window.name`, and names the window when it has no name.
+
+`askMoss()` loads no React, mounts nothing and never throws.
+
+## FloatingActionBar
+
+`FloatingActionBar` is an optional component that shows Moss at the bottom of the page while the chat is closed. It suits a guide the user follows with the chat closed.
+
+```tsx
+import { AgentProvider, AssistantButton, FloatingActionBar } from '@viamoss/moss-sdk';
+
+<AgentProvider config={config}>
+  <App />
+  <AssistantButton />
+  <FloatingActionBar />
+</AgentProvider>
+```
+
+| Prop | Type | Default | What it does |
+|------|------|---------|--------------|
+| `defaultRevealed` | `boolean` | `false` | Start fully shown instead of peeking from the bottom edge |
+| `showCoachMark` | `boolean` | `true` | Show the hint "Hover to peek at the content, and click to start chatting." until the user dismisses it in that browser tab |
+
+How it behaves:
+
+- It is centered at the bottom of the browser window and hidden while the chat is open.
+- It peeks from the bottom edge, and shows in full on hover. A click keeps it shown; a click on the shown bar opens the chat.
+- It shows Moss's latest answer, or "Have a question? Get a quick answer from our AI assistant!" before there is one.
+- It shows **Guide me** when a guide is offered, **Next** during a guide, and **Done** when the guide is complete.
+- It has no Exit control, so leave `closingChatEndsGuide` at `false` when you use it.
+- It renders in your page's DOM, outside the widget's shadow root. It is available in the npm package only.
+
+## Stability settings for guides
+
+Before each turn, and after each guide step, Moss waits for the page to settle before it reads it. On a page that loads content in steps, this wait decides whether Moss sees the next step's element. Tune it under `stability`. The full layer reference is in [Advanced](/en/sdk/advanced#stability-tuning).
+
+| Option | Type | Default | What it does |
+|--------|------|---------|--------------|
+| `stability.maxTotalWaitMs` | `number` (ms) | `15000` | The longest the layered wait takes |
+| `stability.layers.loadingIndicators` | `boolean` | `false` | Wait for loading indicators (spinners, skeletons) to disappear |
+| `stability.loadingIndicators.timeoutMs` | `number` (ms) | `5000` | The longest that layer waits |
+| `stability.loadingIndicators.selectors` | `string[]` | the list below | Replaces the default list |
+| `stability.loadingIndicators.additionalSelectors` | `string[]` | — | Adds to the default list |
+| `stability.loadingIndicators.excludeSelectors` | `string[]` | — | Elements that never count as loading |
+| `stability.placeholderGuard.enabled` | `boolean` | `true` | A last wait, right before Moss reads the page, for loading placeholders visible in the viewport to clear |
+| `stability.placeholderGuard.timeoutMs` | `number` (ms) | `4000` | The longest the guard waits. Not counted in `maxTotalWaitMs`. |
+| `stability.placeholderGuard.selectors` | `string[]` | the list below | Replaces the guard's list |
+| `stability.placeholderGuard.additionalSelectors` | `string[]` | — | Adds to the guard's list |
+| `stability.placeholderGuard.excludeSelectors` | `string[]` | — | Elements that never count, on top of `loadingIndicators.excludeSelectors` |
+| `stability.domMutations.quietPeriodMs` | `number` (ms) | `800` | How long the page must go without DOM changes |
+| `stability.domMutations.countQuietBeforeLayer` | `boolean` | `true` | From 0.17.0. Counts quiet time during the earlier layers toward `quietPeriodMs`, instead of starting a fresh wait after them |
+
+The loading-indicators layer looks for `[class*="skeleton" i]`, `[class*="loading"]`, `[class*="spinner" i]`, `[class*="placeholder"]`, `[aria-busy="true"]`, `[data-loading="true"]`, `.shimmer`, `.pulse` and `[class*="loader" i]`.
+
+The placeholder guard runs whether or not the loading-indicators layer is on. It looks for `[class*="skeleton" i]`, `[data-testid*="skeleton" i]`, `[class*="shimmer" i]`, `.placeholder-glow`, `.placeholder-wave`, `[aria-busy="true"]` and `[data-loading="true"]`. If you set `loadingIndicators.selectors`, the guard uses that list instead. After the guard times out, Moss reads the page anyway.
+
+```tsx
+stability: {
+  afterReload: { enabled: true },
+  layers: { loadingIndicators: true },
+  loadingIndicators: {
+    additionalSelectors: ['.app-busy'],
+    excludeSelectors: ['.always-on-spinner'],
+  },
+},
+```
+
+<Tip>
+    An element that always matches a loading selector, such as a permanent spinner or an element with "loading" in its class name, holds the wait until it times out on every turn. Add it to `excludeSelectors`.
+</Tip>
+
+## Common questions
+
+**Why didn't Moss offer a guide?**
+Moss offers a guide only when its answer comes with a plan of steps on the page, and only when two switches under **Configure > Behavior** are both on: **On-screen guidance** in **Core Features** (on by default) and **Enable Planning** in **Plan Progress Tracking** (off by default). A new application needs **Enable Planning** turned on.
+
+**How do I end a guide when the user closes the chat?**
+Set `closingChatEndsGuide: true`. By default a guide keeps running, with its highlight, while the chat is closed.
+
+**Moss loses the guide when a step loads a new page. How do I keep it?**
+Set `stability.afterReload.enabled: true`, and make sure the page that loads mounts `AgentProvider`. If you mount Moss on demand, call `shouldStartMoss()` as each page loads.
+
+**Moss starts closed in a new tab. Is that expected?**
+Yes. Each tab keeps its own open or closed state, and a tab your page opens with `window.open()` starts closed with no guide. The exception is a tab opened by a guide step's click, which continues the guide when `stability.afterReload.enabled` is on.
+
+**How do I open Moss with a question from my own help menu?**
+Call `askMoss(question)` from `@viamoss/moss-sdk/start`. It works whether or not Moss is mounted yet.
+
+**Can users minimize the chat during a guide?**
+From 0.17.0, with `appearance.chrome.guide.minimize: true`, in the floating layout. See [Appearance](/en/sdk/appearance#guide-offer-and-guide).
+
+## Related
+
+- [Appearance](/en/sdk/appearance): guide offer, highlight color, badges, Next placement, minimize
+- [Sessions](/en/sdk/api/session): timeouts and what happens when a user comes back
+- [Events and errors](/en/sdk/events): `Moss Plan` events
+- [Hooks](/en/sdk/api/hooks): `openChat()`, `closeChat()`, `continueGuide()`

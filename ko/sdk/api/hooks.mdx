@@ -1,166 +1,128 @@
 ---
 title: "Hooks"
-description: "Moss 어시스턴트를 프로그래밍 방식으로 제어하기 위한 React Hooks"
+description: "useAgent 훅으로 React 코드에서 Moss 어시스턴트 제어하기"
 icon: "code"
 ---
 
 # React Hooks
 
-Moss SDK는 어시스턴트 UI를 프로그래밍 방식으로 제어할 수 있는 React Hooks를 제공합니다. 선언적인 `data-moss-trigger` 속성보다 더 세밀한 제어가 필요할 때 사용하세요.
+`useAgent()`를 쓰면 React 컴포넌트에서 채팅을 열고 닫고, 메시지를 보내고, 채팅 상태를 따라갈 수 있습니다. 선언적인 `data-moss-trigger` 속성으로 부족할 때 쓰세요. npm 패키지에만 있습니다.
 
 ## useAgent
 
-Moss 어시스턴트와 상호작용하기 위한 주요 Hook입니다. 반드시 `AgentProvider` 내에서 사용해야 합니다.
+`AgentProvider` 안에서 렌더링되는 컴포넌트에서 호출하세요. 프로바이더 밖에서 호출하면 `useAgent must be used within an AgentProvider` 오류를 던집니다.
 
 ```tsx
 import { useAgent } from '@viamoss/moss-sdk';
 
-function MyComponent() {
-  const {
-    isChatOpen,
-    openChat,
-    closeChat,
-    toggleChat,
-    messages,
-    sendMessage,
-    isConnected,
-    isWaitingForResponse,
-  } = useAgent();
+function HelpButton() {
+  const { isChatOpen, openChat, closeChat } = useAgent();
 
   return (
-    <button onClick={() => openChat()}>
-      어시스턴트 열기
+    <button onClick={() => (isChatOpen ? closeChat() : openChat())}>
+      {isChatOpen ? 'Close help' : 'Open help'}
     </button>
   );
 }
 ```
 
+프로바이더 밖의 코드를 포함해 어디서든 질문과 함께 Moss를 열려면 `askMoss()`를 쓰세요. [가이드와 페이지 이동](/ko/sdk/guides-and-navigation)을 참고하세요.
+
 ---
 
 ## 반환 값
 
-`useAgent()`는 다음 속성과 메서드를 포함하는 `AgentState` 객체를 반환합니다:
+`useAgent()`는 `AgentState` 객체를 반환합니다. 전체 정의는 [Types](/ko/sdk/api/types#agentstate)를 참고하세요.
 
-### 상태 속성
+### 상태
 
-| 속성 | 타입 | 설명 |
-|------|------|------|
-| `isConnected` | `boolean` | SDK가 백엔드에 연결되어 있는지 여부 |
-| `isChatOpen` | `boolean` | 채팅 모달이 현재 열려 있는지 여부 |
-| `messages` | `ChatMessage[]` | 현재 대화의 메시지 배열 |
-| `isWaitingForResponse` | `boolean` | 어시스턴트가 응답을 처리 중인지 여부 |
-| `chatMode` | `'chat' \| 'guide'` | 현재 대화 모드 |
-| `suggestsGuideMode` | `boolean` | 어시스턴트가 가이드 모드로 전환을 제안했는지 여부 |
-| `useVision` | `boolean` | 비전(스크린샷 분석) 기능이 활성화되어 있는지 여부 |
-| `debugMode` | `boolean` | 디버그 모드가 활성화되어 있는지 여부 |
+| 속성 | 타입 | 의미 |
+|----------|------|---------|
+| `isConnected` | `boolean` | 채팅 세션이 연결되어 있습니다. SDK는 채팅이 열릴 때, 또는 이어 갈 세션이 있으면 페이지가 로드될 때 세션을 시작합니다 |
+| `isChatOpen` | `boolean` | 채팅 패널이 열려 있습니다. 최소화된 상태(0.17.0부터, `appearance.chrome.guide.minimize`를 쓸 때)도 포함합니다 |
+| `messages` | `ChatMessage[]` | 현재 채팅의 메시지 |
+| `isWaitingForResponse` | `boolean` | 턴이 진행 중이거나 세션이 연결 중입니다 |
+| `isRetrievalExpected` | `boolean` | 현재 턴이 입력한 질문이라 도움말 문서를 검색합니다. 가이드 단계에서는 `false`입니다 |
+| `activeChatSessionId` | `string \| null` | 현재 Moss 세션 ID. 이벤트에 실리는 `sessionId`와 같습니다. 세션이 생기기 전에는 `null`입니다 |
+| `chatMode` | `'chat' \| 'guide'` | 가이드가 진행 중인지 여부 |
+| `suggestsGuideMode` | `boolean` | 가장 최근 답변이 가이드를 제안합니다(**가이드 시작** 버튼, 또는 직접 정한 `chrome.guideOffer.label`) |
+| `planPhase` | `'offered' \| 'executing' \| null \| undefined` | 마지막 턴 뒤의 가이드 단계: 제안됨, 진행 중, 또는 가이드가 없으면 `null`. 백엔드가 알려 주지 않았으면 `undefined`입니다 |
+| `useVision` | `boolean` | 이 세션에서 비전 스크린샷이 켜져 있습니다 |
+| `debugMode` | `boolean` | 설정한 `debugMode` 값 |
 
-### 채팅 제어 메서드
+### openChat(position?)
 
-#### `openChat(position?)`
-
-채팅 모달을 엽니다. 이미 열려 있으면 아무 동작도 하지 않습니다.
+채팅 패널을 엽니다.
 
 ```tsx
 const { openChat } = useAgent();
 
-// 기본 위치로 열기
-openChat();
-
-// 사용자 지정 위치로 열기
-openChat({ x: 100, y: 100, width: 400, height: 600 });
+openChat();                                           // 마지막 위치에서
+openChat({ x: 24, y: 80, width: 420, height: 600 });  // 이번에만
 ```
 
-| 매개변수 | 타입 | 설명 |
-|----------|------|------|
-| `position` | `DefaultModalPosition` | 선택사항. 초기 위치 및 크기 |
+| 매개변수 | 타입 | 의미 |
+|-----------|------|---------|
+| `position` | `DefaultModalPosition` | 선택 사항. 뷰포트 왼쪽 위 모서리를 기준으로 한 위치와 크기(CSS 픽셀) |
 
----
+- 채팅이 이미 열려 있으면 아무 일도 일어나지 않습니다. 단, 최소화된 패널은 다시 펼쳐집니다.
+- `position`은 이번 한 번만 적용되며 저장되지 않습니다. Moss는 패널을 뷰포트 안에 둡니다. 들어갈 수 있는 패널은 안쪽으로 옮기고, 들어가지 않는 패널은 크기를 줄입니다. 열려 있는 동안 사용자가 패널을 끌거나 크기를 바꾸면 사용자가 정한 배치가 유지됩니다.
+- 도킹 레이아웃(`appearance.layout.mode: 'docked'`)에서는 `position`을 무시합니다. [외관](/ko/sdk/appearance)을 참고하세요.
 
-#### `closeChat()`
+### closeChat()
 
-채팅 모달을 닫습니다. 이미 닫혀 있으면 아무 동작도 하지 않습니다.
+채팅 패널을 닫습니다.
 
-```tsx
-const { closeChat } = useAgent();
+- `askMoss()`로 요청했지만 아직 보내지 않은 질문은 취소됩니다. 채팅이 이미 닫혀 있으면 이것만 합니다.
+- `closingChatEndsGuide: true`이면 진행 중인 가이드가 끝납니다. [가이드와 페이지 이동](/ko/sdk/guides-and-navigation)을 참고하세요.
 
-closeChat();
-```
+### toggleChat(position?)
 
----
+채팅이 열려 있으면 닫고, 닫혀 있으면 선택적인 `position`으로 엽니다. 최소화된 패널은 닫지 않고 다시 펼칩니다.
 
-#### `toggleChat(position?)`
+### sendMessage(text, attachments?)
 
-채팅 모달을 열거나 닫습니다.
-
-```tsx
-const { toggleChat } = useAgent();
-
-// 기본 위치로 토글
-toggleChat();
-
-// 사용자 지정 위치로 토글 (열 때 적용)
-toggleChat({ x: 100, y: 100, width: 400, height: 600 });
-```
-
-| 매개변수 | 타입 | 설명 |
-|----------|------|------|
-| `position` | `DefaultModalPosition` | 선택사항. 열 때 적용할 위치 |
-
----
-
-#### `sendMessage(text)`
-
-어시스턴트에게 프로그래밍 방식으로 메시지를 보냅니다.
+현재 채팅에 사용자로서 메시지를 보냅니다.
 
 ```tsx
-const { sendMessage } = useAgent();
+const { sendMessage, isConnected } = useAgent();
 
-await sendMessage('새 프로젝트는 어떻게 만드나요?');
-```
-
-| 매개변수 | 타입 | 설명 |
-|----------|------|------|
-| `text` | `string` | 보낼 메시지 |
-
-**반환:** `Promise<void>`
-
----
-
-#### `startNewChat()`
-
-현재 대화를 지우고 새 채팅 세션을 시작합니다.
-
-```tsx
-const { startNewChat } = useAgent();
-
-await startNewChat();
-```
-
-**반환:** `Promise<void>`
-
----
-
-### 가이드 모드 메서드
-
-#### `continueGuide()`
-
-가이드 모드에서 다음 단계로 진행합니다. "다음" 버튼을 클릭하는 것과 동일합니다.
-
-```tsx
-const { continueGuide, chatMode } = useAgent();
-
-if (chatMode === 'guide') {
-  await continueGuide();
+if (isConnected) {
+  await sendMessage('How do I create a new project?');
 }
 ```
 
-**반환:** `Promise<void>`
+| 매개변수 | 타입 | 의미 |
+|-----------|------|---------|
+| `text` | `string` | 메시지 |
+| `attachments` | `AttachmentRef[]` | 선택 사항, 0.17.0부터. 최대 5개(`MAX_ATTACHMENT_FILES`). SDK는 업로드 API를 내보내지 않으므로 연동 코드에서는 생략합니다 |
 
----
+**반환 값:** `Promise<void>`
 
-#### `acceptGuideSuggestion()`
+- 채팅에 세션이 있어야 합니다. 세션이 생기기 전에 호출하면 메시지를 보내지 않고 SDK가 `Cannot send message: activeChatSessionId is not set`을 로그에 남깁니다. 예외는 하나입니다. 비활성 후 돌아온 사용자를 위해 Moss가 새 채팅을 시작하는 동안에는 메시지 하나를 붙잡아 두었다가 새 채팅이 연결되면 보냅니다. [세션](/ko/sdk/api/session)을 참고하세요.
+- 첨부가 5개를 넘으면 요청을 보내기 전에 promise가 `TooManyAttachmentsError`로 거부됩니다.
+- 메시지는 패널이 열려 있든 닫혀 있든 채팅에 나타납니다.
 
-어시스턴트의 가이드 모드 전환 제안을 수락합니다. "가이드 시작" 버튼을 클릭하는 것과 동일합니다.
+### startNewChat()
+
+채팅 헤더의 **새 질문** 버튼처럼 현재 채팅을 끝내고 새 채팅을 시작합니다.
+
+**반환 값:** `Promise<void>`
+
+- 현재 채팅에 주고받은 내용이 한 번 이상 있고 아직 평가하지 않았다면 평가 카드가 먼저 나타나고, 사용자가 평가하거나 건너뛰면 새 채팅이 시작됩니다. 이 경우 promise는 새 채팅이 시작되기 전에 resolve되므로, 바로 뒤에 호출한 `sendMessage()`는 이전 채팅으로 갑니다.
+- `askMoss()`로 요청했지만 아직 보내지 않은 질문은 취소됩니다.
+
+### continueGuide()
+
+**다음** 버튼처럼 진행 중인 가이드를 다음 단계로 넘깁니다.
+
+**반환 값:** `Promise<void>`
+
+### acceptGuideSuggestion()
+
+**가이드 시작** 버튼처럼 가장 최근 답변이 제안한 가이드를 시작합니다.
+
+**반환 값:** `Promise<void>`
 
 ```tsx
 const { acceptGuideSuggestion, suggestsGuideMode } = useAgent();
@@ -170,31 +132,13 @@ if (suggestsGuideMode) {
 }
 ```
 
-**반환:** `Promise<void>`
+<Note>
+    `AgentState`에는 Moss 자체의 디버그 도구와 개발 중인 기능을 위한 멤버도 몇 가지 선언되어 있습니다. 여기서는 다루지 않으며, 예고 없이 바뀔 수 있습니다.
+</Note>
 
 ---
 
-### 디버그 메서드
-
-#### `captureContext()`
-
-현재 페이지 컨텍스트(스크린샷 및 DOM)를 수동으로 캡처합니다. 디버깅 용도로만 유용합니다.
-
-```tsx
-const { captureContext, debugMode } = useAgent();
-
-if (debugMode) {
-  const context = await captureContext();
-  console.log(context?.screenshotDataUrl);
-  console.log(context?.pageText);
-}
-```
-
-**반환:** `Promise<{ screenshotDataUrl: string | null; pageText: string | null } | null>`
-
----
-
-## 예제
+## 예시
 
 ### 커스텀 도움말 버튼
 
@@ -205,11 +149,8 @@ function HelpButton() {
   const { openChat, isChatOpen } = useAgent();
 
   return (
-    <button
-      onClick={() => openChat()}
-      disabled={isChatOpen}
-    >
-      {isChatOpen ? '채팅 열림' : '도움이 필요하세요?'}
+    <button onClick={() => openChat()} disabled={isChatOpen}>
+      {isChatOpen ? 'Chat open' : 'Need help?'}
     </button>
   );
 }
@@ -226,7 +167,7 @@ function KeyboardShortcut() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Cmd/Ctrl + K로 채팅 토글
+      // Cmd/Ctrl + K로 채팅을 열고 닫습니다
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
         toggleChat();
@@ -241,39 +182,37 @@ function KeyboardShortcut() {
 }
 ```
 
-### 메시지 카운터 배지
+### 답변 개수 배지
 
 ```tsx
 import { useAgent } from '@viamoss/moss-sdk';
 
-function MessageBadge() {
+function AnswerCount() {
   const { messages, openChat } = useAgent();
-  const unreadCount = messages.filter(m => m.sender === 'assistant').length;
+  const answers = messages.filter(m => m.sender === 'assistant').length;
 
   return (
-    <button onClick={() => openChat()} className="relative">
-      도움말
-      {unreadCount > 0 && (
-        <span className="badge">{unreadCount}</span>
-      )}
+    <button onClick={() => openChat()}>
+      Help
+      {answers > 0 && <span className="badge">{answers}</span>}
     </button>
   );
 }
 ```
 
-### 로딩 상태와 함께 메시지 보내기
+### 자체 입력창에서 질문하기
 
 ```tsx
 import { useState } from 'react';
 import { useAgent } from '@viamoss/moss-sdk';
 
 function QuickQuestion() {
-  const { sendMessage, openChat, isWaitingForResponse } = useAgent();
+  const { sendMessage, isConnected, isWaitingForResponse } = useAgent();
   const [question, setQuestion] = useState('');
+  const ready = isConnected && !isWaitingForResponse;
 
   const handleSubmit = async () => {
     if (!question.trim()) return;
-    openChat();
     await sendMessage(question);
     setQuestion('');
   };
@@ -283,28 +222,27 @@ function QuickQuestion() {
       <input
         value={question}
         onChange={(e) => setQuestion(e.target.value)}
-        placeholder="빠른 질문하기..."
-        disabled={isWaitingForResponse}
+        placeholder="Ask a quick question..."
+        disabled={!ready}
       />
-      <button
-        onClick={handleSubmit}
-        disabled={isWaitingForResponse || !question.trim()}
-      >
-        {isWaitingForResponse ? '전송 중...' : '질문하기'}
+      <button onClick={handleSubmit} disabled={!ready || !question.trim()}>
+        {isWaitingForResponse ? 'Sending...' : 'Ask'}
       </button>
     </div>
   );
 }
 ```
 
+`isConnected`는 채팅을 한 번 열거나 이전 세션을 이어 가기 전까지 `false`입니다. 채팅을 열고 질문하는 것을 한 번에 하려면 `askMoss()`를 쓰세요. [가이드와 페이지 이동](/ko/sdk/guides-and-navigation)을 참고하세요.
+
 ---
 
-## 참고사항
+## 참고 사항
 
 <Warning>
-  `useAgent()`는 반드시 `AgentProvider` 내에서 호출해야 합니다. 외부에서 호출하면 오류가 발생합니다.
+    `useAgent()`는 `AgentProvider` 안에서 호출해야 합니다. 밖에서 호출하면 오류를 던집니다.
 </Warning>
 
 <Info>
-  이 Hook은 안정적인 함수 참조를 반환합니다. 의존성 배열에 안전하게 포함할 수 있으며 불필요한 리렌더링을 유발하지 않습니다.
+    `useAgent()`가 반환하는 함수는 메모이즈되어 있지만, 일부는 채팅 상태가 바뀌면 함께 바뀝니다. 위의 키보드 예시에서 `toggleChat`을 넣은 것처럼, effect의 의존성 배열에 평소처럼 넣으세요.
 </Info>

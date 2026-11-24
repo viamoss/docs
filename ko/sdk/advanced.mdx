@@ -1,156 +1,185 @@
 ---
 title: "고급"
-description: "안정성 튜닝, Shadow DOM, CSP 및 문제 해결"
+description: "안정성 튜닝, Shadow DOM, CSP, 네이티브 다이얼로그, 페이지 변경, 문제 해결"
 icon: "sliders"
 ---
 
 # 고급 설정
 
+이 페이지는 SDK가 페이지가 안정되기를 기다리는 방식, SDK UI가 페이지에 놓이는 방식, Content Security Policy가 허용해야 하는 것, 그리고 연동 문제를 해결하는 방법을 다룹니다. SDK가 페이지에서 읽는 것과 그 범위를 제한하는 방법은 [페이지 데이터와 개인정보 보호 설정](/ko/sdk/page-data)을 참고하세요.
+
 ## 안정성 튜닝
 
-페이지 컨텍스트를 캡처하기 전에 SDK는 페이지가 안정화될 때까지 대기합니다. 이를 통해 불완전하거나 렌더링 중인 스냅샷이 AI에 전송되는 것을 방지합니다. 안정성 시스템은 여러 감지 레이어를 순차적으로 실행하며, 각 레이어는 개별적으로 켜고 끌 수 있습니다:
+SDK는 질문이나 가이드 단계를 위해 페이지를 읽기 전에, 모델이 렌더링이 덜 끝난 화면을 보지 않도록 페이지가 안정되기를 기다립니다. 이 대기는 다음 감지 레이어를 이 순서대로 실행합니다.
 
-| 레이어 | 감지 대상 | 기본값 |
-|--------|----------|--------|
-| **Network Idle** | 대기 중인 fetch/XHR 요청 | 활성화 |
-| **DOM Mutations** | DOM 변경 (MutationObserver 사용) | 활성화 |
-| **Loading Indicators** | 스피너, 스켈레톤, `[aria-busy]` | 비활성화 |
-| **Frame Readiness** | 동일 출처 프레임 문서가 `readyState: 'complete'`에 도달 | 활성화 |
-| **Resource Quiet** | 마지막 리소스 완료 이후 Resource Timing 항목이 잠잠해짐 | 활성화 |
-| **Layout Shifts** | 시각적 레이아웃 변경 (PerformanceObserver 사용) | 비활성화 |
-| **Browser Idle** | CPU 유휴 (requestIdleCallback 사용) | 활성화 |
-| **Final Frame** | requestAnimationFrame 1회 | 활성화 |
+| 레이어 | 기다리는 대상 | 기본값 |
+|-------|-------------------|---------|
+| **Network Idle** | 대기 중인 fetch와 XHR 요청 | 켜짐 |
+| **Frame Readiness** | 같은 출처 프레임이 `readyState: 'complete'`에 이르는 것 | 켜짐 |
+| **Resource Quiet** | 일정 시간 동안 새 리소스 로드가 없는 것 | 켜짐 |
+| **DOM Mutations** | 일정 시간 동안 DOM 변경이 없는 것 | 켜짐 |
+| **Loading Indicators** | 스피너, 스켈레톤, `[aria-busy]`가 사라지는 것 | 꺼짐 |
+| **Layout Shifts** | 레이아웃 이동이 멈추는 것 | 꺼짐 |
+| **Browser Idle** | 유휴 콜백(`requestIdleCallback`) | 켜짐 |
+| **Final Frame** | 애니메이션 프레임 하나 | 켜짐 |
+
+레이어가 끝나면 **플레이스홀더 가드**가 항상 실행됩니다. 화면에 보이는 로딩 플레이스홀더(스켈레톤, 시머, `aria-busy`)가 뷰포트에 있는 동안 최대 4초까지 사라지기를 기다린 뒤 캡처를 진행합니다. Loading Indicators 레이어가 켜져 있는지와 상관없이 실행됩니다.
 
 <Info>
-    로딩 인디케이터와 레이아웃 시프트 레이어는 기본적으로 비활성화되어 있습니다. 많은 사이트에 지속적인 로딩 애니메이션이 있어 불필요한 지연을 유발할 수 있기 때문입니다. 애플리케이션이 확실히 사라지는 스켈레톤 스크린을 사용하는 경우 활성화하세요.
+    많은 사이트가 로딩 애니메이션이나 움직이는 요소를 화면에 계속 띄워 두기 때문에, Loading Indicators와 Layout Shifts는 기본으로 꺼져 있습니다. 켜 두면 캡처할 때마다 시간 초과까지 기다리게 됩니다. 스켈레톤 화면이 확실히 사라지는 사이트라면 켜세요.
 </Info>
 
-### 추가 레이어 활성화
+### 레이어 켜고 끄기
+
+레이어를 켜거나 끄려면 `layers`를 쓰세요.
 
 ```tsx
 <AgentProvider config={{
   // ...
   stability: {
     layers: {
-      loadingIndicators: true,  // 로딩 인디케이터 감지 활성화
-      layoutShift: true,        // 레이아웃 시프트 감지 활성화
+      loadingIndicators: true,
+      layoutShift: true,
     },
   },
 }}>
 ```
 
-### 레이어별 설정
-
-각 레이어를 개별적으로 설정할 수 있습니다:
-
-```tsx
-stability: {
-  // 글로벌 타임아웃
-  maxTotalWaitMs: 15000,       // 모든 레이어의 최대 총 대기 시간 (기본값: 15초)
-  networkTimeoutMs: 10000,     // 네트워크 유휴 타임아웃 (기본값: 10초)
-  browserIdleTimeoutMs: 500,   // 브라우저 유휴 타임아웃 (기본값: 500ms)
-
-  // DOM 뮤테이션 레이어
-  domMutations: {
-    quietPeriodMs: 800,        // 이 시간 동안 변경 없음 = 안정 (기본값: 800ms)
-    excludeSelectors: ['.live-clock', '.notification-badge'],
-  },
-
-  // 로딩 인디케이터 레이어 (layers.loadingIndicators도 활성화해야 함)
-  loadingIndicators: {
-    selectors: ['[class*="skeleton"]', '.spinner', '[aria-busy="true"]'],
-    excludeSelectors: ['.permanent-loader'],
-    timeoutMs: 5000,
-  },
-
-  // 레이아웃 시프트 레이어 (layers.layoutShift도 활성화해야 함)
-  layoutShift: {
-    quietPeriodMs: 200,        // 이 시간 동안 시프트 없음 = 안정 (기본값: 200ms)
-    ignoreThreshold: 0.01,     // 작은 시프트 무시 (기본값: 0.01)
-  },
-}
-```
-
-### 안정성 검사 비활성화
-
-테스트용이나 매우 단순한 페이지의 경우 레이어를 비활성화할 수 있습니다:
-
-```tsx
-stability: {
-  layers: {
-    networkIdle: false,
-    domMutations: false,
-    browserIdle: false,
-    finalFrame: false,
-  },
-}
-```
+레이어 자체의 `enabled: false`(예: `domMutations: { enabled: false }`)로도 레이어를 끌 수 있지만, 거기서 `enabled: true`로 설정해도 기본으로 꺼진 레이어는 켜지지 않습니다. 켤 때는 `layers`를 쓰세요.
 
 <Warning>
-    안정성 레이어를 비활성화하면 AI가 불완전한 페이지 컨텍스트를 받을 수 있습니다. 테스트 용도이거나 페이지가 완전히 렌더링되었다고 확신하는 경우에만 비활성화하세요.
+    레이어를 끄면 모델에 불완전한 페이지가 전달될 수 있습니다. 테스트할 때나, 페이지가 완전히 렌더링된다고 확신할 때만 끄세요.
 </Warning>
+
+### 레이어별 설정
+
+```tsx
+stability: {
+  maxTotalWaitMs: 15000,       // 모든 레이어를 합친 최대 대기 시간(기본값 15000)
+  networkTimeoutMs: 10000,     // Network Idle 시간 초과(기본값 10000)
+  browserIdleTimeoutMs: 500,   // Browser Idle 시간 초과(기본값 500)
+
+  domMutations: {
+    quietPeriodMs: 800,                            // 기본값 800
+    excludeSelectors: ['.live-clock', '.notification-badge'],
+    countQuietBeforeLayer: true,                   // 기본값 true(0.17.0부터)
+  },
+
+  loadingIndicators: {                             // layers.loadingIndicators: true가 필요합니다
+    additionalSelectors: ['.my-spinner'],          // 기본 목록에 더해집니다
+    excludeSelectors: ['.permanent-loader'],
+    timeoutMs: 5000,                               // 기본값 5000
+  },
+
+  frameReadiness: { quietMs: 200, timeoutMs: 10000 },  // 기본값
+  resourceQuiet:  { quietMs: 500, timeoutMs: 8000 },   // 기본값
+
+  layoutShift: {                                   // layers.layoutShift: true가 필요합니다
+    quietPeriodMs: 200,                            // 기본값 200
+    ignoreThreshold: 0.01,                         // 기본값 0.01
+  },
+
+  placeholderGuard: {
+    enabled: true,                                 // 기본값 true
+    timeoutMs: 4000,                               // 기본값 4000. maxTotalWaitMs에 포함되지 않습니다
+    additionalSelectors: ['.my-skeleton'],
+    excludeSelectors: ['.always-shimmering'],
+  },
+}
+```
+
+| 설정 | 타입 | 기본값 | 의미 |
+|---------|------|---------|---------|
+| `maxTotalWaitMs` | `number`(ms) | `15000` | 모든 레이어를 합친 최대 대기 시간 |
+| `networkTimeoutMs` | `number`(ms) | `10000` | 네트워크가 조용해지기를 기다리는 최대 시간 |
+| `browserIdleTimeoutMs` | `number`(ms) | `500` | 유휴 콜백을 기다리는 최대 시간 |
+| `domMutations.quietPeriodMs` | `number`(ms) | `800` | 이 시간 동안 DOM 변경이 없으면 안정된 것으로 봅니다 |
+| `domMutations.excludeSelectors` | `string[]` | `[]` | 이 요소들 안의 변경은 무시합니다 |
+| `domMutations.countQuietBeforeLayer` | `boolean` | `true` | 0.17.0부터. 앞선 레이어가 실행되는 동안 조용했던 시간도 대기 시간에 셉니다. 끄면 앞선 레이어가 끝난 뒤 새로 시간을 잽니다 |
+| `loadingIndicators.selectors` | `string[]` | 내장 목록 | 로딩 선택자의 내장 목록을 대체합니다 |
+| `loadingIndicators.additionalSelectors` | `string[]` | — | 내장 목록을 대체하지 않고 더합니다 |
+| `loadingIndicators.excludeSelectors` | `string[]` | `[]` | 로딩으로 보지 않을 요소. 플레이스홀더 가드에도 적용됩니다 |
+| `loadingIndicators.timeoutMs` | `number`(ms) | `5000` | 이 레이어의 최대 대기 시간 |
+| `frameReadiness.quietMs` | `number`(ms) | `200` | 로딩 중인 프레임이 보인 뒤, 모든 프레임이 완료 상태로 머물러야 하는 시간 |
+| `frameReadiness.timeoutMs` | `number`(ms) | `10000` | 이 레이어의 최대 대기 시간 |
+| `resourceQuiet.quietMs` | `number`(ms) | `500` | 가장 최근 리소스가 로드를 마친 뒤 조용해야 하는 시간 |
+| `resourceQuiet.timeoutMs` | `number`(ms) | `8000` | 이 레이어의 최대 대기 시간 |
+| `layoutShift.quietPeriodMs` | `number`(ms) | `200` | 이 시간 동안 레이아웃 이동이 없으면 안정된 것으로 봅니다 |
+| `layoutShift.ignoreThreshold` | `number` | `0.01` | 이보다 작은 이동은 무시합니다 |
+| `placeholderGuard.enabled` | `boolean` | `true` | 플레이스홀더 가드를 실행합니다 |
+| `placeholderGuard.timeoutMs` | `number`(ms) | `4000` | 플레이스홀더가 사라지기를 기다리는 최대 시간. `maxTotalWaitMs`에 포함되지 않습니다 |
+| `placeholderGuard.selectors` | `string[]` | `loadingIndicators.selectors`, 없으면 내장 목록 | 플레이스홀더 선택자를 대체합니다 |
+| `placeholderGuard.additionalSelectors` | `string[]` | — | 플레이스홀더 선택자에 더합니다 |
+| `placeholderGuard.excludeSelectors` | `string[]` | — | 플레이스홀더로 보지 않을 요소와 그 안의 요소 |
+
+각 레이어 객체는 위에서 설명한 `enabled`도 받습니다.
 
 ### 리로드 후 처리
 
-가이드 단계 중에 전체 페이지 리로드가 발생하는 경우 `afterReload` 옵션을 활성화하여 상태를 보존하세요:
+가이드 중에 앱이 페이지 전체를 새로 불러온다면(링크, 리디렉션, 폼 제출) `afterReload`를 켜세요. 그러면 다음 페이지에서 가이드가 이어집니다.
 
 ```tsx
 stability: {
   afterReload: {
-    enabled: true,          // 명시적으로 활성화하지 않으면 꺼져 있음
-    pendingTTL: 30000,      // 대기 상태가 유효한 시간 (기본값: 30000ms)
-    storageKey: 'my-app-moss-pending',  // 대기 상태를 저장하는 키 재정의
+    enabled: true,      // 기본값 false
+    pendingTTL: 30000,  // ms, 기본값 30000
   },
 }
 ```
 
-| 필드 | 타입 | 기본값 | 설명 |
-|------|------|--------|------|
-| `enabled` | `boolean` | `false` | 전체 페이지 리로드를 거쳐 대기 중인 가이드 상태를 보존 |
-| `pendingTTL` | `number` | `30000` | 대기 마커가 폐기되기 전까지 유효한 시간(밀리초) |
-| `storageKey` | `string` | SDK 기본값 | 대기 마커를 저장하는 데 사용하는 스토리지 키 |
+| 필드 | 타입 | 기본값 | 의미 |
+|-------|------|---------|---------|
+| `enabled` | `boolean` | `false` | 페이지를 새로 불러와도 가이드 단계를 이어 갑니다 |
+| `pendingTTL` | `number`(ms) | `30000` | 다음 페이지가 그 단계를 이어받을 때까지 허용하는 시간 |
+
+Moss를 필요할 때만 마운트한다면, `shouldStartMoss()`가 이 표시를 보고 페이지 로드 때 Moss를 마운트할지 정합니다. [가이드와 페이지 이동](/ko/sdk/guides-and-navigation)을 참고하세요.
 
 ---
 
 ## Shadow DOM
 
-SDK는 모든 UI를 `document.body`에 첨부된 Shadow DOM 내부에 렌더링합니다. 이는 다음을 의미합니다:
+npm 패키지의 `AgentProvider`는 React 트리에서 프로바이더가 있는 자리에 호스트 요소 `<div id="clippy-shadow-host">`를 렌더링합니다. 이 요소는 왼쪽 위에 `position: fixed`로 놓이며 `z-index: 2147483647`입니다. 채팅 패널과 가이드 UI는 이 요소의 열린 섀도 루트 안에 렌더링됩니다. (`clippy`는 예전 이름이며, 이 id는 0.17.0에서도 바뀌지 않았습니다.)
 
-- **여러분의 CSS가 Moss UI에 영향을 줄 수 없습니다** — 스타일이 완전히 캡슐화됨
-- **Moss CSS가 여러분의 앱에 영향을 줄 수 없습니다** — 스타일 누출 없음
-- **여러분의 앱에서 DOM 쿼리로 Moss 요소를 찾을 수 없습니다** — `document.querySelector`가 Shadow Root 내부의 요소를 매칭하지 않음
+- **페이지의 CSS 규칙은 섀도 루트 안의 Moss 요소에 적용되지 않고**, 그 안의 Moss 스타일도 페이지에 닿지 않습니다.
+- **크기는 루트 글꼴 크기를 따릅니다.** 위젯의 크기는 `rem` 단위이므로 페이지의 `html` 글꼴 크기에 맞춰 커지고 작아집니다.
+- **프로바이더의 자식 요소는 섀도 루트 밖에 렌더링됩니다.** `AssistantButton`, `FloatingActionBar`, 그리고 `AgentProvider`에 넘긴 자체 컴포넌트는 페이지의 일반 요소입니다.
+- **`document.querySelector`로는 섀도 루트 안의 요소를 찾을 수 없습니다.** 자동화 테스트에서는 `#clippy-shadow-host`를 선택한 뒤 열린 섀도 루트 안으로 들어가세요.
 
-<Tip>
-    자동화된 테스트 도구(Cypress, Playwright 등)를 사용하는 경우 Moss 요소와 상호 작용하려면 Shadow DOM을 관통해야 합니다. `#moss-shadow-host` 호스트 요소를 찾으세요(0.16 이하 SDK 버전에서는 `#clippy-shadow-host`).
-</Tip>
+CDN 스크립트는 같은 프로바이더를 `<body>` 끝에 추가한 컨테이너 `<div id="moss-sdk-root">` 안에 렌더링합니다. 이 컨테이너는 고정 위치이며 `z-index: 2147483647`, `pointer-events: none`입니다.
+
+Moss는 `<head>`에 넣는 하이라이트 스타일처럼 섀도 루트 밖의 페이지도 조금 바꿉니다. [Moss가 페이지에서 바꾸는 것](/ko/sdk/overview#moss가-페이지에서-바꾸는-것)을 참고하세요.
 
 ---
 
 ## Content Security Policy (CSP)
 
-애플리케이션에서 엄격한 CSP 헤더를 사용하는 경우 다음을 허용해야 할 수 있습니다:
+앱이 Content Security Policy를 보낸다면 다음을 허용해야 합니다.
 
-| 디렉티브 | 값 | 이유 |
-|----------|---|------|
-| `connect-src` | Moss 백엔드 URL | API 요청 |
-| `script-src` | CDN URL (스크립트 태그 사용 시) | SDK 스크립트 |
-| `style-src` | `'unsafe-inline'` | Shadow DOM 스타일 |
-| `img-src` | `blob:` `data:` | 스크린샷 처리 |
+| 지시어 | 값 | 이유 |
+|-----------|-------|-----|
+| `connect-src` | Moss `apiUrl` | 모든 SDK 요청. 0.17.0부터 `streamActivity`를 켰을 때의 Server-Sent Events도 포함합니다 |
+| `connect-src` | Moss 배포의 파일 저장소 호스트 | 비전 스크린샷과 0.17.0부터의 첨부 파일은 서명된 URL로 저장소에 바로 업로드됩니다 |
+| `script-src` | CDN 스크립트의 호스트 | CDN 설치에만 해당 |
+| `style-src` | `'unsafe-inline'` | SDK가 페이지와 섀도 루트에 `<style>` 요소를 추가하고 인라인 스타일을 씁니다 |
+| `img-src` | `data:` | 비전 스크린샷의 크기를 브라우저에서 줄입니다 |
+| `img-src` | 답변에 들어간 이미지의 호스트 | [허용된 호스트](/ko/sdk/configuration#replylinks)의 이미지만 불러옵니다 |
 
-CSP 헤더 예시:
+예시:
 
 ```
 Content-Security-Policy:
   connect-src 'self' https://moss-api.viamoss.ai;
   style-src 'self' 'unsafe-inline';
-  img-src 'self' blob: data:;
+  img-src 'self' data:;
 ```
+
+`connect-src`가 SDK를 막으면 브라우저 콘솔에 `apiUrl`에 대한 CSP 위반이 표시되고 채팅이 연결되지 않습니다. SDK가 차단을 알아채면 재시도를 멈추고, `onEvent`가 `errorType: 'connection_blocked'`인 `Moss Error`를 받습니다.
 
 ---
 
 ## DOM 관찰 범위
 
-기본적으로 SDK는 `document.body`의 변경을 관찰합니다. 페이지의 특정 부분으로 관찰을 제한하려면:
+기본적으로 Moss는 `document.body`에서 페이지 텍스트를 읽습니다. 페이지의 일부로 제한하려면 다음과 같이 설정하세요.
 
 ```tsx
 <AgentProvider config={{
@@ -159,199 +188,183 @@ Content-Security-Policy:
 }}>
 ```
 
-다음과 같은 경우에 유용합니다:
-- 앱에 재캡처를 트리거하지 말아야 할 복잡한 사이드바나 헤더가 있는 경우
-- 관련 없는 DOM 변경으로 인한 노이즈를 줄이고 싶은 경우
-- 어시스턴트가 페이지의 특정 섹션만 도와야 하는 경우
+SDK는 처음으로 맞는 요소를 쓰고, 그 안에서만 페이지 텍스트를 읽습니다. Moss가 한 영역만 도와야 할 때 쓰세요.
+
+이 옵션은 [안정성 대기](#안정성-튜닝)의 두 부분, 즉 DOM Mutations 레이어와 플레이스홀더 가드도 그 요소로 좁힙니다. Network Idle, Frame Readiness, Resource Quiet, Loading Indicators, Layout Shifts 레이어는 계속 페이지 전체를 봅니다. 요소 안에 실시간 시계처럼 계속 바뀌는 부분이 있어 대기가 길어진다면 `stability.domMutations.excludeSelectors`를 쓰세요.
+
+비전 스크린샷, 세션 녹화, 화면 기록은 여전히 페이지 전체를 대상으로 합니다. [페이지 데이터](/ko/sdk/page-data#moss가-읽는-영역-제한하기-observetargetselector)를 참고하세요.
 
 ---
 
 ## 네이티브 모달 다이얼로그
 
-애플리케이션이 네이티브 `<dialog>`를 `showModal()`로 열면, 브라우저는 다이얼로그
-바깥의 모든 요소를 비활성(inert) 상태로 만듭니다. Moss 위젯도 예외가 아닙니다.
-사용자는 어시스턴트를 클릭할 수 없고, 진행 중이던 가이드도 이어갈 수 없습니다.
+앱이 `showModal()`로 네이티브 `<dialog>`를 열면, 브라우저는 다이얼로그 밖의 모든 것을 inert 상태로 만들며 Moss 위젯도 예외가 아닙니다. 사용자는 어시스턴트를 클릭할 수 없고, 진행 중인 가이드도 이어지지 못합니다.
 
-애플리케이션에서 `showModal()`을 사용한다면, 위젯을 마운트한 요소를 넘겨 모달
-다이얼로그 이스케이프를 설치하세요:
+앱이 `showModal()`을 쓴다면, 앱 코드가 소유한 요소에 Moss를 마운트하고 그 요소에 모달 다이얼로그 탈출 기능을 설치하세요.
 
 ```tsx
-import { installModalDialogEscape } from '@viamoss/moss-sdk';
+import { createRoot } from 'react-dom/client';
+import { AgentProvider, AssistantButton, installModalDialogEscape } from '@viamoss/moss-sdk';
 
-const uninstall = installModalDialogEscape(widgetMountElement);
+// 프레임워크 트리 밖에 있는, Moss만 들어가는 요소.
+const mossHost = document.createElement('div');
+document.body.appendChild(mossHost);
 
-// 나중에 위젯을 해제할 때:
+const uninstall = installModalDialogEscape(mossHost);
+
+createRoot(mossHost).render(
+  <AgentProvider config={config}>
+    <AssistantButton />
+  </AgentProvider>
+);
+
+// 나중에 Moss를 제거할 때:
 uninstall();
 ```
 
-모달 다이얼로그가 열려 있는 동안 SDK 호스트는 다이얼로그의 트리 안으로 임시
-이동되며(그 위로 올라갑니다), 덕분에 위젯은 계속 조작 가능한 상태로 뷰포트 위치를
-유지합니다. 다이얼로그가 닫히면 호스트는 원래 DOM 위치로 복원됩니다. 반환된 함수는
-리스너를 제거하고 호스트를 복원합니다.
+모달 다이얼로그가 열려 있는 동안 SDK는 그 요소를 다이얼로그의 트리 안으로 옮기고 다이얼로그 위로 올리므로, 위젯은 계속 조작할 수 있고 화면의 제자리를 지킵니다. 다이얼로그가 닫히면 요소는 원래 자리로 돌아갑니다. 반환된 함수는 리스너를 제거하고 요소를 원래대로 되돌립니다.
 
 <Warning>
-    통합에서 온전히 소유한 요소, 즉 Moss 위젯을 마운트한 컨테이너를 넘기세요.
-    애플리케이션 프레임워크가 관리하는 노드는 절대 넘기지 마세요. 이스케이프는
-    요소를 다른 위치로 옮기므로 프레임워크의 렌더링과 충돌합니다.
+    Moss를 마운트한 컨테이너처럼 연동 코드가 전적으로 소유한 요소를 넘기세요. 앱의 프레임워크가 관리하는 노드는 절대 넘기지 마세요. 탈출 기능이 요소를 옮기므로 프레임워크의 렌더링과 충돌합니다.
 </Warning>
 
 **제한 사항:**
 
-- Shadow root 내부에 렌더링된 다이얼로그는 추적되지 않습니다.
-- Popover API를 지원하지 않는 브라우저에서는 위젯이 조작 가능한 상태로 유지되지만,
-  `overflow: hidden`이나 transform이 적용된 다이얼로그 안에서는 잘려 보일 수
-  있습니다.
+- `installModalDialogEscape`는 npm 패키지에만 있으며, CDN 스크립트에서는 쓸 수 없습니다.
+- 섀도 루트 안에 렌더링된 다이얼로그는 추적하지 않습니다.
+- Popover API가 없는 브라우저에서는 위젯을 조작할 수는 있지만, `overflow: hidden`이나 transform이 있는 다이얼로그 안에서 잘려 보일 수 있습니다.
 
 ---
 
-## 민감 콘텐츠 편집
+## 민감한 콘텐츠 마스킹
 
-### `data-moss-redact`를 이용한 선언적 편집
-
-HTML 요소에 `data-moss-redact` 속성을 지정하면 Moss 백엔드로 전송되는 모든
-데이터에서 해당 요소가 편집됩니다. 민감한 콘텐츠를 보호하는 가장 간단한 방법입니다.
+Moss가 읽으면 안 되는 요소에는 `data-moss-redact`를 붙이세요. 폼 필드의 값은 기본으로 마스킹되며(`redactAllInputs: true`), 필드 하나를 다시 읽게 하려면 `data-moss-unredact`를 붙이세요. 이미 쓰고 있는 표시를 재사용하려면 `redactionSelectors`에 나열하세요.
 
 ```html
 <div data-moss-redact>
-  <p>계좌 잔액: $12,340.56</p>
-  <p>주민등록번호: 123-45-6789</p>
+  <p>Account balance: $12,340.56</p>
 </div>
+<input type="search" data-moss-unredact />
 ```
 
-**편집되는 대상:**
+마스킹은 페이지 텍스트, 가이드 단계 보고, 그리고 0.17.0부터는 세션 녹화와 화면 기록에 적용됩니다. 입력값 마스킹은 네이티브 필드(`input`, `textarea`, `select`, 편집 가능한 영역)에만 적용되므로, 다른 요소로 만든 커스텀 컨트롤에는 `data-moss-redact`를 붙이세요. 사용자가 채팅에 입력한 내용과 비전 스크린샷에는 마스킹이 적용되지 **않습니다**.
 
-- **텍스트 콘텐츠** — 백엔드로 전송되는 구조화된 컨텍스트에서 `[REDACTED]`로 대체
-- **민감한 속성** — `value`, `placeholder`, `title`, `alt`, `aria-label`, `href`,
-  `src`, `name`이 모두 편집됨
-- **하위 요소** — 편집 대상 요소의 모든 하위 요소가 제외됨
+비전 스크린샷은 사용자가 공유한 화면(보통 이 탭)을 그대로 담은 프레임입니다. Moss는 비전이 켜져 있고(애플리케이션의 **비전 사용** 스위치, 또는 config의 `useVision: true`), `pageContext`가 `'full'`이며, 사용자가 브라우저의 화면 캡처 요청을 허용했을 때만 스크린샷을 찍습니다. 마스킹 속성은 그 내용을 바꾸지 않습니다. 페이지를 스크린샷에서 빼려면 `useVision: false`로 비전을 끄거나 `pageContext`를 `'metadata'`나 `'none'`으로 낮추세요.
 
-편집은 표시된 요소와 그 상위 10단계까지의 조상에 적용되므로, 컨테이너 하나만
-표시해 내부 전체를 편집할 수 있습니다.
+각 마커가 정확히 무엇에 적용되는지, 그리고 `data-recording-block`, `pageContext`, 수집 스위치는 [페이지 데이터와 개인정보 보호 설정](/ko/sdk/page-data#마스킹)을 참고하세요.
 
-```html
-<!-- 이 섹션 안의 모든 폼 필드가 편집됩니다 -->
-<section data-moss-redact>
-  <input type="text" placeholder="카드 번호" />
-  <input type="text" placeholder="CVV" />
-</section>
-```
+---
 
-### 입력값 편집 (기본 활성화)
+## 프로그래밍 방식의 페이지 변경
 
-`input`, `textarea`, `select`, `contenteditable` 영역을 포함한 모든 입력 요소의
-값은 기본적으로 편집됩니다. 사용자가 폼에 입력한 내용은 페이지 컨텍스트로 브라우저를
-벗어나지 않습니다.
-
-내용이 안전하고 어시스턴트에게 유용하다고 확인된 특정 필드(예: 검색창)를 대상에서
-제외하려면 `data-moss-unredact`를 지정하세요:
-
-```html
-<input type="search" data-moss-unredact placeholder="상품 검색…" />
-```
-
-입력값 편집을 완전히 비활성화하려면 `redactAllInputs: false`로 설정하세요:
+`pageSanitizationScript`는 SDK가 실제 `document`를 넘겨 호출하는 함수입니다.
 
 ```tsx
+// 같은 함수가 유지되도록 컴포넌트 밖에서 한 번만 정의하세요.
+const tidyPage = (doc: Document) => {
+  doc.querySelectorAll('.debug-overlay').forEach((el) => el.remove());
+};
+
 <AgentProvider config={{
   // ...
-  redactAllInputs: false,  // 기본값: true
+  pageSanitizationScript: tidyPage,
 }}>
 ```
+
+실제 동작은 다음과 같습니다.
+
+- **복사본이 아니라 실제 페이지를 바꿉니다.** 이 함수가 고치거나 지운 것은 사용자에게도 바뀌어 보입니다.
+- **SDK가 페이지를 관찰하기 시작할 때 실행됩니다.** 캡처할 때마다 실행되지 않으며, 함수 자체나 `observeTargetSelector`가 바뀔 때마다 다시 실행됩니다. 그 사이에 앱이 렌더링한 콘텐츠는 건드리지 않습니다.
+- **인라인 화살표 함수는 렌더링할 때마다 실행됩니다.** `AgentProvider`를 렌더링하는 컴포넌트가 렌더링될 때마다 새 함수가 만들어지면, 스크립트가 다시 실행되고 페이지 관찰도 다시 시작됩니다. 함수는 컴포넌트 밖에서 정의하거나 `useCallback`으로 감싸세요.
+- 함수가 던진 오류는 잡아서 로그에 남깁니다.
+- CDN 스크립트에서는 `window.mossSettings.pageSanitizationScript`에 함수로 넘기세요.
 
 <Warning>
-    애플리케이션의 모든 폼을 검토하지 않았다면 `redactAllInputs`를 켜 둔 채로
-    두세요. 비활성화하면 사용자가 입력한 폼 값이 Moss로 전송되는 페이지 컨텍스트에
-    포함됩니다.
-</Warning>
-
-### CSS 선택자를 이용한 편집
-
-애플리케이션이 이미 다른 도구를 위해 민감한 요소를 표시하고 있다면(예: FullStory의
-`.fs-exclude` / `.fs-mask` 클래스), 모든 곳에 `data-moss-redact`를 추가하는 대신
-기존 표시를 그대로 재사용하세요. `redactionSelectors`에 일치하는 요소는
-`data-moss-redact`와 동일하게 편집됩니다:
-
-```tsx
-<AgentProvider config={{
-  // ...
-  redactionSelectors: ['.fs-exclude', '.fs-mask', '[data-private]'],
-}}>
-```
-
-`data-moss-redact`는 이 설정과 관계없이 항상 인식됩니다. 한 요소가 허용 규칙과 편집
-규칙에 모두 해당하면 편집 규칙이 우선합니다.
-
-### 편집이 적용되는 범위
-
-편집은 컨텍스트로 전송되는 페이지 텍스트와 구조, 그리고 단계별 가이드 진행 중
-기록되는 상호작용 리포트에 적용됩니다. 사용자가 입력하는 채팅 메시지, 스크린샷, 세션
-기록, 화면 히스토리는 편집되지 않습니다. 해당 결과물이 여러분의 환경에서 허용되지
-않는다면 각 기능을 개별적으로 비활성화하세요.
-
-### 프로그래매틱 정리
-
-더 복잡한 정리 로직이 필요하다면 `pageSanitizationScript`로 캡처 전에 복제된 DOM을
-수정하세요:
-
-```tsx
-<AgentProvider config={{
-  // ...
-  pageSanitizationScript: (doc) => {
-    // 신용카드 필드 제거
-    doc.querySelectorAll('[data-sensitive]').forEach(el => {
-      el.textContent = '[편집됨]';
-    });
-    // 트래킹 픽셀 제거
-    doc.querySelectorAll('img[width="1"]').forEach(el => el.remove());
-  },
-}}>
-```
-
-<Warning>
-    두 방식 모두 AI가 보는 내용에만 영향을 줍니다. 실제 DOM은 변경되지 않으므로
-    사용자에게는 아무런 변화가 보이지 않습니다.
+    `pageSanitizationScript`로 Moss에게서 데이터를 숨기지 마세요. 사용자가 보는 화면이 바뀌고, 함수가 실행된 뒤에 렌더링된 콘텐츠는 놓칩니다. 대신 [마스킹](/ko/sdk/page-data#마스킹)을 쓰세요.
 </Warning>
 
 ---
 
 ## 문제 해결
 
+Moss의 콘솔 로그는 `[Moss SDK INFO]`, `[Moss SDK WARN]` 등으로 시작하고, CDN 스크립트 자체의 메시지는 `[MossSDK]`로 시작합니다. 브라우저 콘솔을 `Moss`로 필터링하면 모두 볼 수 있습니다. 기본 로그 레벨에서는 SDK가 시작할 때 한 줄을 남깁니다.
+
+```
+[Moss SDK INFO] [MossSDK] v0.17.0 initialized (env=…, app=YOUR_APP_ID)
+```
+
+함께 기록되는 객체는 자격 증명을 가린 config입니다. 먼저 여기서 버전과 값을 확인하세요.
+
 ### 어시스턴트 버튼이 나타나지 않음
 
-1. 브라우저 콘솔에서 `[MossSDK]` 오류를 확인하세요
-2. `applicationId`가 대시보드의 유효한 애플리케이션과 일치하는지 확인하세요
-3. `apiUrl`이 브라우저에서 접근 가능한지 확인하세요
-4. JWT 서명 키가 활성 상태이고 폐기되지 않았는지 확인하세요
+1. **시작 로그가 없습니다.** 프로바이더가 마운트되지 않았습니다. 서버에서 렌더링하는 프레임워크라면 SDK를 클라이언트에서만 불러오세요. [서버 사이드 렌더링](/ko/sdk/installation#서버-사이드-렌더링)을 참고하세요.
+2. **npm 패키지:** `AssistantButton`이 `AgentProvider` 안에서 렌더링되는지 확인하세요. `collectionEnabled: false`이거나 [수집 컨트롤](/ko/sdk/page-data#collectioncontrol)이 켜져 있지 않으면 프로바이더는 아무것도 렌더링하지 않습니다.
+3. **CDN 스크립트:** `No applicationId found in script URL`이나 `[MossSDK] Initialization failed`가 있는지 찾아보세요. 스크립트는 `applicationId`를 자기 `src`에서만 읽고, 그 URL의 `moss-sdk`라는 문자열로 자기 태그를 찾습니다. 스크립트를 직접 호스팅한다면 파일 이름에 `moss-sdk`를 남겨 두세요.
+4. `Moss SDK error: missing required config: …`가 있는지 찾아보세요. 빠진 `apiUrl`, `applicationId`, `userId`를 알려 줍니다.
 
-### "Failed to fetch config" 오류
+### 채팅이 연결되지 않음
 
-- SDK가 백엔드에 연결할 수 없습니다. `apiUrl` 및 네트워크/CORS 설정을 확인하세요.
-- CSP를 사용하는 경우 `connect-src`에 백엔드 URL이 포함되어 있는지 확인하세요.
+SDK는 채팅이 열릴 때(또는 이어 갈 세션이 있을 때) `POST {apiUrl}/api/v1/sessions`를 보내 세션을 시작합니다. 시도마다 10초가 지나면 시간 초과되고, 실패한 시도는 1, 2, 4, 8, 16초 뒤에 다시 시도합니다. 그래도 실패하면 채팅에 **연결 실패**와 **다시 시도** 버튼이 나타납니다.
 
-### 스크린샷이 빈 화면이거나 불완전함
+브라우저의 네트워크 탭에서 이 요청을 찾아 결과를 확인하세요.
 
-- `screenshotMode`를 `'viewport'`로 전환해 보세요
-- 페이지에 느린 애니메이션이 있는 경우 `stability.domMutations.quietPeriodMs`를 늘리세요
-- iframe이나 교차 출처 콘텐츠가 캡처를 차단하고 있는지 확인하세요
+| 결과 | 원인 | 해결 방법 |
+|--------|-------|-----|
+| Content Security Policy가 차단함 | `connect-src`가 `apiUrl`을 허용하지 않음 | 추가하세요. [CSP](#content-security-policy-csp)를 참고하세요 |
+| 네트워크 오류나 CORS 오류 | `apiUrl`이 잘못되었거나 브라우저에서 닿지 않음 | 브라우저에서 `{apiUrl}/health`를 열어 보고, 프록시와 방화벽을 확인하세요 |
+| `401` | 토큰이 없거나, 만료되었거나, 받아들여지지 않음. `getJwt`를 쓰면 SDK가 새 토큰을 한 번 요청해 다시 시도합니다 | 네트워크 탭에서 토큰 요청과 그 `kid` 헤더를 확인하고, 서명 키가 활성 상태인지 확인하세요. [인증](/ko/sdk/authentication)을 참고하세요 |
+| `DOMAIN_NOT_ALLOWED`가 담긴 `403` | 페이지의 도메인이 애플리케이션의 허용 도메인에 없음 | 대시보드에서 추가하세요. [대시보드 설정](/ko/configurations/dashboard-settings)을 참고하세요 |
+| `ORIGIN_REQUIRED`가 담긴 `403` | 설치가 페이지 출처를 요구하는데, 요청에 `Origin`이나 `Referer`가 없거나 애플리케이션에 허용 도메인이 없음 | 도메인을 허용 도메인에 추가하고, 프록시가 이 헤더를 전달하는지 확인하세요 |
+| `//api/`가 들어간 URL의 `404` | `apiUrl`이 `/`로 끝남(0.17.0 이전 SDK) | 끝의 슬래시를 지우거나 업그레이드하세요. 0.17.0부터는 SDK가 지웁니다 |
+| `429` | 새 세션이 너무 많음: 사용자와 애플리케이션마다 분당 30개 | 모든 사용자가 같은 토큰 subject(`sub`)를 쓴다면, 사용자마다 각자의 값을 주세요 |
 
-### 호스트 애플리케이션과 스타일 충돌
+콘솔의 `[AuthManager]` 로그도 확인하세요. `applicationId mismatch` 경고는 토큰의 `app` 클레임이 config와 다른 애플리케이션을 가리킨다는 뜻입니다.
 
-이것은 발생하지 않아야 합니다 — SDK는 Shadow DOM 격리를 사용합니다. 충돌이 보이는 경우:
-- 앱에서 `*` 또는 `body` 선택자에 `!important`를 사용하고 있는지 확인하세요
-- JavaScript가 Shadow Root를 수정하고 있지 않은지 확인하세요
+지원팀에 문의할 때는 다음을 보내 주세요.
+
+- `Moss`가 들어간 콘솔 로그. 시작 로그와 `[AuthManager]`, `[Session]` 로그를 포함해 주세요.
+- 토큰 요청과 `POST /api/v1/sessions`의 상태 코드와 소요 시간.
+- `apiUrl`, `applicationId`, `userId`, SDK 버전.
+
+### 시간 초과나 요청 폭주를 알리는 답변
+
+이 답변은 페이지나 네트워크가 아니라 Moss 뒤에 있는 모델에서 비롯됩니다.
+
+| 사용자에게 보이는 문구 | 의미 |
+|--------------------|---------|
+| "I'm sorry, that took too long to answer." / "답변하는 데 시간이 너무 오래 걸렸습니다. 다시 시도해 주세요." | 턴의 시간이 다 되었습니다. 전체 시간 예산을 다 썼거나, 모델 요청의 재시도가 모두 시간 초과되었습니다. 서비스가 바쁘다는 뜻은 아닙니다. |
+| "…the service is currently experiencing high traffic…" / "지금 어시스턴트에 요청이 몰리고 있습니다. 다시 시도해 주세요." | Moss가 재시도한 뒤에도 모델 제공자가 과부하를 이유로 요청을 거부했습니다(HTTP 429 또는 5xx). |
+| "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요." | 질문과 가이드 단계에 대한 Moss 자체의 사용자별 제한입니다. 위의 `429` 행을 참고하세요. |
+
+0.16.23 이전에는 시간 초과도 요청 폭주 답변을 냈습니다. 자체 호스팅 설치에서 턴의 시간 예산은 `LLM_TOTAL_TIMEOUT_SECONDS`입니다. 0.17.0부터 기본값은 240초이고, 그 전에는 120초였습니다. [모델과 응답 시간](/ko/self-hosting/models-and-response-time)을 참고하세요.
+
+### 답변의 링크가 일반 텍스트로 보임
+
+0.17.0부터 답변은 허용된 호스트로만 링크하고 이미지를 불러옵니다. 페이지 자체의 출처, 답변이 인용한 문서, 애플리케이션의 허용 도메인과 지식 베이스 호스트, 그리고 [`replyLinks.allowedHosts`](/ko/sdk/configuration#replylinks)에 추가한 호스트입니다. 그 밖의 링크는 텍스트로, 그 밖의 이미지는 대체 텍스트로 보입니다.
+
+### "window is not defined" 또는 "document is not defined"
+
+SDK는 import되는 즉시 브라우저 전역 객체에 접근하므로, 서버에서 렌더링하는 중에 import하면 오류가 납니다. [서버 사이드 렌더링](/ko/sdk/installation#서버-사이드-렌더링)을 참고하세요.
+
+### 대시보드에서 바꾼 설정이 적용되지 않음
+
+npm 패키지는 대부분의 옵션을 넘겨받은 `config`에서만 읽습니다. [설정](/ko/sdk/configuration#설정을-읽어-오는-곳)과 [세션](/ko/sdk/api/session#각-설정을-읽어-오는-위치)을 참고하세요.
 
 ### 디버그 모드
 
-문제 진단을 위해 상세 로깅을 활성화하세요:
+SDK가 무엇을 하는지 보려면 로그 레벨을 높이세요.
 
 ```tsx
 import { LogLevel } from '@viamoss/moss-sdk';
 
 <AgentProvider config={{
   // ...
-  debugMode: true,
   logLevel: LogLevel.DEBUG,
 }}>
 ```
 
-안정성 레이어 타이밍, 네트워크 요청, 컨텍스트 캡처 세부 정보 및 API 응답이 브라우저 콘솔에 기록됩니다.
+안정성 대기 시간, 네트워크 요청, 컨텍스트 캡처, 응답이 콘솔에 기록됩니다. 디버그 로그에는 페이지 내용이 들어갈 수 있으므로 `LogLevel.DEBUG`를 프로덕션에 배포하지 마세요.
+
+<Warning>
+    `debugMode: true`는 채팅 안에서 사용자에게 디버그 컨트롤을 보여 줍니다. 개발 중에만 쓰세요.
+</Warning>

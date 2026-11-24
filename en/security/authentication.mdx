@@ -1,47 +1,53 @@
 ---
 title: "Authentication"
-description: "How Moss authenticates SDK requests and Dashboard users"
+description: "How Moss authenticates SDK requests and dashboard users, what each dashboard role can see, and how organizations are kept apart"
 ---
+
+Moss authenticates two kinds of caller. Your end users reach Moss through the SDK, with a token your server signs for each of them. Your team reaches the dashboard by signing in: through Clerk on the Moss-hosted service, and through your own identity provider on a self-hosted install. This page covers both, the two dashboard roles and what each can see, and how one organization's data is kept from another's.
 
 ## Overview
 
-Moss uses multiple authentication mechanisms depending on the context:
-
 | Context | Method | Description |
 |---------|--------|-------------|
-| **SDK** | JWT Tokens | Short-lived tokens signed with application-specific keys |
-| **Dashboard** | Clerk SSO | OAuth-based single sign-on with organization support |
+| **SDK** | JWT Tokens | Short-lived tokens your server signs for each user with a key of the application. Moss verifies them on every request. |
+| **Dashboard (Moss-hosted)** | Clerk SSO | OAuth-based single sign-on with organization support |
+| **Dashboard (self-hosted)** | Your identity provider (OIDC) | Your team signs in with your identity provider; its groups decide each person's role. |
+| **Audit Log and API logs from your own tools** | Read-only keys | One key per application for each. See [Audit Logging](/en/security/audit-logging). |
+| **AI assistants** | Personal tokens or OAuth | Available only where the deployment and an organization admin turn them on. An assistant acts as the person who connected it. |
 
 ---
 
 ## JWT Authentication
 
-JWT (JSON Web Token) authentication provides the highest security for SDK integrations.
+Every SDK request must carry a JWT that your server signed for the signed-in user. It is the only way the SDK authenticates: there are no SDK API keys, and a request without a valid token is refused with HTTP 401. The one exception is the request that reads the widget's public startup settings, described [below](#allowed-domains-are-a-second-check). Authentication cannot be turned off outside a local development setup. The developer guide is [SDK Authentication](/en/sdk/authentication).
 
 ### How It Works
 
-1. Your backend generates a signed JWT for each user session
-2. The SDK includes this token in API requests
-3. Moss validates the signature, expiration, and claims
-4. Access is granted only if all checks pass
+1. Your server signs a JWT for the user who is signed in to your app.
+2. The SDK sends the token in the `Authorization` header of every request.
+3. Moss finds the signing key named by the token's `kid`, verifies the signature with that key's algorithm, and checks the claims and the lifetime.
+4. Moss takes the user's identity from the `sub` claim only, never from the request body or the SDK's `userId` setting.
 
 ### Token Structure
 
-Moss JWTs include the following claims:
+| Claim | Required | Description |
+|-------|----------|-------------|
+| `sub` | Yes | User ID (subject). A non-empty string. |
+| `app` | Yes | Application ID. Must be the application of the signing key. |
+| `exp` | Yes | Expiration timestamp |
+| `iat` | Yes | Issued-at timestamp. `exp` minus `iat` may be at most 24 hours. |
+| `iss`, `aud` | Only when the application requires them | Must match the values set in **Configure > Security > JWT Claim Enforcement** exactly. |
+| `metadata` | No | User attributes that tailor answers. They grant and block nothing. |
 
-| Claim | Description |
-|-------|-------------|
-| `sub` | User ID (subject) |
-| `app` | Application ID |
-| `exp` | Expiration timestamp |
-| `iat` | Issued-at timestamp |
+The full contract, including every error code, is in the [claims reference](/en/sdk/authentication#jwt-claims-reference).
 
 ### Security Features
 
-- **HS256 Signing** - By default, tokens are signed using HMAC-SHA256 with your application's secret key
-- **Expiration Enforcement** - Tokens must include valid `exp` claim
-- **Key Rotation Support** - Multiple active signing keys with scheduled revocation
-- **Constant-Time Validation** - Signature verification uses timing-safe comparison
+- **Bound to one application** - A key belongs to one application, and the token's `app` must name that application.
+- **Algorithm pinning** - Each key is pinned to its algorithm (HS256, RS256 or ES256). A token signed with any other algorithm is refused, so one kind of key cannot be passed off as another.
+- **Expiration Enforcement** - Tokens must include valid `exp` and `iat` claims, and may live at most 24 hours.
+- **Key Rotation Support** - Up to 5 active signing keys per application, with revocation that is immediate or after a 24- or 72-hour grace period.
+- **Constant-Time Validation** - HS256 signature verification uses timing-safe comparison.
 
 ### Signing Schemes
 
@@ -49,49 +55,63 @@ Moss supports two signing schemes per application:
 
 | Scheme | Algorithms | What Moss stores |
 |--------|-----------|------------------|
-| **Shared secret** (default) | HS256 | The shared secret, used to verify your tokens |
-| **Asymmetric** | RS256, ES256 | Your public key only |
+| **Shared secret** | HS256 | The shared secret that Moss generated, used to verify your tokens |
+| **Asymmetric** | RS256 (RSA, 2,048 to 8,192 bits), ES256 (P-256) | Your public key only |
 
 With asymmetric signing you generate the keypair yourself and register only the
 public key with Moss. The private key never leaves your infrastructure, so Moss
-holds no material that could be used to mint tokens on your behalf. Each
-registered key is pinned to its algorithm, and rotation requires registering a
+holds no material that could be used to mint tokens on your behalf with that key.
+Each registered key is pinned to its algorithm, and rotation requires registering a
 new keypair rather than re-registering a retired one.
 
 <Info>
     Asymmetric signing is worth choosing when your security policy prohibits
-    sharing symmetric secrets with vendors. Otherwise HS256 remains the simpler
-    default.
+    sharing symmetric secrets with vendors. Otherwise HS256 is the simpler choice.
 </Info>
 
 ### Key Management
 
-Each application can have multiple JWT signing keys:
+Admins manage keys in **Configure > Security > JWT Signing Keys**:
 
-- **Key ID (`kid`)** - Unique identifier included in token header
-- **Active Status** - Keys can be deactivated without deletion
-- **Scheduled Revocation** - Set future revocation dates for graceful rotation
-- **Last Used Tracking** - Monitor key usage for security auditing
+- **Key ID (`kid`)** - Unique identifier, `key_` followed by 12 characters, included in the token header
+- **Shown once** - The HS256 secret is shown only when the key is created
+- **Revocation** - **Immediately**, or after a **24 hours** or **72 hours** grace period. A revoked key stays listed as **Revoked**; a revocation cannot be undone, and a scheduled one can be brought forward but not postponed.
+- **Last Used Tracking** - Each key shows when it was created and last used
+- **Audit** - Creating, rotating and revoking a key is recorded in the [audit log](/en/security/audit-logging)
 
-<Info>
-    See the [SDK Authentication Guide](/en/sdk/authentication) for implementation
-    details and code examples.
-</Info>
+If a signing secret or private key leaks, revoke the key with **Immediately**: every token signed with it, including tokens already issued, fails at once with `KEY_REVOKED`. Then create a new key; up to 5 can be active. See [Signing keys: rotate and revoke](/en/sdk/authentication#signing-keys-rotate-and-revoke).
+
+### Allowed Domains Are a Second Check
+
+Each application's **Allowed Domains** list (**Configure > Security > Domain Access Control**) is checked on every SDK request, against the page's `Origin` or `Referer` header. It stops other websites from using your application's assistant in a browser. It is not the security boundary:
+
+- A client outside a browser can send any `Origin`; the signed token is what authenticates it.
+- An empty list allows every page.
+- A request with neither `Origin` nor `Referer` passes, unless the deployment requires an allowed page (on a self-hosted install, the operator setting `SDK_REQUIRE_ORIGIN`; see [What the browser needs](/en/self-hosting/network#what-the-browser-needs)).
+- The widget settings the SDK loads at startup, such as appearance and which captures are on, can be read without a token by anyone who knows the application ID. The allowed-domain check applies to that request too. Never put a secret in SDK-facing settings.
+
+Matching rules are in [Allowed domains](/en/sdk/authentication#allowed-domains).
+
+### Request Limits
+
+From 0.17.0, each user (`sub`) can start 30 chats and ask 60 questions a minute per application, complete 120 guide steps a minute per chat, and each chat can upload 10 recordings a minute. A request over a limit gets HTTP 429 with `Retry-After`, and, on a question or a guide step, the user sees "Too many requests. Try again shortly." See [Request limits](/en/sdk/authentication#request-limits).
 
 ---
 
-## Dashboard Authentication (Clerk)
+## Dashboard Authentication
 
-The Moss Dashboard uses Clerk for authentication, providing enterprise-grade SSO capabilities.
+### Moss-hosted dashboard (Clerk)
 
-### Features
+The Moss-hosted Dashboard uses Clerk for authentication, providing enterprise-grade SSO capabilities.
+
+#### Features
 
 - **OAuth Integration** - Sign in with Google, GitHub, or email
 - **Organization Support** - Multi-tenant access with role-based permissions
 - **Session Management** - Secure session tokens with automatic refresh
 - **MFA Support** - Optional multi-factor authentication
 
-### Organization-Based Access
+#### Organization-Based Access
 
 All Dashboard operations are scoped to your organization:
 
@@ -99,6 +119,52 @@ All Dashboard operations are scoped to your organization:
 - Users can be members of multiple organizations
 - Switching organizations changes your visible applications
 - API calls from Dashboard include organization context in JWT
+- A sign-in without an active organization is refused
+
+A person's role comes from their Clerk organization role: `org:admin` is **Admin**, and any other role is **Member**.
+
+### Self-hosted dashboard (your identity provider)
+
+A self-hosted install signs your team in through your own identity provider over OpenID Connect (OIDC), such as Okta, Microsoft Entra ID or Keycloak. One install serves one organization. Sign-in policies are set in your identity provider.
+
+Roles come from the groups in the user's token (the `groups` claim unless the operator names another):
+
+| The user is in | Role |
+|----------------|------|
+| A group listed in `OIDC_ADMIN_GROUPS` | **Admin** (this wins over member groups) |
+| A group listed in `OIDC_MEMBER_GROUPS` | **Member** |
+| Neither, and `OIDC_MEMBER_GROUPS` lists groups | Refused (HTTP 403) |
+| Neither, and `OIDC_MEMBER_GROUPS` is empty or not set | **Member**: anyone who can sign in |
+
+To limit who can sign in, set `OIDC_MEMBER_GROUPS`. Setup is covered in [Dashboard sign-in and roles](/en/self-hosting/overview#dashboard-sign-in-and-roles).
+
+---
+
+## Roles
+
+Moss has two roles, **Admin** and **Member**. A role applies to every application in the organization: there are no per-application roles, and roles are assigned in Clerk or in your identity provider, not in Moss. The full dashboard tour is in the [dashboard overview](/en/dashboard/overview).
+
+| | Member | Admin |
+|---|---|---|
+| **Analytics**, **Copilot**, **Sessions**, **Users**, **Monitors** | Yes | Yes |
+| **Proposals**: review, accept and dismiss | Yes, except accepting a change to the AI instructions | Yes |
+| Export sessions to CSV or JSON | Yes | Yes |
+| **Knowledge Base** and **Procedures**, including publishing and deleting | Yes | Yes |
+| **Suggested Content** | View only | Yes |
+| **API logs** | No | Yes |
+| The **Configure** group: settings, signing keys, allowed domains, integrations, **Data & privacy** and **Audit Log** | No | Yes |
+| Create, import and export applications; API actions and connections; delete a user's data | No | Yes |
+
+When a member calls an admin-only action, Moss answers HTTP 403 and records an `auth.denied` event in the [audit log](/en/security/audit-logging).
+
+### Who can see end users' conversations
+
+Every member and admin of the organization can open every session of every application: the transcript and its session replay, the **Users** list, and the analytics built from them. Any of them can export sessions.
+
+- Opening or exporting sessions is not recorded in the audit log. Reading API logs is.
+- Session replays open from signed storage links. By default a link works for 7 days (the deployment's operator can change this with `STORAGE_URL_EXPIRY_SECONDS`), and anyone who has the link can open the replay without signing in.
+- An AI assistant that a person connected can read transcripts as that person, while the organization's **Conversation content** setting is on.
+- To limit who can read conversations, limit who belongs to the organization: its members in Clerk, or `OIDC_MEMBER_GROUPS` on a self-hosted install.
 
 ---
 
@@ -108,38 +174,50 @@ Moss enforces strict tenant isolation at every layer:
 
 ### Database Level
 
-Every query is scoped to the requesting organization, so records belonging to other organizations are never returned.
+Dashboard requests look up an application by its ID and your organization together, so an application of another organization is not found. SDK requests are scoped to the application of the token's signing key and to the token's `sub`. From 0.17.0, database constraints also refuse a record whose application differs from that of the record it belongs to, for example a conversation insight or a page snapshot and its chat session.
 
 ### API Level
 
-- JWT tokens include organization ID in claims
-- API endpoints verify organization ownership before access
-- Cross-organization requests are rejected with 403 Forbidden
+- A dashboard user's organization comes from their sign-in: the Clerk organization on the hosted service, the install's single organization on a self-hosted install.
+- A dashboard request for an application of another organization is refused. Most routes answer 404 "Application not found", so the response does not reveal whether the application exists. The audit-log and API-log read routes answer 403 for an application in another organization and 404 for one that does not exist.
+- SDK tokens carry no organization. Each is bound to one application through its signing key, and Moss refuses a token whose `app` differs from that key's application (`APP_MISMATCH`).
+- The audit and API-log keys work only for the application they were created for.
 
 ### Audit Level
 
-- Access attempts to other organizations are logged
-- Security alerts can be configured for suspicious patterns
+- Changes made through the dashboard are recorded, including attempts that fail.
+- A request refused for lacking the admin role is recorded as `auth.denied`.
+- Reads are not recorded, except reads of API logs and AI assistant tool calls. A request for another organization's application that only reads is refused but not recorded.
+- Moss has no alerting you can configure on audit events. To watch for patterns, pull events into your own tools with the [Audit API](/en/security/audit-logging#reading-the-audit-log-from-your-own-tools).
 
 ---
 
 ## Session Authorization
 
-Beyond authentication, Moss verifies authorization for every request:
-
-### Session Verification
-
-1. **User Ownership** - Sessions belong to specific users
-2. **Application Scope** - Sessions are bound to applications
-3. **Composite Keys** - Foreign key constraints enforce data integrity
-
-### Access Patterns
+Beyond authentication, Moss checks who owns a chat on every request that names one:
 
 | Request | Verification |
 |---------|-------------|
-| Create session | User + Application authentication |
-| Send message | Session ownership + Application match |
-| Get history | Session ownership + User match |
+| Start a chat | A valid token for the application |
+| Reopen a chat, send a message, upload a recording | The chat belongs to the token's application and to the token's `sub` |
+
+What a request for a chat that is not the user's gets:
+
+| Request | Another user's chat | A chat ID that does not exist |
+|---------|---------------------|-------------------------------|
+| Send a message | 403 `SESSION_UNAUTHORIZED` | 403 `SESSION_UNAUTHORIZED` |
+| Reopen the chat | 403 `SESSION_UNAUTHORIZED` | A new chat starts |
+| Upload a recording | 404 "Session not found" | 404 "Session not found" |
+
+Chat IDs are random, so they cannot be guessed. A chat stays bound to the `sub` that started it, so give each person their own `sub`.
+
+---
+
+## AI Assistant Connections
+
+Where the deployment offers them and an organization admin turns on **Allow AI assistants**, each person can connect an AI assistant to Moss with their own token. An assistant acts as that person and never has more access than they do; every tool call is recorded in the audit log.
+
+Moss cannot see when someone leaves your organization in Clerk or your identity provider. A connection that person made keeps working until it expires or an admin revokes it, so revoke a leaver's connections on the **AI assistants** page. See [AI assistants](/en/dashboard/ai-assistants).
 
 ---
 
@@ -147,19 +225,34 @@ Beyond authentication, Moss verifies authorization for every request:
 
 ### For SDK Integration
 
-1. **Use JWT authentication** for production deployments
-2. **Implement token refresh** before expiration
+1. **Sign tokens on your server only**, for the user your app has authenticated, with `sub` from your own session
+2. **Use `getJwt`** so the SDK fetches a new token before the current one expires
 3. **Set short token lifetimes** (15-60 minutes recommended)
 4. **Use HTTPS** for all API communication
+5. **Fill in Allowed Domains** for every application, and do not rely on it alone
 
 ### For Dashboard Access
 
 1. **Enable MFA** for all team members
-2. **Review organization members** regularly
+2. **Review organization members** regularly, since every member can read every conversation
 3. **Use SSO** if available in your organization
-4. **Audit access logs** periodically
+4. **Review the Audit Log** periodically
 
 ---
+
+## Common Questions
+
+**Can a member see conversations, or only admins?**
+Every member can open and export every session of every application in the organization. See [Who can see end users' conversations](#who-can-see-end-users-conversations).
+
+**Where do roles come from on a self-hosted install?**
+From your identity provider's groups: `OIDC_ADMIN_GROUPS` maps to **Admin** and `OIDC_MEMBER_GROUPS` to **Member**. If `OIDC_MEMBER_GROUPS` is empty or not set, anyone who can sign in is a member.
+
+**Can I give someone access to only one application?**
+No. Roles cover every application in the organization, and every member can read every application's conversations.
+
+**What happens to a request for another organization's application?**
+It is refused: 404 on most routes, and 403 on the audit-log and API-log read routes, which answer 404 only for an application that does not exist. SDK tokens are bound to one application and cannot reach another.
 
 ## Next Steps
 
@@ -169,7 +262,7 @@ Beyond authentication, Moss verifies authorization for every request:
         icon="code"
         href="/en/sdk/authentication"
     >
-        Implement JWT authentication in your application
+        Sign tokens, manage keys and read error codes
     </Card>
     <Card
         title="Data Protection"

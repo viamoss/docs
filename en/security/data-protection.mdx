@@ -1,13 +1,295 @@
 ---
 title: "Data Protection"
-description: "How Moss protects your data through encryption, validation, and secure storage"
+description: "What data Moss collects, where it is stored, what reaches the model provider, how to mask it, and how long it is kept"
 ---
 
-## Overview
+This page lists each kind of data Moss handles for an application: when it is collected and what turns it on or off, where it is stored, whether it goes to a model provider, how to mask it, and how long it is kept. It describes Moss 0.17.0 and marks what changed from 0.16.x.
 
-Moss implements multiple layers of data protection to ensure your information remains secure throughout its lifecycle.
+- To change what your pages send, see [Page data](/en/sdk/page-data).
+- To set how long data is kept, or to delete one user's data, see [Data & privacy](/en/dashboard/data-privacy).
 
 For customer-managed deployments, see [Deployment Scope](/en/security/overview#deployment-scope).
+
+---
+
+## What Moss collects
+
+| Data | Collected | Stored in | Sent to the model provider |
+| --- | --- | --- | --- |
+| [Chat messages](#chat-messages) | Every question and answer | Database | Yes: the question and the chat's earlier messages |
+| [Page URL and title](#page-text-url-and-title) | With each question, unless page context is `none` | Database | Yes |
+| [Page text](#page-text-url-and-title) | With each question while page context is `full`, the default while **On-screen guidance** is on | Database | Yes |
+| [Screenshots](#screenshots) | Off by default. With a question, when vision is on, page context is `full` and the user has allowed screen sharing | File storage | Yes, to a model that accepts images |
+| [Screen history](#screen-history) | Off by default | Database | Yes |
+| [Session recordings](#session-recordings) | Off by default. While the chat is open, when **Enable Session Replay** is on | File storage | No |
+| [Page snapshots](#page-snapshots) | Off by default, and refused by a server running in production | File storage | No |
+| [Uploaded files](#uploaded-files) | Beta, off by default. When the user attaches a file | File storage | The file name only |
+| [API logs](#api-logs) | Off by default. When **Record API logs** is on | Database | No |
+| [User ID and metadata](#user-id-and-metadata) | At the start of each session | Database | The metadata, yes |
+| [Interaction reports](#interaction-reports) | When the user acts on the element a guide step points to | Database | Yes: a short description of the element, with the page context sent as for a question |
+| [Feedback](#feedback) | When the user rates an answer or the session | Database | Not with questions; some dashboard features read it |
+| [Browser copies](#where-data-is-stored) | While the user uses the chat | The user's browser | No |
+
+Each conversation's database records and files are kept until deleted. Automatic deletion is off until an admin turns it on; see [How long data is kept](#how-long-data-is-kept).
+
+---
+
+## How each kind of data is collected
+
+### Chat messages
+
+Every question the user types and every answer Moss gives is stored with the conversation. The model receives the question with the conversation's earlier messages. A new chat starts empty: Moss doesn't send earlier conversations to the model.
+
+### Page text, URL and title
+
+With each question, the SDK reads the page so the assistant can answer about it and point at elements. How much it reads is the page-context tier:
+
+| Tier | What the SDK sends |
+| --- | --- |
+| `full` | Page text and structure, the URL and the title. Screenshots are possible only at this tier. |
+| `metadata` | The URL and title only. |
+| `none` | Neither. |
+
+- An application uses `full` while **On-screen guidance** is on (the default) and `metadata` when it is off: **Configure > Behavior > Core Features**.
+- **CDN script:** follows the application's tier, unless the page sets `pageContext` in `window.mossSettings`, which overrides it in either direction.
+- **npm package:** sends what its own `pageContext` option says, `full` if unset. To send less, set `pageContext: 'metadata'` or `'none'` in your config.
+- The server doesn't check the tier: it accepts what the page sends.
+
+Before sending, the SDK masks form fields and marked areas in the page text (see [Masking in the browser](#masking-in-the-browser)). Other visible text is sent as it appears on the page.
+
+Moss stores a record of what each turn sent to the model, including the page text, with the conversation. It is deleted with the conversation.
+
+### Screenshots
+
+**A screenshot is a raw frame of the browser tab, taken with the browser's screen-capture API. Nothing on it is masked:** not form fields, and not areas marked `data-moss-redact`.
+
+A screenshot is taken for a question only when all of these hold:
+
+1. **Vision is on.** That is **Enable Vision** in **Configure > Behavior > Core Features** (off by default), unless the page's SDK config sets `useVision`, which overrides the application setting either way. `useVision: false` stops screenshots; `useVision: true` turns them on even when **Enable Vision** is off.
+2. **Page context is `full`.**
+3. **The user has allowed screen sharing.** The first question that needs a screenshot opens the browser's screen-sharing prompt, and the user must share this tab. If they decline, the chat goes on without screenshots.
+
+The browser uploads each screenshot to file storage through a signed upload link and the question refers to it; if the upload fails, the image is sent with the question instead. The model receives the image when it accepts images. From 0.17.0, a screenshot over 10 MiB isn't uploaded and the question is answered without it, and a question can use only a screenshot uploaded for its own chat.
+
+### Screen history
+
+Off by default. Screen history is a short text timeline of the user's recent clicks, typing, navigation and page changes, sent to the model with each question.
+
+- **CDN script:** follows **Enable Screen History for AI** in **Configure > Behavior > Core Features**, unless the page sets `enableScreenHistoryRecording` in `window.mossSettings`, which overrides it in either direction.
+- **npm package:** sends it only when your config sets `enableScreenHistoryRecording: true`.
+- The server doesn't check the application setting: it accepts the screen history the page sends.
+
+It is built from the same in-page recorder as session recordings, which runs while the chat is open. From 0.17.0 it is masked the same way: with `redactAllInputs` on (the default), what the user types into form fields is masked. On 0.16.x, screen history can include what the user typed.
+
+It is stored in the record of what each turn sent to the model, and deleted with the conversation.
+
+### Session recordings
+
+Off by default. A recording captures the page's structure and the user's activity while the chat is open, so the session can be replayed in the dashboard. Recordings are not sent to the model.
+
+- The application must have **Enable Session Replay** on (**Configure > Behavior > Core Features**). The server refuses recordings for an application without it.
+- **CDN script:** records when the application setting is on. `enableSessionRecording: false` in the page turns it off.
+- **npm package:** records only when your config also sets `enableSessionRecording: true`.
+- Canvas content isn't recorded, and images aren't copied into the recording.
+- From 0.17.0, form fields and marked areas are masked in recordings (see [Masking in the browser](#masking-in-the-browser)).
+- From 0.17.0, an upload is limited to 16 MiB and 12,000 events, and a session to 64 MiB, 100,000 events and 720 uploads.
+
+<Note>
+    Changed in 0.17.0: an application records only when **Enable Session Replay** was saved as on. On 0.16.x, an application that never saved the setting recorded sessions.
+</Note>
+
+### Page snapshots
+
+A page snapshot is a copy of the page's HTML, saved with a question for offline analysis. It isn't masked. The SDK sends one only when the page sets `enableRawDomCapture: true`, and the server accepts it only when its operator has turned this capture on in a development or test environment. A server running in production refuses every page snapshot.
+
+### Uploaded files
+
+Beta, and off unless the page sets `appearance.chrome.attachments: true` (new in 0.17.0). Users can then attach PDF, PNG and JPEG files, up to 5 a message and 10 MiB each. Files are stored in file storage with the conversation. The model is told only each file's name and never reads the file. The file itself goes only to an API action or MCP tool that takes a file, in a step the user confirms.
+
+### API logs
+
+Off by default. When an admin turns on **Record API logs** (**Analyze > API logs**, or **Collect detailed API logs** in **Configure > Data & privacy**), Moss saves the requests and responses of the application's API calls, such as the widget's requests and Moss's calls to the AI model, file storage and API actions. Bodies are masked before they are stored; see [Masking in API logs](#masking-in-api-logs). See [API logs](/en/dashboard/analytics#api-logs).
+
+### User ID and metadata
+
+- **User ID:** taken from the `sub` claim of the user's signed token, never from the request body. It identifies the user's profile and conversations.
+- **Metadata:** the attributes your page passes in `userMetadata` and in the token's `metadata` claim. They are stored on the user's profile and added to the model's prompt, so the assistant can answer for that user. Pass roles and categories, not raw personal data such as names, emails or phone numbers.
+
+See [Authentication](/en/sdk/authentication).
+
+### Interaction reports
+
+When a guide step points at an element and the user acts on it, the SDK reports it to Moss: the page context at that moment, and the text, labels and markup of the element the user acted on. The element's markup is masked in the browser the same way as page text. The report is stored with the turn. To decide the next step, the model receives a short description of the element, with the page text, screen history and screenshot sent as for a question.
+
+### Feedback
+
+When the user rates an answer or the session, Moss stores the rating and any comment with the conversation. From 0.17.0, a thumbs-down can ask what went wrong and the session card can ask for a 1–5 rating, when your page turns these on. While **Backend PII filtering** is on, every comment is filtered. Feedback isn't sent to the model with the user's questions; Copilot and self-healing in the dashboard read it.
+
+---
+
+## Where data is stored
+
+| Store | What it holds |
+| --- | --- |
+| **Database** | Conversations and messages, the record of what each turn sent to the model (page text, screen history), user profiles and metadata, API logs, audit events, deletion requests and application settings. |
+| **File storage** | Screenshots and uploaded files in one bucket, session recordings in a second and page snapshots in a third, each kept under its conversation's ID. |
+| **Knowledge-base index** | Your help content, for search. It holds no end-user conversations. |
+| **The user's browser** | In `localStorage`, which stays until the SDK replaces it or the browser's site data is cleared: the open chat's ID with the user ID, and the user's last 10 chats, each with the first 100 characters of its first question and the user ID. While a guide step's click opens another page, `localStorage` also holds that step's title, the page URL and the clicked element's masked markup, until the new page sends them or their time limit passes. In `sessionStorage`, which the browser clears when the tab closes: the open chat's messages and those of chats ended in that tab, a question passed with `askMoss()` until it is sent, and a support ticket's text while its submission is unanswered. The CDN script also keeps the user ID in `localStorage` as `moss_user_id`, and makes up an anonymous ID (`anon_…`) when the page gives none. Neither automatic deletion nor deleting a user's data reaches these copies. |
+
+The dashboard shows screenshots and recordings through signed links, valid for 7 days by default. A link's expiry ends access through that link; it doesn't delete the file.
+
+On a self-hosted install, the database, file storage and model providers are the ones your operator configures.
+
+### Who can see it
+
+Every member of your organization, not only admins, can open sessions, their transcripts and replays, and export sessions, for every application in the organization. API logs, **Data & privacy** and the audit log are for admins only.
+
+**Outside AI assistants** (new in 0.17.0). If your deployment offers AI assistants and an admin turns on **Allow AI assistants** (off by default), each member can connect their own AI assistant, such as a desktop chat app, to Moss. It reads what that member can see. Unless an admin turns off **Conversation content** (on by default), that includes what end users wrote: transcripts, questions, quotes and feedback comments. What the assistant reads then goes to that assistant's own provider. See [AI assistants](/en/dashboard/ai-assistants#what-an-assistant-can-read).
+
+See [Who can see end users' conversations](/en/security/authentication#who-can-see-end-users-conversations) and [Dashboard overview](/en/dashboard/overview) for roles.
+
+---
+
+## What goes to the model provider
+
+**The chat model** receives, for each question:
+
+- the question and the conversation's earlier messages;
+- the page URL and title, and the page text at the `full` tier;
+- the screenshot, if one was taken and the model accepts images;
+- the screen history, if it is on;
+- the user's metadata;
+- excerpts from your knowledge base, and your AI instructions;
+- the results of tools the assistant runs, such as API actions;
+- when the user acts on a guide step, a short description of that element; that turn also sends the page text, screen history and screenshot, as a question does.
+
+Moss also sends conversation content to a model for Copilot, evaluation scores, conversation insights, monitors and self-healing in the dashboard.
+
+From 0.17.0, if your deployment offers more than one model, **Configure > Behavior > Model** shows which one answers for the application and names the data processor ("Data sent to this model is processed by …"). Switching asks first. While a chosen model is unavailable, the deployment's default model answers in its place, and the card says so, unless the model is marked as allowing no fallback.
+
+**The embedding provider** receives your knowledge-base content when it is indexed, and the search text for each question.
+
+**Optional models**, both off by default. Whoever operates your deployment (Moss for the Moss-hosted service, your operator for a self-hosted install) decides whether each is used and which provider runs it:
+
+- **A screenshot analyzer.**
+- **An element-targeting model** that picks which element a guide step highlights. It receives the guide step's text and a list of the page's interactive elements (each element's role, attributes and visible text), taken from the page text. It runs only when the operator has turned it on and allowed a provider for it, and only for an application that names that provider; it never falls back to another provider. If a call fails, the chat model's choice stands.
+
+When indexing your knowledge base, Moss can also send its images to an image model to describe them. That is your help content, not user data.
+
+On a self-hosted install, your operator's settings choose the chat model and embedding provider; see [Models and response time](/en/self-hosting/models-and-response-time). The optional models and the image model are also operator settings.
+
+---
+
+## Masking and filtering
+
+Masking happens in three places: in the user's browser, on the server before anything is stored or sent to the model, and in API logs.
+
+### Masking in the browser
+
+The SDK masks page data before it leaves the browser. The options are set in your page's code; see [Page data](/en/sdk/page-data).
+
+| What | Page text | Session recordings (from 0.17.0) | Screenshots | Page snapshots |
+| --- | --- | --- | --- | --- |
+| Form fields: `input`, `textarea`, `select`, editable regions (`redactAllInputs`, on by default) | Masked | Masked | Not masked | Not masked |
+| A field marked `data-moss-unredact` | Not masked | Still masked | Not masked | Not masked |
+| Areas marked `data-moss-redact`, or matched by `redactionSelectors` | Masked | Masked | Not masked | Not masked |
+| Other visible text | Not masked | Not masked | Not masked | Not masked |
+
+- An invalid `redactionSelectors` entry stops that session's recording, with an error in the browser console only.
+- Before 0.17.0, session recordings were not masked.
+- Screen history follows the recording's masking (see [Screen history](#screen-history)).
+
+### Backend PII filtering
+
+<Info>
+    New in 0.17.0.
+</Info>
+
+**Configure > Security > Backend PII filtering** replaces common personal-data patterns with `[REDACTED]` on the server, before Moss stores a request or sends it to the model. The same filtered text goes to the transcript, the stored record of the turn, the API log and the model. Data already stored is not changed. It applies to every install type. Only admins can change it.
+
+**Turning it on.** **Filter this application's requests** turns it on or off for the application. Until an admin sets it, the application follows the deployment default, which is off unless the operator turns it on for the install (`PII_FILTER_DEFAULT_ENABLED` on a self-hosted install). **Use deployment default** clears the application's own setting.
+
+**What to filter** (at least one):
+
+| Scope | Covers | Default |
+| --- | --- | --- |
+| **Page context** | Page text, the screen-history timeline and the page title | On |
+| **Interaction reports** | Text, labels and markup of the element the user acted on | On |
+| **Chat messages** | What the user types | Off, because it can remove the value the user is asking about |
+
+Feedback comments are filtered whenever the filter is on.
+
+**Patterns.**
+
+- Always, while the filter is on: email addresses, US phone numbers, payment-card numbers and US Social Security numbers.
+- **Additional patterns**, each optional: IPv4 addresses, IBANs (checksum validated) and Korean resident registration numbers.
+- **Custom patterns**: up to 25, in RE2 syntax, up to 200 characters each. Lookahead, lookbehind and backreferences are not supported. A pattern can't match empty text. Each needs a unique name that starts with a lowercase letter and uses only lowercase letters, digits and underscores, and isn't a built-in name.
+
+Click **Save PII settings** to apply.
+
+**It fails closed.** If the filter can't finish scanning a field, it withholds the whole field instead of passing it on unfiltered.
+
+**What it doesn't filter:**
+
+- the page URL, and link and image addresses inside the page text (`mailto:`, `tel:` and `sms:` links are filtered);
+- screenshots, session recordings, page snapshots and uploaded files;
+- user metadata;
+- your knowledge-base content, the results of API actions and tools, and the model's replies.
+
+<Warning>
+    Rolling a self-hosted install back to 0.16.25 turns the filter off: 0.16.25 ignores it, so page, interaction and chat text are stored and sent to the model unfiltered until you upgrade again.
+</Warning>
+
+### Masking in API logs
+
+From 0.17.0, request and response bodies in API logs are masked before they are stored:
+
+- `[REDACTED]` replaces the values of credential keys, such as tokens, passwords, secrets, cookies, authorization headers and API keys, matched whatever their case or separators.
+- `[REDACTED]` also replaces email addresses, phone numbers (US formats, and international numbers written with `+` and a country code), US Social Security numbers and card numbers, and, while **Backend PII filtering** is on for the application, what its own patterns match.
+- `[OMITTED]` marks what isn't stored at all: headers, URLs and paths, page text, HTML, files, text over 2 KB and error details.
+
+Names, addresses and other free text are not masked.
+
+On 0.16.x, only the values of a few credential keys (API keys, authorization, passwords, secrets and tokens, matched by exact name) are replaced; emails, phone numbers, page text and the rest of each body are stored as sent.
+
+---
+
+## Page text and help content are not instructions
+
+Text on your page, or in a help article, can try to tell the assistant what to do. From 0.17.0, Moss treats it as content to answer from, never as instructions:
+
+- The model is told that only Moss's own prompt, your AI instructions and the user's own messages say what to do, that the page text, screen history, help articles, tool results, the user's metadata and its own earlier replies are content, and never to follow an instruction found inside them.
+- Page text is enclosed so that it can't break out of its block in the prompt, and a line of page text or help content that looks like one of the prompt's own labels is marked as page or document content.
+- Replies open links and load images only from your page's own site, your allowed domains, your knowledge base's hosts and hosts you add with `replyLinks.allowedHosts`. Anything else shows as plain text, and an image as its alt text, so a reply can't send page data to an outside address by loading it.
+
+**When a safety filter blocks a request.** Moss doesn't configure your model provider's safety filters, such as Model Armor in your Google Cloud project; you set those in the provider. When Gemini's safety filters or Model Armor block a request or its reply, the user gets the reply "A safety filter blocked this request, so I can't answer it. If it keeps happening on this page, please contact your administrator." There is no Retry button. From 0.17.0, the dashboard marks the turn **A safety filter blocked the request**.
+
+---
+
+## How long data is kept
+
+Automatic deletion, new in 0.17.0, is off for every application until an admin turns it on in **Configure > Data & privacy**. Until then, Moss keeps everything below until someone deletes it.
+
+| Data | Period once Automatic deletion is on (default) |
+| --- | --- |
+| Conversations, with their messages, page text, screen history and uploaded files | Keep until deleted |
+| Screenshots | 7 days |
+| Session recordings | Keep until deleted |
+| Page snapshots | Keep until deleted |
+| API logs | 90 days |
+| User profile and metadata | Deleted with the user's last conversation |
+
+- Admins can choose a period from 1 to 36,500 days for each of the first five, or keep until deleted.
+- Deleting a conversation deletes its screenshots, recording, page snapshots and API logs with it.
+- Audit events are kept for a period your Moss administrator sets, 365 days by default. See [Audit logging](/en/security/audit-logging).
+- One user's data can be deleted at any time, with a certificate. See [Delete a user's data](/en/dashboard/data-privacy#delete-a-users-data).
+- Automatic deletion doesn't reach tickets already sent to your help desk, copies in the user's browser, or your backups.
+
+For Moss-hosted service data, use the applicable agreement, documented customer
+instructions, and [Privacy Policy](https://viamoss.ai/legal-terms/privacy-policy)
+to determine the period.
+
+The details, including legal holds, minimums and what a self-hosted install needs, are in [Data & privacy](/en/dashboard/data-privacy). How long a chat session lasts in the widget is a separate setting that deletes nothing; see [Sessions](/en/sdk/api/session).
 
 ---
 
@@ -22,105 +304,20 @@ Public Moss service endpoints use HTTPS:
 
 ### At Rest
 
+#### Moss-hosted service
+
 Data stored in Moss databases is protected:
 
 - **Database Encryption** - AES-256 encryption at rest for Moss-hosted databases
+
+#### Stored credentials, on every install
+
+What the application does with the credentials it stores, on the Moss-hosted service and on self-hosted installs:
+
 - **Credential Protection** - API-key verification hashes and encrypted reusable credentials
 - **Secure Key Storage** - Encryption keys managed separately from data
 
----
-
-## Input Validation
-
-API request schemas validate inputs before processing:
-
-### Schema Validation
-
-Pydantic schemas define request fields and validation rules:
-
-```python
-class SessionRequest(BaseModel):
-    user_id: str
-    application_id: str
-    metadata: Optional[dict] = None
-
-    @validator('user_id')
-    def validate_user_id(cls, v):
-        if len(v) > 256:
-            raise ValueError('user_id too long')
-        return v
-```
-
-### Validation Rules
-
-| Input Type | Validation |
-|------------|------------|
-| String fields | Length limits, format validation |
-| IDs | UUID format verification |
-| Enums | Allowed values only |
-| Nested objects | Recursive validation |
-
-### Rejection Behavior
-
-Invalid requests receive clear error responses:
-
-```json
-{
-  "detail": [
-    {
-      "loc": ["body", "user_id"],
-      "msg": "field required",
-      "type": "value_error.missing"
-    }
-  ]
-}
-```
-
----
-
-## Sensitive Data Handling
-
-### Automatic Redaction
-
-The request-log sanitizer redacts known credential fields before storage:
-
-**Redacted Fields:**
-- `api_key`, `apiKey`
-- `authorization`
-- `password`
-- `secret`
-- `token`
-- `x-api-key`
-
-**How It Works:**
-
-```python
-# Before logging
-{
-    "user_id": "user-123",
-    "api_key": "app_abc123xyz..."
-}
-
-# After sanitization
-{
-    "user_id": "user-123",
-    "api_key": "[REDACTED]"
-}
-```
-
-### Recursive Sanitization
-
-Redaction applies to nested objects and arrays:
-
-```python
-{
-    "config": {
-        "auth": {
-            "token": "[REDACTED]"  # Nested fields also sanitized
-        }
-    }
-}
-```
+The details are under [Credential Storage](#credential-storage).
 
 ---
 
@@ -128,13 +325,13 @@ Redaction applies to nested objects and arrays:
 
 ### API Keys
 
-API keys are never stored in plaintext:
+The API keys are the API log access key and the audit API key. There are no API keys for the SDK; it uses signed tokens. API keys are never stored in plaintext:
 
 | Stage | Protection |
 |-------|------------|
 | Generation | Cryptographically random (`secrets.token_urlsafe`) |
 | Storage | SHA-256 hash |
-| Comparison | Constant-time comparison (timing-safe) |
+| Verification | Looked up by its SHA-256 hash |
 | Display | Shown once at creation, never retrievable |
 
 ### JWT Signing Keys
@@ -147,6 +344,8 @@ JWT secrets receive enhanced protection:
 | Storage | Encrypted at rest |
 | Rotation | Support for multiple active keys |
 | Revocation | Scheduled revocation with grace period |
+
+If you register a public key (RS256 or ES256) instead, Moss holds only your public key and no signing material. See [Authentication](/en/security/authentication).
 
 ### Password-Like Secrets
 
@@ -164,21 +363,28 @@ Authentication is enforced on every SDK request in production; it cannot be disa
 
 ## Domain Whitelisting
 
-Restrict SDK usage to approved domains:
+The allowed-domains list stops other websites from loading Moss with your application ID.
 
 ### Configuration
 
-Set allowed domains in the Dashboard under **Settings > Security**:
+Add each domain where the SDK runs under **Configure > Security > Domain Access Control > Allowed Domains**:
 
 ```
 app.example.com
-staging.example.com
+*.example.com
 localhost:3000
 ```
 
+- An entry matches that exact host. `*.example.com` matches any subdomain of `example.com`, but not `example.com` itself.
+- An entry with a port matches only that port; without one, any port. Leave out `:443`.
+
 ### Enforcement
 
-When an allowlist is configured, requests from unlisted domains are rejected during SDK initialization.
+Moss checks the page's address, from the `Origin` header or else the `Referer`, on the SDK's configuration load and on every SDK request. A page that isn't on a non-empty list gets `403` with code `DOMAIN_NOT_ALLOWED`, and Moss doesn't load there. A sandboxed frame or a `file://` page is refused while the list has any entry.
+
+An empty list allows every page, unless the operator of the install requires allowed domains. The same rules, with the SDK setup, are in [SDK authentication](/en/sdk/authentication#allowed-domains).
+
+The list is not authentication. It relies on headers that browsers send, so it doesn't stop a client outside a browser. Every SDK request must carry a valid signed token; see [Authentication](/en/security/authentication).
 
 <Warning>
     Remember to include all environments (production, staging, development) in
@@ -187,60 +393,69 @@ When an allowlist is configured, requests from unlisted domains are rejected dur
 
 ---
 
-## Data Minimization
+## Input Validation
 
-Moss follows data minimization principles:
+API request bodies and parameters are checked against typed schemas before Moss acts on them. A request with a missing or invalid field is refused with `422`, listing each problem:
 
-### Collected Data
-
-| Data Type | Purpose | Retention |
-|-----------|---------|-----------|
-| User ID | Session identification | Applicable retention policy |
-| Screenshots | Visual context for AI | Applicable retention policy |
-| Chat messages | Conversation history | Applicable retention policy |
-| Session recordings | Replay and debugging | Applicable retention policy |
-
-For Moss-hosted service data, use the applicable agreement, documented customer
-instructions, and [Privacy Policy](https://viamoss.ai/legal-terms/privacy-policy)
-to determine the period. Capture settings control collection; a signed URL's
-expiry controls access and does not delete an object. Confirm that the deletion
-schedule is active for the intended application and storage destination before
-relying on an automatic retention period. Recordings and support copies require
-their own scope and deletion treatment.
-
-Input-field redaction does not redact screenshot pixels. Recording controls and
-screenshot capture are configured separately.
-
-### User Control
-
-Users can control data collection via SDK configuration:
-
-```html
-<script>
-  window.mossSettings = {
-    apiUrl: 'https://moss-api.viamoss.ai',
-    userId: 'USER_ID',
-    enableSessionRecording: false,       // Disable recordings
-    enableScreenHistoryRecording: false, // Disable history
-  };
-</script>
-<script src="https://cdn.viamoss.ai/moss-sdk@latest.min.js?applicationId=YOUR_APP_ID"></script>
+```json
+{
+  "detail": [
+    {
+      "type": "missing",
+      "loc": ["body", "user_id"],
+      "msg": "Field required",
+      "input": {}
+    }
+  ]
+}
 ```
 
-To apply the same settings after the SDK has loaded, pass them to `window.MossSDK.boot(...)`:
+On the SDK's endpoints the body also carries `problem` and `reference` fields, which the SDK uses to show the error.
 
-```javascript
-await window.MossSDK.boot({
-    enableSessionRecording: false,
-    enableScreenHistoryRecording: false,
-})
-```
+---
+
+## Common questions
+
+**What leaves the end user's browser?**
+The question, the page URL and title, the page text with form fields and marked areas masked, interaction reports when the user acts on a guide step, and any feedback. If you turn them on: screenshots (not masked), screen history, session recordings (masked) and uploaded files. The SDK also keeps a short list of recent chats in the browser's storage. See [What Moss collects](#what-moss-collects).
+
+**How do we stop page text and screenshots from being sent?**
+Use page context `metadata` (URL and title only) or `none`. On the CDN script, turning off **On-screen guidance** does this, unless the page sets `pageContext` itself in `window.mossSettings`; on npm, set `pageContext` in your config. To stop screenshots alone, leave **Enable Vision** off and don't set `useVision: true` in the page, or set `useVision: false`. See [Page data](/en/sdk/page-data).
+
+**Are screenshots masked?**
+No. A screenshot is a raw frame of the browser tab. Session recordings are masked from 0.17.0; screenshots are not. Don't turn on vision for pages that show data you can't send to the model.
+
+**Can we remove personal data before it reaches the model?**
+Turn on [Backend PII filtering](#backend-pii-filtering) and add patterns for your own identifiers. It doesn't cover screenshots, recordings or uploaded files.
+
+**Can text on our page make the assistant do something else?**
+From 0.17.0, Moss tells the model to treat page text, help articles and tool results as content, never as instructions, and replies link and load images only from allowed hosts. See [Page text and help content are not instructions](#page-text-and-help-content-are-not-instructions).
+
+**Who at our company can read end users' conversations?**
+Every member of your organization, for every application in it, including replays and session export. If an admin allows AI assistants, a member's connected assistant can read conversation content too, unless **Conversation content** is off. See [Who can see it](#who-can-see-it).
+
+**Can we run Model Armor or another safety filter in our cloud project?**
+Yes. Moss doesn't configure or change it. When Gemini's safety filters or Model Armor block a request, the user sees that a safety filter blocked it, and the turn is marked in the dashboard. See [When a safety filter blocks a request](#page-text-and-help-content-are-not-instructions).
 
 ---
 
 ## Next Steps
 
 <CardGroup cols={2}>
+    <Card
+        title="Data & privacy"
+        icon="user-shield"
+        href="/en/dashboard/data-privacy"
+    >
+        Retention periods and deleting a user's data
+    </Card>
+    <Card
+        title="Page data"
+        icon="file-lines"
+        href="/en/sdk/page-data"
+    >
+        What the SDK reads from the page, and the controls over it
+    </Card>
     <Card
         title="Audit Logging"
         icon="clipboard-list"

@@ -1,6 +1,6 @@
 ---
 title: "Support Ticket Handoff"
-description: "Let the assistant draft support tickets that your application files"
+description: "Let the assistant draft Zendesk tickets that your own backend files"
 icon: "ticket"
 ---
 
@@ -11,63 +11,167 @@ icon: "ticket"
 </Info>
 
 The Moss assistant can collect a support request in conversation, draft a
-ticket, and show it to the user for review. When the user confirms, the SDK
-hands the approved ticket to **your application**, which files it through your
-own backend. Moss never holds a credential for your ticketing system, and the
-requester's identity is attached by your backend from your own session — it
-never transits Moss.
+Zendesk ticket, and show it to the user on a card for review. When the user
+submits it, the SDK hands the ticket to **your page**, which files it through
+your own backend. Moss never holds a credential for your Zendesk account, and
+the requester's identity is attached by your backend from your own session: it
+never passes through Moss.
 
-<Info>
-    Ticket filing is configured per application in the Moss dashboard,
-    including the intake form the assistant collects against. Contact Moss to
-    enable it for your application.
-</Info>
+This is the **Host-brokered** filing mode of the Zendesk integration. In
+**Direct** mode, Moss files tickets itself with an API token stored in the
+dashboard, and your page needs no code. Admins choose the mode on
+[Configure > Integrations > Zendesk](/en/dashboard/integrations#zendesk).
+
+## Set up
+
+1. An admin connects Zendesk in **Host-brokered** mode and arranges the ticket
+   card on **Ticket intake**. See [Zendesk](/en/dashboard/integrations#zendesk).
+2. A published procedure allows the ticket: in the procedure editor, under
+   **Tools it can use > Built-in**, select `zendesk_ticket`. See
+   [Procedures](/en/dashboard/procedures).
+3. Your page registers `onSupportTicket` (below), and your backend files what
+   it receives. The dashboard's **Broker contract** page lists exactly what
+   your backend receives and what it must add.
+4. The admin sets **Filing** to **Live**.
 
 ## How it works
 
-1. **Collect** — the assistant gathers the ticket fields in conversation,
-   validated against your configured intake form.
-2. **Review** — the widget renders the drafted ticket as a preview card in the
-   chat. The user can edit the description and confirm or cancel.
-3. **Hand off** — on confirm, the SDK calls the `onSupportTicket` callback you
-   registered at initialization, passing the confirmed ticket and a handoff id.
-4. **File** — your page forwards both to your backend over your own
+1. **Collect**: the assistant gathers the ticket fields in conversation,
+   validated against your Zendesk form as Moss last synced it.
+2. **Review**: the widget shows the drafted ticket as a card in the chat. The
+   user can make changes, then submit or cancel. The card shows when the
+   draft expires.
+3. **Hand off**: on submit, Moss checks the values again, and the SDK calls
+   the `onSupportTicket` callback you registered, passing the ticket and a
+   handoff ID.
+4. **File**: your page forwards both to your backend over your own
    session-authenticated channel. Your backend attaches the requester and
    files the ticket.
-5. **Confirm** — your callback resolves with the outcome. The assistant shows
-   the user the result, including the ticket id when you provide one.
+5. **Confirm**: your callback resolves with the outcome. The card shows the
+   user the result, with the ticket number when you provide one.
 
 ## Registering the callback
 
 Registering `onSupportTicket` is also the capability signal: the SDK reports
-it at session init, and the backend offers ticket filing only to sessions that
-registered it. A page that doesn't register the callback is never offered a
-flow it cannot finish.
+it when the session starts or resumes, and in Host-brokered mode Moss offers
+ticket filing only to sessions that reported it. A page that doesn't register
+the callback is never offered a flow it cannot finish.
 
-```tsx
-<AgentProvider config={{
-  apiUrl: 'https://moss-api.viamoss.ai',
-  applicationId: 'YOUR_APP_ID',
-  userId: currentUser.id,
-  getJwt: () => fetchMossToken(),
+<Tabs>
+  <Tab title="npm">
+    ```tsx
+    import { AgentProvider } from '@viamoss/moss-sdk';
+    import type { SupportTicketHandoff, SupportTicketOutcome } from '@viamoss/moss-sdk';
 
-  onSupportTicket: async ({ handoffId, ticket }) => {
-    const res = await fetch('/api/support/moss-handoff', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ handoffId, ticket }),
-    });
-    if (!res.ok) {
-      return { ok: false, errorCode: `HTTP_${res.status}` };
+    async function fileTicket({ handoffId, ticket }: SupportTicketHandoff): Promise<SupportTicketOutcome> {
+      const res = await fetch('/api/support/moss-handoff', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ handoffId, ticket }),
+      });
+      if (!res.ok) {
+        return { ok: false, errorCode: `HTTP_${res.status}` };
+      }
+      const filed = await res.json();
+      return { ok: true, ticketId: filed.ticketId, ticketUrl: filed.ticketUrl };
     }
-    const filed = await res.json();
-    return { ok: true, ticketId: filed.ticketId, ticketUrl: filed.ticketUrl };
-  },
-}}>
-```
+
+    <AgentProvider config={{
+      apiUrl: 'https://moss-api.viamoss.ai',
+      applicationId: 'YOUR_APP_ID',
+      userId: currentUser.id,
+      getJwt: () => fetchMossToken(),
+      onSupportTicket: fileTicket,
+    }}>
+      {children}
+    </AgentProvider>
+    ```
+  </Tab>
+  <Tab title="CDN script">
+    ```html
+    <script>
+      window.mossSettings = {
+        getJwt: () => fetchMossToken(),
+        onSupportTicket: async ({ handoffId, ticket }) => {
+          const res = await fetch('/api/support/moss-handoff', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ handoffId, ticket }),
+          });
+          if (!res.ok) return { ok: false, errorCode: 'HTTP_' + res.status };
+          const filed = await res.json();
+          return { ok: true, ticketId: filed.ticketId, ticketUrl: filed.ticketUrl };
+        },
+      };
+    </script>
+    ```
+    Set `window.mossSettings` before the Moss script loads. See
+    [Installation](/en/sdk/installation).
+  </Tab>
+</Tabs>
 
 The callback owns the transport: use your application's normal session and
 CSRF semantics. The SDK never touches your cookies.
+
+## When Moss offers a ticket
+
+Moss offers a ticket only when **all** of these hold. If no ticket is offered,
+check them in order. Conditions 4 and 5 apply only in Host-brokered mode; the
+others apply in both modes.
+
+| # | Condition | Where to check |
+|---|---|---|
+| 1 | Zendesk is connected (in Direct mode, with an API user and token stored). | **Configure > Integrations > Zendesk**: the panel shows the account and **Mode** |
+| 2 | **Filing** is **Live**. It starts **Off** on a new connection. | The **Filing** control on the Zendesk panel |
+| 3 | Filing is not **Paused** by a change to your Zendesk form. | The panel's status, and the banner listing what to fix |
+| 4 | Host-brokered only: your ticket form has synced, and every field Zendesk requires can be filled, by a row on the card, a pinned value, or your backend. | **Ticket intake** shows your form, not "No schema synced yet". A required field whose row says "Moss binds no role to this field" needs a **Pinned value** or **Backend** |
+| 5 | Host-brokered only: the page registered `onSupportTicket` when the session started or resumed. | Your SDK config, on the page the user is on |
+| 6 | The conversation is in a published procedure that allows `zendesk_ticket`, **or** no procedure is running and Zendesk is the application's default handoff (see below). | The procedure's **Tools it can use** |
+| 7 | No ticket from this conversation has been filed yet. | The session in **Sessions**. Moss files at most one ticket per conversation; if one is already filed, the assistant tells the user it is in the queue |
+
+Even when all of these hold, the assistant drafts a ticket only when the
+procedure's steps, or the user's request, call for one.
+
+**Default handoff.** When no procedure is running, Moss can still offer a
+ticket as its default handoff, if the application has at least one published
+procedure and Zendesk is its support destination. Zendesk is the destination
+by default when its filing is **Live** and Intercom is not connected. When
+Intercom is connected as well, only procedures decide: each one allows
+`zendesk_ticket` or `intercom_conversation`.
+
+From 0.17.0, while a card waits for the user, the chat input is off; its
+placeholder reads "Review your ticket summary above…". It comes back once a
+submission's outcome is in, when the user cancels, or when the draft expires.
+The card is still there after a page load. A user who cancels can ask for the ticket again in the same
+conversation; the new draft starts from the values on the cancelled card.
+After the user submits, the assistant doesn't draft another card while your
+backend is filing.
+
+### Turning filing off
+
+The admin's **Filing** control on the Zendesk panel is the one switch. Set to
+**Off**, Moss stops offering tickets in every procedure and in the default
+handoff, and a card already on screen can no longer be submitted. The
+procedures keep their ticket step, so switching back to **Live** restores it.
+You don't need to change code.
+
+### Rolling out to some users
+
+Pass `onSupportTicket` only for users in the rollout. Sessions started without
+the callback are never offered a ticket (condition 5), so the rest of your
+users see no change. The SDK reports the callback each time a session starts
+or resumes, for example on the next page load, so a user moved into or out of
+the rollout is affected from then on.
+
+```tsx
+<AgentProvider config={{
+  // ...
+  onSupportTicket: user.inTicketRollout ? fileTicket : undefined,
+}}>
+```
+
+This works only in Host-brokered mode. In Direct mode Moss files without the
+callback, so `onSupportTicket` does not gate it.
 
 ## The handoff
 
@@ -75,8 +179,8 @@ Your callback receives a `SupportTicketHandoff`:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `handoffId` | `string` | Identifies this filing decision. Report the outcome against it, and deduplicate on it so one confirmation cannot become two tickets. |
-| `ticket` | `SupportTicketPayload` | The ticket to file, exactly as the user confirmed it. |
+| `handoffId` | `string` | Identifies this filing decision. Report the outcome against it, and deduplicate on it so one submission cannot become two tickets. |
+| `ticket` | `SupportTicketPayload` | The ticket to file: what the user submitted, as Moss validated it against your form at submit time. |
 
 `SupportTicketPayload` uses the Zendesk ticket-create shape, in Zendesk's own
 casing, so your backend can attach the requester and post it without
@@ -85,13 +189,23 @@ translation:
 | Field | Type | Description |
 |-------|------|-------------|
 | `subject` | `string` | Ticket subject |
-| `comment` | `{ html_body: string }` | Ticket description as HTML |
-| `tags` | `string[]` | Optional tags |
-| `ticket_form_id` | `number` | Optional form id |
-| `custom_fields` | `Array<{ id: number; value: ... }>` | Optional custom field values |
+| `comment` | `{ html_body: string }` | Ticket body as HTML: the description, then the last 12 chat messages, each cut at 400 characters |
+| `tags` | `string[]` | Always includes `moss-created` (see below) |
+| `ticket_form_id` | `number` | The Zendesk form chosen on **Ticket intake**. Optional in the type; present once a form has synced |
+| `custom_fields` | `Array<{ id: number; value: string \| number \| boolean \| string[] \| null }>` | Field values, including the [session reference field](/en/dashboard/integrations#session-reference-field) when one is set |
 
-Fields the user left unset are absent rather than empty — Moss omits what it
-cannot determine instead of guessing.
+Fields the user left unset are absent rather than empty: Moss omits what it
+cannot determine instead of guessing. The payload never contains a requester
+(no name, no email): your backend adds it, along with any field the admin
+placed under **Backend** on **Ticket intake**.
+
+### The `moss-created` tag
+
+Every ticket Moss drafts carries the Zendesk tag `moss-created` in
+`ticket.tags`. Keep it when your backend posts the ticket. It is how your
+support team can find, route and report on tickets that came through Moss, in
+Zendesk views, triggers and reports. If your backend adds tags of its own,
+append them rather than replacing the list.
 
 ## The outcome
 
@@ -120,23 +234,115 @@ number needs a cast there.
   user. From Moss 0.16.16, either one sent as a whole number is recorded as
   text, and any other value that isn't text is dropped.
 - Do not resolve early to release the SDK. A callback still pending after
-  15 seconds, or one that rejects, is treated as **unknown** rather than
-  failed: the card tells the user the request was handed over without a
-  confirmation, because your backend may well have filed it. Late resolutions
-  are ignored.
+  15 seconds, one that rejects, or one that returns something without a
+  boolean `ok`, is treated as **unknown** rather than failed: the card tells
+  the user the request was handed over without a confirmation, because your
+  backend may well have filed it. Nothing is reported to Moss, and late
+  resolutions are ignored.
 
-### Repeated submits
+## What the card shows
+
+| What happened | The card shows |
+|---|---|
+| You resolved `{ ok: true, ticketId }` | "Submitted on your behalf — Ticket #`ticketId`" |
+| You resolved `{ ok: true }` without `ticketId` | "Submitted on your behalf" |
+| You also passed `ticketUrl` (a string) | A **View ticket** link |
+| You resolved `{ ok: false }` | "We couldn't submit your ticket", with the [fallback link](#fallback-link) |
+| No answer within 15 seconds, or the callback threw | "Handed over to be filed, but no confirmation came back. Check with support if you don't hear from them." |
+| The user cancelled | "No ticket was sent", with the [fallback link](#fallback-link). The draft is kept for this session. |
+
+The ticket number appears only when your callback returns `ticketId`. Moss
+cannot look it up, because it never calls Zendesk in this mode. The dashboard's
+session transcript shows the same outcome, with the number when you returned
+one.
+
+### Card copy
+
+Set `appearance.chrome.ticketCard` to replace the card's wording with your own.
+Every key is optional, and an unset key keeps the SDK's translated default.
+Your strings are shown as given, in every language, so translate them
+yourself if you serve more than one.
+
+| Key | Where it shows | Default |
+|---|---|---|
+| `titleLabel` | Label of the title row | Your form's name for the field, else "Title" |
+| `descriptionLabel` | Label of the description row | Your form's name for the field, else "Description" |
+| `privacyNote` | Under the card's header: who the ticket is filed with | "Filed by support" |
+| `submittingNote` | Under "Submitting your ticket…" | "Sending to support" |
+| `confirmedNote` | Beside the success strip | "You're all set — your ticket is with support." |
+| `cancelledNote` | In the "No ticket was sent" row | "Your draft is kept for this session — say the word to pick it back up." |
+| `failedNote` | In the "We couldn't submit your ticket" row | "Support didn't receive it." |
+
+```tsx
+appearance: {
+  chrome: {
+    ticketCard: {
+      privacyNote: 'Filed with Acme Support',
+      confirmedNote: 'We reply by email within one business day.',
+    },
+  },
+},
+```
+
+`ticketCard` is set in code only. Other appearance options are in
+[Appearance](/en/sdk/appearance).
+
+### Fallback link
+
+When filing fails or the user cancels, the card offers the chat footer's
+**Open a ticket** link (or the **Help center** link if there is no ticket
+link), so the user has somewhere to go. It appears only while the footer is
+shown. Set it in the dashboard under **Configure > Appearance > Branding**
+(**Show footer**, **Ticket label**, **Ticket URL**), or in code:
+
+```tsx
+appearance: {
+  chrome: {
+    footer: {
+      enabled: true,
+      openTicket: { label: 'Contact support', url: 'https://support.example.com/new', icon: 'ticket' },
+    },
+  },
+},
+```
+
+### Rating after a ticket
+
+When your callback confirms a ticket (`{ ok: true }`), Moss asks the user to
+rate the conversation right away, in the chat below the confirmation, so the
+ticket number and link stay visible. It asks only if the user is still in the
+same conversation, sent nothing while your backend was filing, the
+conversation has at least one exchange, and it hasn't been rated yet. Rating
+or skipping removes only that card; the conversation goes on. The rating uses
+the style set by `appearance.chrome.feedback.sessionRating` (`'thumbs'` by
+default, or `'stars'` from 0.17.0). See [Appearance](/en/sdk/appearance).
+
+## Events
+
+With `onEvent` set, the SDK reports two ticket events:
+
+| Event | When | Properties |
+|---|---|---|
+| `Moss Ticket Opened` | The assistant shows a new ticket card. Once per handoff; a card brought back after a page load doesn't fire it again | `handoffId` |
+| `Moss Ticket Submitted` | The user submitted the card and the outcome is settled | `handoffId`, `outcome`: `'filed'`, `'failed'` or `'unconfirmed'` |
+
+`outcome` is what the card told the user: `'unconfirmed'` means nothing
+confirmed it either way. Both events also carry the common properties
+(`sessionId`, `userId`, `timestamp`, `pageKey`). See [Events](/en/sdk/events).
+
+## Repeated submits
 
 From Moss 0.16.16, when the user submits the same card again before your
-backend's outcome is recorded, for example after a lost response, Moss accepts
-the repeat and calls `onSupportTicket` again under the same `handoffId`.
-Deduplicating on `handoffId` gives the user one ticket. A repeat whose values
-differ from the first submit is refused and never reaches your callback.
+backend's outcome is recorded, for example after a lost response or from a
+second tab, Moss accepts the repeat and calls `onSupportTicket` again under the
+same `handoffId`. Deduplicating on `handoffId` gives the user one ticket. A
+repeat whose values differ from the first submit is refused and never reaches
+your callback.
 
 <Warning>
     Treat `handoffId` as an idempotency key on your backend. If the same
-    handoff reaches you twice, return the original result — never file a
-    second ticket for one confirmation.
+    handoff reaches you twice, return the original result. Never file a
+    second ticket for one submission.
 </Warning>
 
 ## Responsibilities
@@ -149,11 +355,54 @@ differ from the first submit is refused and never reaches your callback.
 | Requester identity | | ✓ (from your session) |
 | Ticketing-system credentials | | ✓ (server-side, yours) |
 | Filing and deduplication | | ✓ |
+| Keeping the `moss-created` tag | | ✓ |
 | Showing the user the result | ✓ | |
+
+## Common questions
+
+**Why doesn't Moss offer to file a ticket?**
+Go through [When Moss offers a ticket](#when-moss-offers-a-ticket) in order.
+The usual causes are **Filing** still **Off**, no published procedure that
+allows `zendesk_ticket`, or a page that doesn't register `onSupportTicket`.
+
+**How do we turn ticket filing off?**
+An admin sets **Filing** to **Off** on the Zendesk panel. It applies to every
+procedure at once, with no code change. See
+[Turning filing off](#turning-filing-off).
+
+**Can we turn filing on for some users only?**
+Yes, in Host-brokered mode: pass `onSupportTicket` only for those users. See
+[Rolling out to some users](#rolling-out-to-some-users).
+
+**How can our support team tell which tickets came through Moss?**
+Every ticket carries the tag `moss-created`; keep it when your backend posts
+the ticket. For the chat itself, an admin can set a
+[session reference field](/en/dashboard/integrations#session-reference-field).
+
+**Why does the card say "Submitted on your behalf" without a ticket number?**
+Your callback resolved `{ ok: true }` without `ticketId`. Return the ID your
+ticketing system gives you.
+
+**What happens when our Zendesk form changes?**
+Moss re-reads the form daily. Most changes need nothing from you. Some pause
+filing until an admin fixes them. A new required field doesn't pause filing,
+but tickets without it can't be filed: in Host-brokered mode the card isn't
+shown (unless the field has a row on the card for the user to fill), and in
+Direct mode, unless Moss can fill the field, the ticket isn't sent and the
+assistant tells the user to contact support. An admin fixes it on **Ticket intake** with a **Pinned value** for the
+field or, in Host-brokered mode, by placing it under **Backend** so your
+backend supplies it. See
+[When your Zendesk form changes](/en/dashboard/integrations#when-your-zendesk-form-changes).
 
 ## Next Steps
 
 <CardGroup cols={2}>
+    <Card title="Zendesk integration" icon="plug" href="/en/dashboard/integrations#zendesk">
+        Connect Zendesk, arrange the ticket card, turn filing on
+    </Card>
+    <Card title="Events" icon="chart-line" href="/en/sdk/events">
+        Send ticket events to your analytics
+    </Card>
     <Card title="Configuration" icon="gear" href="/en/sdk/configuration">
         Full SDK configuration reference
     </Card>

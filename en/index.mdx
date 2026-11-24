@@ -1,18 +1,19 @@
 ---
 title: "Welcome"
-description: "Get started with the Moss AI assistant platform"
+description: "Moss is an AI assistant you embed in your web app: it answers questions with the user's page in view and guides them through tasks"
 ---
 
 ## Welcome to Moss
 
-Moss is an AI-powered assistant platform that embeds directly into your web application. It provides contextual help, step-by-step guidance, and intelligent support - helping your users navigate and accomplish tasks seamlessly.
+Moss is an AI assistant that you embed in your web app. It reads the page your user is on, answers their questions from your documentation, and can walk them through a task by highlighting each element to click.
 
-### Key Capabilities
+### What Moss does
 
-- **Contextual Understanding** - Moss sees what your users see, providing relevant assistance based on their current screen and actions
-- **Step-by-Step Guidance** - Break down complex tasks into manageable steps with visual highlighting
-- **Knowledge Base Integration** - Connect your documentation for accurate, up-to-date answers
-- **Session Replay** - Review user interactions to improve your product and support
+- **Answers in context.** Moss reads the text and structure of the page the user is on, with the parts you mark as sensitive redacted, so its answers fit what the user sees. See [Page data and privacy](/en/sdk/page-data).
+- **Guides step by step.** Moss highlights the button or field for each step on the real page.
+- **Answers from your knowledge base.** Connect your help center or documentation, and Moss cites the articles it answers from.
+- **Hands off to support.** Moss drafts a support ticket and files it to Zendesk, either itself or through your own backend.
+- **Replays sessions.** With session recording turned on (it is off by default), you can review what users did in the dashboard.
 
 ## Get Started
 
@@ -22,21 +23,28 @@ Moss is an AI-powered assistant platform that embeds directly into your web appl
         icon="rocket"
         href="/en/quickstart"
     >
-        Get your AI assistant up and running in minutes
+        Add Moss to a React app
     </Card>
     <Card
         title="SDK Overview"
         icon="code"
         href="/en/sdk/overview"
     >
-        Learn how the SDK works and integration options
+        How the SDK works, and npm vs script tag
+    </Card>
+    <Card
+        title="Page Data and Privacy"
+        icon="shield-halved"
+        href="/en/sdk/page-data"
+    >
+        What Moss reads from your page, and how to limit it
     </Card>
     <Card
         title="Configuration"
         icon="gear"
         href="/en/configurations/overview"
     >
-        Customize behavior through Dashboard or SDK settings
+        Settings in the dashboard and in your code
     </Card>
     <Card
         title="Security"
@@ -45,18 +53,27 @@ Moss is an AI-powered assistant platform that embeds directly into your web appl
     >
         Authentication, data protection, and compliance
     </Card>
+    <Card
+        title="Self-Hosting"
+        icon="server"
+        href="/en/self-hosting/overview"
+    >
+        Run Moss in your own infrastructure
+    </Card>
 </CardGroup>
 
 ## Resources
 
 ### Dashboard
 
-Access the [Moss Dashboard](https://dashboard.viamoss.ai) to:
-- Create and manage applications
-- Configure AI assistant settings
-- View session recordings and analytics
-- Manage your knowledge base
+Use the [Moss Dashboard](https://dashboard.viamoss.ai) to:
+
+- create and configure applications;
+- manage your knowledge base, procedures and suggested content;
+- review sessions, session replays and analytics.
+
+A self-hosted install has its own dashboard address.
 
 ### Support
 
-Need help? Check our documentation or contact support through the Dashboard.
+Need help? Check the [troubleshooting guide](/en/sdk/advanced#troubleshooting), or contact support through the Dashboard.

@@ -40,6 +40,10 @@
               "en/sdk/installation",
               "en/sdk/authentication",
               "en/sdk/configuration",
+              "en/sdk/appearance",
+              "en/sdk/guides-and-navigation",
+              "en/sdk/events",
+              "en/sdk/page-data",
               "en/sdk/support-ticket-handoff",
               {
                 "group": "API Reference",
@@ -56,7 +60,18 @@
           {
             "group": "Dashboard",
             "pages": [
-              "en/dashboard/session-data-export"
+              "en/dashboard/overview",
+              "en/dashboard/sessions",
+              "en/dashboard/session-data-export",
+              "en/dashboard/analytics",
+              "en/dashboard/knowledge-base",
+              "en/dashboard/suggested-content",
+              "en/dashboard/procedures",
+              "en/dashboard/improving-answers",
+              "en/dashboard/integrations",
+              "en/dashboard/data-privacy",
+              "en/dashboard/export-import",
+              "en/dashboard/ai-assistants"
             ]
           },
           {
@@ -76,6 +91,15 @@
               "en/security/data-protection",
               "en/security/audit-logging",
               "en/security/compliance"
+            ]
+          },
+          {
+            "group": "Self-hosting",
+            "pages": [
+              "en/self-hosting/overview",
+              "en/self-hosting/models-and-response-time",
+              "en/self-hosting/network",
+              "en/self-hosting/operations"
             ]
           },
           {
@@ -110,6 +134,10 @@
               "ko/sdk/installation",
               "ko/sdk/authentication",
               "ko/sdk/configuration",
+              "ko/sdk/appearance",
+              "ko/sdk/guides-and-navigation",
+              "ko/sdk/events",
+              "ko/sdk/page-data",
               "ko/sdk/support-ticket-handoff",
               {
                 "group": "API Reference",
@@ -126,7 +154,18 @@
           {
             "group": "대시보드",
             "pages": [
-              "ko/dashboard/session-data-export"
+              "ko/dashboard/overview",
+              "ko/dashboard/sessions",
+              "ko/dashboard/session-data-export",
+              "ko/dashboard/analytics",
+              "ko/dashboard/knowledge-base",
+              "ko/dashboard/suggested-content",
+              "ko/dashboard/procedures",
+              "ko/dashboard/improving-answers",
+              "ko/dashboard/integrations",
+              "ko/dashboard/data-privacy",
+              "ko/dashboard/export-import",
+              "ko/dashboard/ai-assistants"
             ]
           },
           {
@@ -146,6 +185,15 @@
               "ko/security/data-protection",
               "ko/security/audit-logging",
               "ko/security/compliance"
+            ]
+          },
+          {
+            "group": "자체 호스팅",
+            "pages": [
+              "ko/self-hosting/overview",
+              "ko/self-hosting/models-and-response-time",
+              "ko/self-hosting/network",
+              "ko/self-hosting/operations"
             ]
           },
           {

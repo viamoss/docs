@@ -1,24 +1,15 @@
 ---
 title: "SDK 옵션"
-description: "AgentProvider config를 통한 Moss 동작 구성"
+description: "하려는 일에 따라 묶은 AgentProvider 옵션과 각 옵션을 쓰는 경우"
 ---
 
-## 개요
+이 페이지는 SDK 옵션을 하려는 일에 따라 묶고, 각 옵션이 무엇을 하며 언제 쓰는지 설명합니다. 모든 옵션의 타입과 기본값은 전체 레퍼런스인 [설정](/ko/sdk/configuration)에 있습니다.
 
-SDK 설정 옵션을 사용하면 애플리케이션 코드에서 직접 Moss 동작을 사용자 정의할 수 있습니다. 이러한 설정은 지정 시 **대시보드 기본값을 재정의**하여 개발자에게 배포, 환경 또는 사용자 세그먼트별로 세밀한 제어를 제공합니다.
+옵션은 `AgentProvider`의 `config` prop으로 넘깁니다. CDN 스크립트에서는 같은 키를 `window.mossSettings`에 설정하세요. 단, `applicationId`는 스크립트 URL에 넣습니다. 스크립트 URL의 `userId`와 스크립트 태그의 `data-api-base` 속성도 `window.mossSettings`보다 우선합니다.
 
-<Info>
-    **우선순위 알림:** SDK 설정 옵션은 대시보드 설정보다 우선합니다.
-    코드에서 옵션을 구성하면 대시보드에서 설정한 값을 재정의합니다. 이를
-    통해 개발자는 대시보드 설정을 기본값으로 사용하면서 배포별로 동작을
-    사용자 정의할 수 있습니다.
-</Info>
+일부 설정은 Moss 대시보드에서도 올 수 있으며, 테마와 브랜딩은 대시보드가 우선합니다. 설정마다 어느 쪽이 적용되는지는 [설정 개요](/ko/configurations/overview)에 있습니다.
 
----
-
-## 필수 옵션
-
-`AgentProvider` config에 다음 옵션을 제공해야 합니다:
+## Moss를 앱과 사용자에 연결하기
 
 ```tsx
 import { AgentProvider, AssistantButton } from '@viamoss/moss-sdk';
@@ -33,235 +24,62 @@ import { AgentProvider, AssistantButton } from '@viamoss/moss-sdk';
 </AgentProvider>
 ```
 
-| 옵션 | 타입 | 설명 |
-|------|------|------|
-| `apiUrl` | `string` | Moss API 엔드포인트 URL |
-| `applicationId` | `string` | 대시보드의 고유 애플리케이션 ID |
-| `userId` | `string` | 현재 사용자의 고유 식별자 |
-| `getJwt` | `() => Promise<string>` | JWT 토큰을 반환하는 함수 |
+- `apiUrl`, `applicationId`, `userId`는 필수입니다. `applicationId`는 **구성 > 일반**에 **애플리케이션 ID**로 표시됩니다. 0.17.0부터 `apiUrl` 끝의 `/`는 무시됩니다.
+- `getJwt`는 로그인한 사용자를 위해 서명한 토큰을 반환합니다. 이미 가진 토큰을 넘기는 `jwt` 대신 `getJwt`를 쓰세요. 그래야 토큰이 만료되어도 세션이 유지됩니다. [인증](/ko/sdk/authentication)을 참고하세요.
+- `userMetadata`는 사용자의 역할, 요금제 같은 속성을 담아 세션이 시작될 때 보냅니다. Moss가 사용자에 맞게 답변하도록 하려면 이 값을 쓰고, 관리자에게 관리자용 추천 콘텐츠를 보여 주려면 `role: 'admin'`을 설정하세요. 개인정보가 아니라 역할과 분류를 넘기세요.
+- `getBridgeCode`(0.17.0부터)는 애플리케이션의 MCP 서버가 여러분의 사이트를 거쳐 사용자를 로그인시킬 때만 필요합니다. [연동](/ko/dashboard/integrations)을 참고하세요.
 
 <Warning>
-    `userId`는 사용자의 안정적인 식별자여야 합니다. PII(이메일, 이름)를
-    직접 사용하지 마세요 - 대신 해시되거나 익명화된 식별자를 사용하세요.
+    `userId`에는 이메일 주소나 이름이 아니라, 의미를 알 수 없고 바뀌지 않는 식별자를 쓰세요. Moss는 이 값을 모든 채팅 세션과 함께 저장합니다.
 </Warning>
 
----
-
-## 일반 옵션
-
-SDK 동작을 사용자 정의하는 데 자주 사용되는 옵션입니다:
-
-### 언어
-
-SDK 인터페이스의 UI 언어를 설정합니다.
+SDK는 `apiUrl`, `jwt`, `getJwt`, `getBridgeCode`, `applicationId`를 `AgentProvider`가 마운트될 때 한 번만 읽습니다. 페이지 텍스트에 쓰는 `redactionSelectors`와 `redactAllInputs`도 마찬가지입니다. 다른 사용자가 로그인했을 때처럼 이 값들을 바꾸려면, 사용자에 따라 바뀌는 `key`를 `AgentProvider`에 주어 provider를 다시 마운트하세요.
 
 ```tsx
-<AgentProvider config={{
-  apiUrl: 'https://moss-api.viamoss.ai',
-  applicationId: 'YOUR_APP_ID',
-  userId: currentUser.id,
-  getJwt: () => fetchMossToken(),
-  language: 'ko',  // 'en', 'ko' 또는 자동 감지를 위해 undefined
-}}>
+<AgentProvider key={currentUser.id} config={mossConfig}>
   <AssistantButton />
 </AgentProvider>
 ```
 
-**기본값:** `undefined` (브라우저 언어 자동 감지)
+## 위젯 모양 바꾸기
 
-<Tip>
-    사용자의 브라우저 언어 기본 설정을 자동으로 사용하려면 undefined로
-    두세요.
-</Tip>
+- `appearance`는 색상, 글꼴, 채팅 창의 레이아웃과 위치, 헤더, 푸터, 가이드 컨트롤, 시작 화면, 예외 상태 메시지를 정합니다. [외관](/ko/sdk/appearance)을 참고하세요.
+- `pageKey`는 현재 페이지에 `'billing-settings'` 같은 이름을 붙입니다. 페이지마다 다른 추천 질문을 보여 줄 때 쓰며, 이벤트에도 함께 실립니다. [페이지와 역할에 따른 콘텐츠](/ko/sdk/appearance#페이지와-역할에-따른-콘텐츠)를 참고하세요.
+- `language`는 위젯 언어를 `'en'` 또는 `'ko'`로 고정하고 언어 메뉴를 숨깁니다. 설정하지 않으면 Moss가 언어를 감지합니다. [언어](/ko/sdk/configuration#언어)를 참고하세요.
 
-### 비전
+## 세션과 가이드 제어하기
 
-스크린샷 분석 기능을 활성화 또는 비활성화합니다.
+- `sessionConfig`는 채팅이 얼마나 유지되는지, 사용자가 시간 초과 후 돌아왔을 때 무엇을 보는지 정합니다. [세션](/ko/sdk/api/session)을 참고하세요.
+- `closingChatEndsGuide`는 사용자가 채팅을 닫으면 진행 중인 가이드를 끝냅니다. 페이지에 자체 가이드 컨트롤이 없을 때 쓰세요. [가이드가 끝나는 경우](/ko/sdk/guides-and-navigation#가이드가-끝나는-경우)를 참고하세요.
+- `stability`는 Moss가 페이지를 읽기 전에 페이지가 안정되기를 얼마나 기다릴지 정합니다. 가이드 단계의 클릭으로 새 페이지가 로드될 수 있다면 `stability.afterReload`를 켜세요. [새로 고침, 리디렉션, 새 탭](/ko/sdk/guides-and-navigation#새로-고침-리디렉션-새-탭)과 [안정성 튜닝](/ko/sdk/advanced#안정성-튜닝)을 참고하세요.
+- `streamActivity`(0.17.0부터)는 `appearance.chrome.loader: 'steps'`와 함께 쓰며, Moss 백엔드가 한 턴에서 밟는 단계를 진행되는 대로 보여 줍니다. 페이지와 Moss 사이의 프록시가 Server-Sent Events를 통과시켜야 합니다.
+- `enableProactiveGuides`: `false`로 설정하면 애플리케이션에 설정된 공지와 트리거 규칙을 끕니다.
 
-```tsx
-<AgentProvider config={{
-  apiUrl: 'https://moss-api.viamoss.ai',
-  applicationId: 'YOUR_APP_ID',
-  userId: currentUser.id,
-  getJwt: () => fetchMossToken(),
-  useVision: true,  // 시각적 컨텍스트 활성화
-}}>
-  <AssistantButton />
-</AgentProvider>
-```
+## Moss가 읽고 기록하는 범위 제한하기
 
-**기본값:** `true` (대시보드에서)
+각 옵션은 [페이지 데이터와 개인정보 보호 설정](/ko/sdk/page-data)에서 자세히 설명합니다.
 
-### 세션 녹화
+- `pageContext`는 턴마다 페이지를 얼마나 보낼지 정합니다. 페이지의 구조와 텍스트(`'full'`), URL과 제목만(`'metadata'`), 둘 다 보내지 않음(`'none'`) 중에서 고릅니다. 내용이 브라우저 밖으로 나가면 안 되는 페이지에서는 `'metadata'`를 쓰고 `enableScreenHistoryRecording`을 끈 채로 두세요. 사용자 동작 타임라인은 어느 수준에서든 전송되기 때문입니다. `'metadata'`에서는 Moss가 페이지의 요소를 가리킬 수 없습니다.
+- `redactAllInputs`와 `redactionSelectors`는 폼 값과 지정한 요소를 페이지 텍스트에서 마스킹합니다. 마크업의 요소에도 `data-moss-redact`를 붙이세요.
+- `useVision`은 사용자가 공유한 탭의 프레임을 턴마다 보냅니다. 사용자가 브라우저의 화면 캡처 요청을 허용해야 하고, `pageContext`가 `'full'`일 때만 보냅니다. 이 스크린샷에는 마스킹이 적용되지 않습니다. 대시보드의 **비전 사용**을 켜든 끄든 덮어쓰려면 이 값을 설정하세요. `false`로 두면 스크린샷을 보내지 않습니다.
+- `enableSessionRecording`은 대시보드의 **세션 리플레이**에서 다시 볼 수 있도록 세션을 녹화합니다. 대시보드의 **세션 리플레이 활성화**도 켜져 있어야 합니다. 0.17.0부터는 이 스위치가 꺼져 있으면 서버가 녹화를 거부합니다.
+- `enableScreenHistoryRecording`은 사용자의 최근 동작 타임라인을 턴마다 보냅니다.
+- `observeTargetSelector`는 Moss가 읽는 범위를 페이지의 한 요소로 제한합니다.
+- `collectionEnabled`와 `collectionControl`(0.17.0부터)은 앱 코드에서 Moss가 마운트되지 않도록 막습니다. 예를 들어 사용자가 동의할 때까지 막을 수 있습니다.
+- `pageSanitizationScript`는 Moss가 페이지를 관찰하기 시작할 때마다 실제 페이지에서 실행하는 함수입니다. 마운트될 때 실행되고, `observeTargetSelector`나 함수 자체가 바뀌면 다시 실행됩니다. 이 함수가 바꾼 내용은 사용자에게도 보이므로 개인정보 보호 수단이 아닙니다. 함수는 컴포넌트 밖에서 정의하세요. 인라인 함수는 렌더링할 때마다 다시 실행됩니다.
+- `screenshotMode`는 0.17.0에서 채팅용 스크린샷에 아무 영향을 주지 않습니다.
 
-사용자 세션이 리플레이를 위해 녹화되는지 여부를 제어합니다.
+## Moss를 자체 시스템에 연결하기
 
-```tsx
-<AgentProvider config={{
-  apiUrl: 'https://moss-api.viamoss.ai',
-  applicationId: 'YOUR_APP_ID',
-  userId: currentUser.id,
-  getJwt: () => fetchMossToken(),
-  enableSessionRecording: false,  // 개인정보에 민감한 사용자를 위해 비활성화
-}}>
-  <AssistantButton />
-</AgentProvider>
-```
+- `onSupportTicket`은 여러분의 백엔드를 통해 지원 티켓을 접수하고 그 결과를 알립니다. [지원 티켓 핸드오프](/ko/sdk/support-ticket-handoff)를 참고하세요.
+- `onEvent`는 분석 도구로 보낼 사용 이벤트를 받고, `eventQueryText`는 이벤트에 질문 텍스트를 실을지 정합니다. [이벤트와 오류](/ko/sdk/events)를 참고하세요.
+- `onError`(0.17.0부터)는 채팅이 사용자에게 보여 주는 모든 문제를 누가 해결할 수 있는지와 함께 받습니다. [onError](/ko/sdk/events#onerror)를 참고하세요.
+- `replyLinks.allowedHosts`(0.17.0부터)는 답변이 링크하고 이미지를 불러올 수 있는 호스트를 추가합니다. 답변이 애플리케이션의 허용 도메인이나 지식 베이스에 없는 사이트로 링크할 때 쓰세요. [replyLinks](/ko/sdk/configuration#replylinks)를 참고하세요.
 
-**기본값:** `true` (대시보드에서)
+## 문제 진단하기
 
-### 화면 히스토리
-
-AI 컨텍스트에 사용자 액션 히스토리를 포함합니다.
-
-```tsx
-<AgentProvider config={{
-  apiUrl: 'https://moss-api.viamoss.ai',
-  applicationId: 'YOUR_APP_ID',
-  userId: currentUser.id,
-  getJwt: () => fetchMossToken(),
-  enableScreenHistoryRecording: true,
-}}>
-  <AssistantButton />
-</AgentProvider>
-```
-
-**기본값:** `true` (대시보드에서)
-
----
-
-## 외관 (Appearance)
-
-Moss 어시스턴트 UI의 비주얼 테마를 사용자 정의합니다.
-
-### 프리셋 사용
-
-```tsx
-<AgentProvider config={{
-  apiUrl: 'https://moss-api.viamoss.ai',
-  applicationId: 'YOUR_APP_ID',
-  userId: currentUser.id,
-  getJwt: () => fetchMossToken(),
-  appearance: 'blue',  // 프리셋 테마 사용
-}}>
-  <AssistantButton />
-</AgentProvider>
-```
-
-**사용 가능한 프리셋:**
-
-| 프리셋 | 설명 |
-|--------|------|
-| `'blue'` | 글래스모피즘 효과가 있는 기본 블루 테마 |
-| `'purple'` | 단색 배경의 퍼플 테마 |
-
-### 커스텀 외관
-
-부분 객체를 전달하여 특정 속성을 재정의합니다:
-
-```tsx
-<AgentProvider config={{
-  apiUrl: 'https://moss-api.viamoss.ai',
-  applicationId: 'YOUR_APP_ID',
-  userId: currentUser.id,
-  getJwt: () => fetchMossToken(),
-  appearance: {
-    colors: {
-      primary: '#3b82f6',
-      primaryLight: '#60a5fa',
-    },
-    modal: {
-      defaultPosition: { right: 20, bottom: 20 },
-      defaultSize: { width: 400, height: 600 },
-    },
-    effects: {
-      glassmorphism: true,
-    },
-  },
-}}>
-  <AssistantButton />
-</AgentProvider>
-```
-
-### 사용자 정의 가능한 속성
-
-| 카테고리 | 속성 |
-|----------|------|
-| `colors` | `primary`, `primaryLight`, `primaryLighter`, `userMessage`, `assistantMessage`, `headerBackground`, `inputAreaBackground`, `modalBackground`, `text.*`, `border`, `success`, `error` |
-| `typography` | `fontFamily`, `fontSize.*`, `lineHeight.*` |
-| `spacing` | `3xs`, `2xs`, `xs`, `sm`, `md` 등 |
-| `radius` | `sm`, `md`, `lg`, `xl` |
-| `shadows` | `sm`, `md`, `lg` |
-| `effects` | `glassmorphism`, `glassBlur`, `glassOpacity` |
-| `inputBar` | `roundedTop`, `topShadow` |
-| `progressBar` | `height` |
-| `modal` | `defaultPosition`, `defaultSize` |
-
-<Tip>
-    부분 객체는 기본 테마와 깊은 병합(deep-merge)됩니다. 재정의하려는 속성만 지정하면 됩니다.
-</Tip>
-
----
-
-## 세션 옵션
-
-세션 관리 동작을 구성합니다:
-
-```tsx
-<AgentProvider config={{
-  apiUrl: 'https://moss-api.viamoss.ai',
-  applicationId: 'YOUR_APP_ID',
-  userId: currentUser.id,
-  getJwt: () => fetchMossToken(),
-  sessionConfig: {
-    inactivityTimeout: 60,
-    maxSessionAge: 4,
-    showNotification: true,
-  },
-}}>
-  <AssistantButton />
-</AgentProvider>
-```
-
-| 옵션 | 타입 | 기본값 | 설명 |
-|------|------|--------|------|
-| `inactivityTimeout` | `number` | `30` | 세션 만료 전 비활성 시간(분) |
-| `maxSessionAge` | `number` | `2` | 최대 세션 지속 시간(시간) |
-| `showNotification` | `boolean` | `true` | 새 세션 시 알림 표시 |
-
----
-
-## 개발자 옵션
-
-디버깅 및 사용자 정의를 위한 고급 설정입니다:
-
-### 스크린샷 모드
-
-```tsx
-<AgentProvider config={{
-  apiUrl: 'https://moss-api.viamoss.ai',
-  applicationId: 'YOUR_APP_ID',
-  userId: currentUser.id,
-  getJwt: () => fetchMossToken(),
-  screenshotMode: 'viewport',  // 'fullpage' 또는 'viewport'
-}}>
-  <AssistantButton />
-</AgentProvider>
-```
-
-**기본값:** `'fullpage'`
-
-| 값 | 설명 |
-|----|------|
-| `fullpage` | 전체 스크롤 가능한 페이지를 캡처 |
-| `viewport` | 보이는 부분만 캡처 |
-
-<Tip>
-    페이지가 매우 긴 앱의 경우 처리 시간을 줄이기 위해 `viewport`를
-    사용하세요.
-</Tip>
-
-### 로그 레벨
+- `logLevel`은 SDK가 콘솔에 남기는 로그의 양을 정합니다. 문자열이 아니라 SDK가 내보내는 `LogLevel` enum을 받습니다. CDN 스크립트에서는 enum의 숫자를 넘기세요. `1`(debug)부터 `5`(silent)까지입니다.
+- `debugMode`는 채팅 안에 디버그 컨트롤을 보여 줍니다. 모든 사용자에게 보이므로 프로덕션에서는 절대 켜지 마세요. 이 값은 대시보드에서 가져오지 않습니다.
 
 ```tsx
 import { AgentProvider, AssistantButton, LogLevel } from '@viamoss/moss-sdk';
@@ -271,177 +89,38 @@ import { AgentProvider, AssistantButton, LogLevel } from '@viamoss/moss-sdk';
   applicationId: 'YOUR_APP_ID',
   userId: currentUser.id,
   getJwt: () => fetchMossToken(),
-  logLevel: LogLevel.DEBUG,  // DEBUG, INFO, WARN, ERROR, SILENT
+  logLevel: LogLevel.WARN,
 }}>
   <AssistantButton />
 </AgentProvider>
 ```
 
-**기본값:** `LogLevel.INFO`
+## 0.17.0의 변경 사항
 
-`logLevel`은 문자열이 아니라 SDK가 내보내는 `LogLevel` 열거형 값을 받습니다. 각 레벨은 자신보다 심각한 레벨을 모두 포함합니다 (`DEBUG`는 모든 것을 표시하고, `SILENT`은 로깅을 비활성화합니다).
+- **제거:** `displayMode`, `headless`, `forcedActivationFlow`. TypeScript가 이 옵션들을 거부하므로 config에서 지우세요.
+- **변경:** 세션 녹화에는 대시보드의 **세션 리플레이 활성화**가 켜져 있어야 하며, 이 스위치를 한 번도 저장하지 않은 애플리케이션은 이제 꺼진 것으로 봅니다(0.16.x에서는 켜진 것으로 보았습니다). npm 패키지의 `enableSessionRecording` 기본값은 여전히 `false`입니다.
+- **변경:** `apiUrl` 끝의 `/`는 무시됩니다.
+- **추가:** `onError`, `replyLinks`, `streamActivity`, `getBridgeCode`, `collectionEnabled`, `collectionControl`. 새 외관 키는 [0.17.0의 새 기능](/ko/sdk/appearance#0170의-새-기능)에 있습니다.
 
-### 디버그 모드
+## 대시보드에만 있는 설정
 
-```tsx
-<AgentProvider config={{
-  apiUrl: 'https://moss-api.viamoss.ai',
-  applicationId: 'YOUR_APP_ID',
-  userId: currentUser.id,
-  getJwt: () => fetchMossToken(),
-  debugMode: true,
-}}>
-  <AssistantButton />
-</AgentProvider>
-```
-
-**기본값:** `false`
-
-문제 해결을 위한 자세한 로깅 및 디버그 기능을 활성화합니다.
-
-### DOM 대상 셀렉터
-
-```tsx
-<AgentProvider config={{
-  apiUrl: 'https://moss-api.viamoss.ai',
-  applicationId: 'YOUR_APP_ID',
-  userId: currentUser.id,
-  getJwt: () => fetchMossToken(),
-  observeTargetSelector: '#main-content',
-}}>
-  <AssistantButton />
-</AgentProvider>
-```
-
-**기본값:** `'body'`
-
-관찰할 DOM 요소의 CSS 셀렉터입니다. 페이지의 특정 부분으로 관찰을 제한하려면 이를 변경하세요.
-
-### DOM 안정성
-
-SDK가 페이지가 안정화되기를 기다리는 방식을 구성합니다:
-
-```tsx
-<AgentProvider config={{
-  apiUrl: 'https://moss-api.viamoss.ai',
-  applicationId: 'YOUR_APP_ID',
-  userId: currentUser.id,
-  getJwt: () => fetchMossToken(),
-  stability: {
-    maxTotalWaitMs: 15000,
-    layers: {
-      networkIdle: true,
-      domMutations: true,
-      loadingIndicators: false,
-      frameReadiness: true,
-      resourceQuiet: true,
-      layoutShift: false,
-      browserIdle: true,
-      finalFrame: true,
-    },
-    domMutations: {
-      quietPeriodMs: 1000,
-    },
-  },
-}}>
-  <AssistantButton />
-</AgentProvider>
-```
-
-<Tip>
-    자세한 레이어별 문서는 [SDK 고급 설정](/ko/sdk/advanced#stability-tuning)
-    가이드를 참조하세요.
-</Tip>
-
----
-
-## 전체 TypeScript 인터페이스
-
-SDK 설정을 위한 전체 TypeScript 인터페이스입니다:
-
-```typescript
-interface MossConfig {
-  // 필수
-  apiUrl: string;
-  applicationId: string;
-  userId: string;
-  getJwt: () => Promise<string>;
-
-  // 애플리케이션 기능
-  useVision?: boolean;
-  language?: 'en' | 'ko';
-  appearance?: AppearanceInput;  // 'blue' | 'purple' | 커스텀 객체
-
-  // 녹화 및 히스토리
-  enableSessionRecording?: boolean;
-  enableScreenHistoryRecording?: boolean;
-
-  // 세션 관리
-  sessionConfig?: {
-    inactivityTimeout?: number;
-    maxSessionAge?: number;
-    showNotification?: boolean;
-  };
-
-  // 기술 설정
-  logLevel?: LogLevel;  // 열거형: DEBUG, INFO, WARN, ERROR, SILENT
-  debugMode?: boolean;
-  screenshotMode?: 'fullpage' | 'viewport';
-  observeTargetSelector?: string;
-
-  // DOM 안정성
-  stability?: {
-    maxTotalWaitMs?: number;
-    layers?: {
-      networkIdle?: boolean;
-      domMutations?: boolean;
-      loadingIndicators?: boolean;
-      frameReadiness?: boolean;
-      resourceQuiet?: boolean;
-      layoutShift?: boolean;
-      browserIdle?: boolean;
-      finalFrame?: boolean;
-    };
-    domMutations?: {
-      quietPeriodMs?: number;
-    };
-  };
-}
-```
-
----
-
-## SDK에서 사용할 수 없는 설정
-
-다음 설정은 대시보드를 통해서만 구성할 수 있습니다:
-
-- **AI 어시스턴트 지침** - AI를 위한 사용자 정의 지침
-- **API 키** - 인증 자격 증명
-- **도메인 접근 제어** - 허용 도메인 목록
-- **벡터 저장소 설정** - RAG 시스템 설정
-
-<Warning>
-    이러한 설정은 보안상의 이유로 대시보드 전용입니다. 애플리케이션 전체
-    동작 및 인증에 영향을 미칩니다.
-</Warning>
-
----
+AI 어시스턴트 프롬프트, 모델, 화면 가이드, 허용 도메인, 지식 베이스, 프로시저, 연동, 데이터 보존에는 SDK 옵션이 없습니다. [대시보드에만 있는 설정](/ko/configurations/overview#대시보드에만-있는-설정)을 참고하세요.
 
 ## 다음 단계
 
 <CardGroup cols={2}>
     <Card
+        title="설정 레퍼런스"
+        icon="gear"
+        href="/ko/sdk/configuration"
+    >
+        모든 옵션과 각 옵션의 타입, 기본값
+    </Card>
+    <Card
         title="예시"
         icon="lightbulb"
         href="/ko/configurations/examples"
     >
-        다양한 사용 사례에 대한 전체 설정 예시 보기
-    </Card>
-    <Card
-        title="대시보드 설정"
-        icon="browser"
-        href="/ko/configurations/dashboard-settings"
-    >
-        대시보드에서 애플리케이션 기본값 구성
+        자주 쓰는 경우의 전체 설정
     </Card>
 </CardGroup>

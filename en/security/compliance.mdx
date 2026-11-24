@@ -22,36 +22,50 @@ requests to the relevant customer.
 
 Authorized customer operators can fulfill data access requests using:
 
-- Export chat history via Dashboard
-- Download session recordings
+- Export chat history via Dashboard (see [Session Data Export](/en/dashboard/session-data-export))
+- Replay session recordings in the dashboard's session view; the dashboard has no control to download them
 - Access audit logs for their activity
 
 #### Right to Erasure (Article 17)
 
-Moss supports deletion of user-linked data:
+Moss supports deletion of user-linked data. From 0.17.0, an admin deletes one user's data in the dashboard under **Configure > Data & privacy > Delete a user's data**, or from the user's page; the API remains available. The steps, statuses and certificate are described in [Data & privacy](/en/dashboard/data-privacy#delete-a-users-data).
 
-**What Gets Deleted:**
+**What Gets Deleted** (in the one application):
 
-- Chat sessions and messages
-- AI-generated instructions and plans
-- Screenshots and recordings in configured storage
-- User records
-- Associated request logs
+- The user's profile
+- Every conversation, with its messages, guided plans, screenshots, recordings, page snapshots and attachments
+- Evaluation scores, insights, monitor results and help-desk handoff records from those conversations
+- API logs and guide events with the user's ID
+- Audit records about the user, including your team's reviews and reads of their conversations, except those an audit minimum keeps (below)
+
+If your Moss administrator sets an audit minimum (none by default), audit records about the user that hold no content, such as your team's evaluations of their conversations, deletions of their metadata and AI-assistant tool calls, are kept when they are younger than the minimum. They stay until the normal audit period removes them, and the certificate's JSON lists them as retained.
+
+Suggestions that cited the user's conversations are kept, but lose their links to them and the text written from them.
+
+**What Isn't Deleted:**
+
+- Backups and earlier file versions, until they expire
+- Copies outside Moss, such as help-desk tickets already sent and the user's browser
+- Other audit records of admin actions
+- The request itself, kept as proof of the deletion
 
 **Deletion Process:**
 
-1. Submit a deletion request via API or contact Moss
-2. Moss validates the request
-3. User records and linked application data are deleted
-4. Deletion results are returned for review
+1. An admin finds the user by ID, reviews what will be deleted and confirms by typing the ID. With the API: `POST /api/v1/applications/{application_id}/deletion-requests`, signed in as an admin.
+2. Moss records the request and runs it. A legal hold on the application refuses the request (`423` in the API), and nothing is recorded.
+3. The request's status shows where it stands: **In progress**, **Queued** for the next scheduled deletion run, **Done**, **No data found**, or **Failed** with **Retry**.
+4. When it is **Done**, its certificate shows what was deleted and what was verified. The certificate is also available as JSON.
 
-The response covers the selected current application/user records and files in
-configured session storage. Backups and external processor copies are handled
+The request covers the application's current records for the user and the files
+in its configured storage. Backups and external processor copies are handled
 through separate deletion procedures. A failed storage sweep leaves the request
-incomplete and preserves references for retry.
+incomplete and keeps the record of what was already deleted, so **Retry** can
+finish it.
 
-Where queued deletion is enabled, the API first returns a durable request ID and
-status. Poll that request for completion; acceptance is not proof of deletion.
+A recorded request is not proof of deletion: follow its status until it is
+**Done**, then use its certificate. On a self-hosted install, a request can wait
+for the retention CronJob, which your operator must set up even if Automatic
+deletion stays off.
 Customer-managed infrastructure and copies held by Moss have separate operating
 responsibilities. Contractual return, deletion and certification deadlines apply
 independently of routine retention periods.
@@ -60,9 +74,8 @@ independently of routine retention periods.
 
 Export user data in standard formats:
 
-- Chat history (JSON)
-- Session metadata (JSON)
-- Audit logs (CSV)
+- Sessions and their messages (CSV or JSON), from session export
+- Audit logs (JSON or CSV)
 
 ### Lawful Basis
 
@@ -70,9 +83,14 @@ The controller determines the lawful basis for processing:
 
 | Basis                   | Implementation                                    |
 | ----------------------- | ------------------------------------------------- |
-| **Consent**             | SDK can prompt for user consent before activation |
+| **Consent**             | The SDK has no consent prompt of its own. Load it only after your own consent step (see below) |
 | **Legitimate Interest** | Purposes justified by the controller              |
 | **Contract**            | Providing the AI assistant service                |
+
+To hold Moss back until a user consents:
+
+- **CDN script:** set `collectionEnabled: false` in `window.mossSettings` before the script loads. Moss then doesn't start. After consent, call `window.MossSDK.boot({ collectionEnabled: true })`.
+- **npm package:** don't render `AgentProvider` until the user consents, or pass `collectionEnabled: false` in its config, which renders nothing.
 
 ### Data Processing Agreement
 
@@ -161,13 +179,14 @@ Restrict where your SDK can operate:
 
 ### Purpose
 
-- Prevent unauthorized use of your application ID
+- Stop other websites from loading Moss with your application ID
 - Control which environments can access Moss
-- Reduce risk of API key exposure
+
+The list is not authentication. It relies on the `Origin` and `Referer` headers that browsers send, so it doesn't stop a client outside a browser. Every SDK request must carry a valid signed token; see [Authentication](/en/security/authentication).
 
 ### Configuration
 
-Add allowed domains in Dashboard under **Settings \> Security**:
+Add allowed domains in the dashboard under **Configure > Security > Domain Access Control**:
 
 ```
 app.example.com
@@ -175,9 +194,11 @@ staging.example.com
 localhost:3000
 ```
 
+An entry matches that exact host; `*.example.com` matches every subdomain of `example.com`, but not `example.com` itself.
+
 ### Enforcement
 
-When an allowlist is configured, requests from unlisted domains are rejected during SDK initialization.
+When the list has entries, Moss checks the page's address on the SDK's configuration load and on every SDK request. A page that isn't listed gets `403` with code `DOMAIN_NOT_ALLOWED`. An empty list allows every page, unless the operator of the install requires allowed domains. The full matching rules are in [SDK authentication](/en/sdk/authentication#allowed-domains).
 
 ---
 
@@ -203,5 +224,11 @@ When an allowlist is configured, requests from unlisted domains are rejected dur
   </Card>
   <Card title="Audit Logging" icon="clipboard-list" href="/en/security/audit-logging">
     Detailed audit trail documentation
+  </Card>
+  <Card title="Data & privacy" icon="user-shield" href="/en/dashboard/data-privacy">
+    Retention periods and deleting a user's data
+  </Card>
+  <Card title="Data Protection" icon="lock" href="/en/security/data-protection">
+    What Moss collects, where it goes, and how to mask it
   </Card>
 </CardGroup>

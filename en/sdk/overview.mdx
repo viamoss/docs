@@ -1,92 +1,105 @@
 ---
 title: "SDK Overview"
-description: "How the Moss SDK works and what it provides"
+description: "How the Moss SDK works, how to install it, and what it reads and changes on your page"
 icon: "cube"
 ---
 
 # SDK Overview
 
-The Moss SDK embeds an AI-powered assistant into your web application. It captures page context, communicates with the Moss backend, and renders an interactive assistant UI — all without affecting your existing styles or layout.
+The Moss SDK embeds the Moss assistant in your web app. It reads the page the user is on, sends their questions with that context to your Moss backend, and shows the answers in a chat panel. When an answer is a set of steps, it can highlight the elements to click, one step at a time.
 
 ## How It Works
 
-When a user asks a question, the SDK:
+When a user asks a question or takes a guide step, the SDK:
 
-1. **Captures page context** — DOM structure, visible text, and an optional screenshot
-2. **Sends it to the Moss backend** — along with the user's message and conversation history
-3. **Receives AI-generated guidance** — which may include text responses or step-by-step instructions
-4. **Renders the response** — in a chat modal with optional element highlighting and coach marks
+1. **Waits for the page to settle**, so it doesn't read a half-rendered screen. See [Stability Tuning](/en/sdk/advanced#stability-tuning).
+2. **Reads the page:** its visible structure and text, with sensitive parts redacted. If vision is on and the user allows screen capture, it also takes a screenshot of what the user shares (normally this tab), which is not redacted. See [Page data and privacy controls](/en/sdk/page-data).
+3. **Sends the question and the page to your Moss backend**, which answers from your knowledge base and the conversation so far.
+4. **Shows the answer** in the chat panel, and highlights elements on the page when the answer is a guide.
 
-The entire UI renders inside a [Shadow DOM](https://developer.mozilla.org/en-US/docs/Web/API/Web_components/Using_shadow_DOM), so Moss styles never conflict with your application's CSS.
+The chat panel and guide UI render inside a [shadow DOM](https://developer.mozilla.org/en-US/docs/Web/API/Web_components/Using_shadow_DOM), so your style rules don't reach them. Components you render inside `AgentProvider`, such as `AssistantButton`, render in your page as ordinary elements. See [Shadow DOM](/en/sdk/advanced#shadow-dom).
 
 ## Integration Methods
 
-The SDK supports two integration methods:
-
-| Method | Best For | Install |
+| Method | Best for | Install |
 |--------|----------|---------|
-| **NPM Package** | React applications | `npm install @viamoss/moss-sdk` |
-| **CDN Script Tag** | Any web application | `<script src="...">` |
+| **npm package** | React apps | `npm install @viamoss/moss-sdk` |
+| **CDN script tag** | Any web page | `<script src="…">` |
 
-Both methods provide the same assistant UI and functionality. Choose based on your tech stack.
+Both show the same chat panel and guides. They differ in what you control:
 
-## What Gets Captured
+| | npm package | CDN script |
+|---|---|---|
+| Settings | Your `config` prop | The dashboard's, with `window.mossSettings` on top |
+| Launcher | `AssistantButton`, `FloatingActionBar`, your own button, or none | `AssistantButton`, always |
+| Programmatic control | `useAgent()` hook, `askMoss()`, `shouldStartMoss()` | `window.MossSDK.boot()`, `identify()`, `updateConfig()`, `shutdown()` |
+| Native dialog support | `installModalDialogEscape()` | Not available |
 
-When the assistant needs context about the current page, the SDK captures:
+Both work with `data-moss-trigger` elements. See [Installation](/en/sdk/installation).
 
-- **Interactive elements** (buttons, links, form fields) with their visible text labels and states
-- **A screenshot** of the page (configurable: full page or viewport only)
-- **Page URL and metadata**
+## What Gets Read and Sent
 
-### What Is Not Captured
+With each question and guide step, the SDK sends your backend:
 
-The SDK does **not** access or transmit:
+- **Page text:** the visible elements' structure, labels and text, with redaction applied.
+- **The page URL**, including its query string.
+- **A screenshot of what the user shares**, normally this tab, only if vision is on and the user allows the browser's screen-capture prompt. It is not redacted.
+- **A short timeline of recent user actions**, only if you turn on screen history.
 
-- **Cookies** — the SDK never reads `document.cookie`
-- **localStorage or sessionStorage** — only its own `moss`-prefixed keys are used; your application's storage is not read
-- **Password field values** — `<input type="password">` values are excluded
-- **Hidden elements** — elements with `display: none`, `visibility: hidden`, or the `inert` attribute are filtered out
-- **Non-interactive content** — general page text (paragraphs, headings, divs) is not included in the structured context sent to the backend
-- **Closed Shadow DOM content** — elements inside closed shadow roots are inaccessible to the SDK
-- **Cross-origin iframe content** — iframes from different origins are opaque per browser same-origin policy
+Session recording for replay in the dashboard is a separate feature, off by default. What the user types is sent as written.
+
+[Page data and privacy controls](/en/sdk/page-data) describes each of these exactly, with every control: `data-moss-redact`, `redactAllInputs`, `redactionSelectors`, `pageContext` and the collection switches.
+
+### What Page Text Leaves Out
+
+- **Hidden elements**: `display: none`, `visibility: hidden`, `opacity: 0`, and anything inside an `inert` subtree. One exception: the text a visible element's `aria-describedby` points to is read even when it is hidden.
+- **Values of native form fields** (`input`, `textarea`, `select` and editable regions), while `redactAllInputs` is on (the default). A custom control built from other elements, such as a dropdown made of `div`s, is read as ordinary text; mark it with `data-moss-redact`.
+- **Closed shadow roots and cross-origin iframes**, which the browser keeps from the SDK.
+
+These limits are for page text. Session recordings and screen history, if you turn them on, also capture hidden elements, except those you block or redact. A vision screenshot shows whatever the shared screen shows. See [Page data](/en/sdk/page-data).
+
+**Your cookies and storage** are not read. The SDK keeps its own state under keys that start with `moss`. To choose its interface language it also checks the `lng` query parameter, an `i18next` cookie and an `i18nextLng` `sessionStorage` entry.
 
 <Info>
-    All data is sent over HTTPS REST endpoints to your configured Moss backend. No WebSocket connections are used.
+    All requests go over HTTPS to the `apiUrl` you configure. From 0.17.0, with `streamActivity` on, turns are answered as Server-Sent Events from the same backend; proxies in between must pass them. Vision screenshots, and from 0.17.0 attachments, upload directly to your Moss deployment's file storage through signed URLs. The SDK uses no WebSockets.
 </Info>
 
 ### What Is Stored in the Browser
 
-The SDK keeps a small amount of its own state in browser storage so a conversation survives navigation and reloads. Everything it writes lives under `moss`-prefixed keys:
+The SDK keeps a small amount of its own state in browser storage so a conversation survives navigation and reloads:
 
 | Storage | What it holds | Lifetime |
 |---------|---------------|----------|
-| `sessionStorage` | Chat history for the current tab, chat open/closed and modal position state | Cleared when the tab closes |
-| `localStorage` | Session-continuity state (active session ID, session metadata and recent session list, pending guide-resume markers) and completion markers for onboarding flows | Persists until cleared |
+| `sessionStorage` | This tab's chat messages, whether the chat is open, the panel's position and size, a running guide, a question waiting from `askMoss()` | Until the tab closes |
+| `localStorage` | The current session's ID and timing, recent session IDs, guides finished on this device, the interface language, and a guide step on its way to the next page | Until cleared |
 
-Captured page context and screenshots are never written to browser storage — they are sent to the backend and held only in memory on the client.
+Page text and screenshots are not written to browser storage. With `stability.afterReload` on, a guide step's report, including the clicked element's redacted markup, is kept in `localStorage` for up to `pendingTTL` (30 seconds by default) so the next page can send it. The CDN script also stores the user's ID as `moss_user_id`.
 
-## Element Highlighting and Coach Marks
+## What Moss Changes on Your Page
 
-When the AI provides step-by-step guidance, the SDK can visually highlight elements on the host page to show users exactly where to click or interact.
+- **A host element.** The npm package renders a fixed-position `<div>` where `AgentProvider` sits; the CDN script appends `<div id="moss-sdk-root">` to `<body>`.
+- **Its own attributes on interactive elements.** Each time it reads the page, the SDK marks the buttons, links and fields it found with `data-` attributes of its own, so it can refer to them. Treat them as internal: they change on every read.
+- **Highlights during a guide.** The highlighted element gets an attribute that a `<style>` element the SDK adds to your `<head>` (and to the shadow root or same-origin frame that holds the element) outlines, and numbered badges are positioned over the page. The attribute and badges are removed when the step ends.
+- **`data-moss-trigger` elements.** A click on one opens or closes the chat and calls `preventDefault()`, so a link with the attribute doesn't navigate. From 0.17.0, if your application shows support conversations in the Moss panel, unread replies add a count badge inside each trigger and a `data-moss-unread` attribute to it; see [Custom Triggers](/en/sdk/installation#custom-triggers).
+- **`fetch` and `XMLHttpRequest`.** To tell when your page's requests have finished, the SDK wraps `window.fetch` and `XMLHttpRequest`'s `open` and `send` in your page, from when the provider mounts, and in same-origin frames. Requests pass through unchanged.
+- **A web font link**, if your appearance sets `typography.fontFaceUrl`.
+- **`window.name`.** When the chat opens in a window your page hasn't named, the SDK names it (`moss-tab-…`) to tell tabs apart. A name your page set is left as it is.
 
-**How it works:**
-
-- The SDK applies a CSS class directly to target elements in the host DOM, adding a pulsing outline to draw attention
-- When multiple elements are highlighted, numbered badges (1, 2, 3...) appear next to each element, matching the numbered steps in the assistant's instructions
-- Badges are positioned using fixed viewport coordinates and automatically reposition on scroll or resize
-- Highlights are cleared when the user moves to the next step or dismisses the assistant
-
-**Coach marks** are small contextual tooltips that appear near UI elements to provide additional guidance. They auto-dismiss on external click and are session-scoped (shown once per session).
-
-Highlighting does not modify the host DOM structure — it only adds and removes CSS classes and lightweight badge elements.
+`pageSanitizationScript`, if you set it, also changes your page; see [Advanced](/en/sdk/advanced#programmatic-page-changes).
 
 ## Next Steps
 
 <CardGroup cols={2}>
     <Card title="Installation" icon="download" href="/en/sdk/installation">
-        Install the SDK via NPM or CDN
+        Install the SDK with npm or a script tag
     </Card>
     <Card title="Authentication" icon="lock" href="/en/sdk/authentication">
         Set up JWT authentication
+    </Card>
+    <Card title="Page data and privacy" icon="shield-halved" href="/en/sdk/page-data">
+        What Moss reads and how to limit it
+    </Card>
+    <Card title="Configuration" icon="gear" href="/en/sdk/configuration">
+        Every SDK option
     </Card>
 </CardGroup>

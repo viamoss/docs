@@ -1,0 +1,286 @@
+---
+title: "Models and response time"
+description: "Which model providers a self-hosted install can use, how to keep model traffic in a region, and the settings that decide how long an answer takes"
+icon: "gauge"
+---
+
+This page is for operators of a self-hosted install. It covers which models Moss
+can run on, where model requests go, and what decides how long a chat answer
+takes.
+
+Most of the time a chat answer takes is the model reasoning before it answers.
+The setting with the largest effect is `LLM_THINKING`.
+
+## Recommended settings
+
+Set these on both `sdk-backend` and `dashboard-backend`:
+
+| Setting | Recommended value | Why |
+|---|---|---|
+| `LLM_THINKING` | `low` | A higher level lets the model reason longer on every call, so each answer takes longer. Set it explicitly so the level doesn't change when you change the model or upgrade. |
+| `LLM_MODEL_NAME` | A model from the [tuned families](#supported-providers) | Moss's prompts and request settings are tuned for those families. |
+| `LLM_TOTAL_TIMEOUT_SECONDS` | Leave at the default, `240` | A turn that runs past it ends with "that took too long to answer". |
+
+Then make sure every proxy in front of `sdk-backend` waits longer than the turn
+budget. See [What the browser needs](/en/self-hosting/network#what-the-browser-needs).
+
+<Warning>
+  In the Helm chart, each workload's `env` is a list, and a list in your values
+  file replaces the chart's whole list. When you add `LLM_THINKING` to
+  `sdk-backend.env` or `dashboard-backend.env`, repeat the chart's default
+  entries for that workload too. The chart README's Environment Variables
+  section shows how.
+</Warning>
+
+## Supported providers
+
+`LLM_CLIENT_TYPE` picks one provider for the whole install, and
+`LLM_MODEL_NAME` the model. Both backends refuse to start without
+`LLM_MODEL_NAME`; the chart sets it to `gemini-3-flash-preview`.
+
+| `LLM_CLIENT_TYPE` | Provider | Sign-in | Notes |
+|---|---|---|---|
+| `google` (default) | Gemini Developer API | `LLM_API_KEY` | `GOOGLE_AUTH_MODE=api_key`, the default. |
+| `google` | Gemini on Vertex AI | Your workloads' Google Cloud identity; no key | Set `GOOGLE_AUTH_MODE=vertex`, `GOOGLE_CLOUD_PROJECT` and `GOOGLE_CLOUD_LOCATION`. See [Keeping model traffic in a region](#keeping-model-traffic-in-a-region). |
+| `openai` | OpenAI's API | `LLM_API_KEY` | `LLM_API_BASE` can point at another OpenAI-compatible endpoint. From 0.17.0, `LLM_THINKING` is sent to OpenAI's own API only; 0.16.x ignored it on OpenAI. |
+| `azure_openai` | A deployment on your Azure OpenAI resource | `LLM_API_KEY`, or Microsoft Entra ID through Azure workload identity | From 0.17.0. See [Using your own Azure OpenAI deployment](#using-your-own-azure-openai-deployment). |
+
+Prompt sections and request settings follow the model's family. The families
+Moss is tuned for include:
+
+- **Gemini:** `gemini-3-flash`, `gemini-3-pro`, `gemini-3.1-pro`,
+  `gemini-3.1-flash-lite-image`, `gemini-3.5-flash`, `gemini-3.5-flash-lite`,
+  `gemini-3.6-flash`, `gemini-3.7-flash`, `gemini-3.8-flash` and
+  `gemini-4-hydrogen`.
+- **OpenAI and Azure OpenAI:** `gpt-6.1-terra`.
+
+There is no automatic failover to a second provider. A call the provider turns
+away with a rate limit or a server error is retried on the same provider, and
+then the turn fails.
+
+From 0.17.0, `LLM_CLIENT_TYPE=openrouter` stops the backends at startup. If
+it's in the `moss-backend` Secret, it also stops the migrate Job, so
+`helm upgrade` fails at its pre-upgrade step before any pod changes. Change it
+before you upgrade.
+
+### What the model settings cover
+
+Moss uses three kinds of model. Only the first follows `LLM_*`:
+
+| Model | Used for | Settings |
+|---|---|---|
+| Chat model | Chat answers, and the dashboard's AI features: Copilot, conversation insights, monitors, procedure authoring, self-healing and session evaluations | `LLM_CLIENT_TYPE`, `LLM_MODEL_NAME`, `LLM_THINKING` and the provider's sign-in, on both backends |
+| Embedding model | Searching the knowledge base, and indexing it | Chosen per application when the application is created, and can't be changed afterwards: Voyage `voyage-3.5` (needs `VOYAGE_API_KEY`), Google `gemini-embedding-2` (`GEMINI_API_KEY`, or none on Vertex AI) or OpenAI `text-embedding-3-small` (`OPENAI_API_KEY`) |
+| Image annotator | Describing the images in knowledge-base pages, on the worker | `ANNOTATOR_LLM_PROVIDER` (`google`, the default, or `openai`), `ANNOTATOR_LLM_MODEL` (default `gemini-3.8-flash`) and `ANNOTATOR_LLM_API_KEY` (leave it out on Vertex AI) |
+
+On a Vertex AI install, the **Embedding model** field in **Create New
+Application** preselects **Google Gemini Embedding 2** when the dashboard also
+has `GOOGLE_AUTH_MODE=vertex`. Elsewhere it preselects **Voyage 3.5**.
+
+## Keeping model traffic in a region
+
+On Vertex AI, `GOOGLE_CLOUD_LOCATION` decides which Google endpoint Moss sends
+model requests to. Set the same value on `sdk-backend`, `dashboard-backend` and
+the worker.
+
+| `GOOGLE_CLOUD_LOCATION` | Chat model and image annotator | `gemini-embedding-2` |
+|---|---|---|
+| `eu` or `us` (multi-region) | `aiplatform.eu.rep.googleapis.com` or `aiplatform.us.rep.googleapis.com` | The same host |
+| A region, such as `europe-west4` | That region's endpoint, such as `europe-west4-aiplatform.googleapis.com` | The global endpoint, `aiplatform.googleapis.com`: the model isn't offered in single regions |
+| `global` | `aiplatform.googleapis.com` | `aiplatform.googleapis.com` |
+
+To keep every model request on one multi-region endpoint:
+
+1. Set `GOOGLE_AUTH_MODE=vertex`, `GOOGLE_CLOUD_PROJECT` and
+   `GOOGLE_CLOUD_LOCATION=eu` (or `us`) on both backends and the worker, and
+   `GOOGLE_AUTH_MODE=vertex` on the dashboard. Give the three backend-image
+   workloads a Google Cloud identity with Vertex AI access; the chart README's
+   "Gemini via Vertex AI (IAM)" section covers GKE Workload Identity, Workload
+   Identity Federation and key files.
+2. Set `LLM_MODEL_NAME` on both backends to a model Google serves at that
+   location. The chart's default, `gemini-3-flash-preview`, isn't served on
+   `eu` or `us`; `gemini-3.8-flash` is one that is.
+3. Create every application with Google Gemini Embedding 2. An application on
+   Voyage or OpenAI embeddings sends its questions and knowledge content to
+   that provider, and its embedding model can't be changed later.
+4. Keep `ANNOTATOR_LLM_PROVIDER` at `google`, and check that
+   `ANNOTATOR_LLM_MODEL` is served at your location.
+5. Leave `LLM_API_KEY` unset. Vertex AI needs no key.
+6. If you set `LLM_PROFILES`, list only Vertex AI profiles at the same
+   location, or limit other profiles with `allowedApplications`. An application
+   on another profile sends its chats and its dashboard AI features to that
+   profile's endpoint.
+7. Add knowledge as Markdown uploads, or from Document360 or, from 0.17.0,
+   Intercom. Website sources are fetched through Firecrawl, a hosted service
+   outside your install (see
+   [Network](/en/self-hosting/network#knowledge-source-fetching)).
+
+<Note>
+  From 0.17.0, on an install with `GOOGLE_AUTH_MODE=vertex`, Copilot,
+  conversation insights, monitors, procedure authoring, self-healing and
+  session evaluations call Vertex AI at `GOOGLE_CLOUD_LOCATION`. On 0.16.x they
+  called the Gemini Developer API with `LLM_API_KEY`, or failed when it was
+  unset. If you set `INSIGHT_SWEEP_ENABLED=false` on `dashboard-backend`
+  because of this, you can turn it back on. With the default
+  `GOOGLE_AUTH_MODE=api_key`, nothing changes.
+</Note>
+
+These settings choose the endpoint Moss sends model requests to. What the
+provider does with a request at that endpoint is set by your agreement with
+that provider.
+
+## Using your own Azure OpenAI deployment
+
+From 0.17.0, Moss can answer on a deployment in your own Azure OpenAI
+resource. Set these on both backends:
+
+| Setting | Value |
+|---|---|
+| `LLM_CLIENT_TYPE` | `azure_openai` |
+| `LLM_API_BASE` | The resource's v1 endpoint, `https://<resource>.openai.azure.com/openai/v1/` |
+| `LLM_MODEL_NAME` | The deployment's name |
+| `LLM_API_KEY` | The resource's key. Leave it unset with workload identity. |
+| `LLM_THINKING` | Required for a reasoning model such as `gpt-6.1-terra`. The backends refuse to start without it when the deployment's name is a `gpt-6.1-terra` model name. They can't tell from any other name, so set it yourself for a deployment named otherwise. |
+| `LLM_LABEL` | Optional. The name admins see for the model in the dashboard. Without it, an Azure model shows as "Default model". |
+
+- **Other Azure hosts.** The endpoint can also be on
+  `<resource>.openai.azure.us` or `<resource>.services.ai.azure.com`. Any other
+  host, such as an Azure API Management gateway, must be listed in
+  `LLM_AZURE_OPENAI_GATEWAY_HOSTS` (host names or IP addresses,
+  comma-separated) on both backends, or they refuse to start. With
+  `LLM_THINKING` set, requests use the Responses API, so a gateway must pass
+  it through.
+- **Without a key.** For a resource with key sign-in turned off, set
+  `LLM_AZURE_OPENAI_AUTH=workload_identity`. The backends then sign in with a
+  Microsoft Entra ID token from the pod's Azure workload identity. The identity
+  needs the `Cognitive Services OpenAI User` role on the resource, and both
+  backends need to reach `login.microsoftonline.com`. This works only on
+  `<resource>.openai.azure.com` or a listed gateway. The chart README's "Azure
+  OpenAI with workload identity" section has the setup for AKS and other
+  clusters.
+- **What stays elsewhere.** Embeddings and image annotation don't run on Azure
+  OpenAI. They go to the providers in
+  [What the model settings cover](#what-the-model-settings-cover).
+
+<Warning>
+  0.16.25 doesn't know `azure_openai`. Before rolling an install on Azure
+  OpenAI back to 0.16.25, set the model settings back to a provider 0.16.25
+  supports, or its backends and migrations stop at startup.
+</Warning>
+
+### A different model per application
+
+From 0.17.0, `LLM_PROFILES` can offer further models, and an application's
+admin can choose one of them in the **Model** card on
+**Configure > Behavior**. Everything else answers on the `LLM_*` model, which
+also answers for a chosen model that
+fails, unless that profile is marked `noFallback`. Embeddings and image
+annotation don't follow the choice, so a profile doesn't keep all of an
+application's data with one provider. The chart README's "Model profiles"
+section has every field and the fallback rules.
+
+## Settings that affect response time
+
+| Setting | Default | What it changes | Trade-off |
+|---|---|---|---|
+| `LLM_THINKING` | Unset | How long the model may reason on each call: `minimal`, `low`, `medium` or `high` | A higher level takes longer on every model call of every turn. |
+| `LLM_MODEL_NAME` | `gemini-3-flash-preview` in the chart | The chat model | A lighter model answers faster. Test it on your own users' questions before you switch. |
+| `LLM_TOTAL_TIMEOUT_SECONDS` | `240` from 0.17.0; `120` before | Seconds one turn may take, model calls and tool calls together | A longer budget turns fewer slow turns into "took too long", and users wait longer for them. Give both backends the same value, and raise proxy timeouts to match. |
+| `LLM_REQUEST_TIMEOUT_SECONDS` | `45` | Seconds the first attempt of each Gemini request in a chat turn may take. A request that times out is retried once, with what is left of the turn budget. | Lower finds a hung request sooner. Too low retries requests that were only slow. |
+
+### What `LLM_THINKING` does
+
+| Provider | Unset | Set |
+|---|---|---|
+| Gemini, in the other families listed above | From 0.17.0, the lowest level that model supports (`minimal` on some models, `low` on others). On 0.16.x, Google's own default level. | The level you set. A level the model doesn't support moves to the nearest one it does, with a warning in the log. |
+| Gemini 4 Hydrogen, or a Gemini model outside the families Moss is tuned for | No level is sent, and Google's default applies. | The level you set. |
+| OpenAI's own API, or Azure OpenAI | No reasoning effort is sent. With a `gpt-6.1-terra` model, the backends refuse to start. | From 0.17.0, sent as the reasoning effort (`minimal` is sent as `none`). On 0.16.x, `LLM_THINKING` was ignored on OpenAI. |
+| Another OpenAI-compatible endpoint | Nothing is sent. | Nothing is sent, and the backend logs a warning. |
+
+Only `minimal`, `low`, `medium` and `high` are accepted. From 0.17.0 any other
+value, such as a number, stops the backends at startup. If that value is in the
+`moss-backend` Secret, it also stops the migrate Job, so `helm upgrade` fails
+at its pre-upgrade step before any pod changes. Fix it before you upgrade.
+
+Set the same value on `dashboard-backend`. On OpenAI and Azure OpenAI, the
+dashboard's AI features send the same reasoning effort as chat. On Gemini,
+Copilot, conversation insights, monitors and procedure authoring send no
+thinking level, so Google's default for the model applies to them.
+
+## Where the time goes
+
+1. **Turn on tracing.** Set `OTEL_EXPORTER_OTLP_ENDPOINT` on `sdk-backend`.
+   [Operations](/en/self-hosting/operations#tracing-a-slow-or-failed-request)
+   lists the spans and log fields.
+2. **Compare the spans of a slow turn.** Under the `POST /api/v1/query`
+   request span, `llm.invoke` holds the model calls, and in a turn that calls
+   tools, the tool calls between them. `rag.search` is the knowledge-base
+   search, and `session.hydrate` loading the session.
+3. **Count the model rounds.** In a turn that can call tools, `sdk-backend`
+   writes a `tool_loop_round` log line for each model call, with
+   `model_latency_ms`, the token `usage` and the `tool_calls` the model asked
+   for. A turn that calls tools makes one model call per round, so each tool
+   round adds a full model wait.
+
+If most of the time is model time (the sum of `model_latency_ms`), lower
+`LLM_THINKING` or try a lighter model. If a procedure makes many rounds, ask
+for fewer lookups in its instructions. If the time is in the tools, look at the
+API or MCP server they call.
+
+The step loader can show users each step while Moss works. It doesn't make
+answers faster. It needs `streamActivity: true` and
+`appearance.chrome.loader: 'steps'` in the SDK, and a network path that passes
+Server-Sent Events: see
+[What the browser needs](/en/self-hosting/network#what-the-browser-needs).
+
+## "Took too long" and "high traffic" replies
+
+| The chat says | What happened | What to do |
+|---|---|---|
+| "I'm sorry, that took too long to answer. Please try again." | The turn used up `LLM_TOTAL_TIMEOUT_SECONDS`, or a model request timed out and its one retry didn't succeed. | Find the slow part with the steps above. Lower `LLM_THINKING`, or shorten what the turn does. |
+| "I'm sorry, the service is currently experiencing high traffic. Please try again in a few moments." | Every attempt was turned away with a rate limit (429) or a server error (5xx), or Moss couldn't connect to the provider at all. It's about the provider or the network path to it, not your users' traffic. It also appears when an application's chosen model is marked `noFallback` and can't answer. | Check the provider's quota and status, and that the backends can reach its host (see [Network](/en/self-hosting/network#model-and-embedding-providers)). |
+| "Too many requests. Try again shortly." | A question or guided step went over Moss's own per-user limits on the SDK routes (`SDK_RATE_LIMITS_ENABLED`, on by default from 0.17.0). | See [SDK request limits](/en/self-hosting/overview#sdk-request-limits). |
+| "A safety filter blocked this request, so I can't answer it. …" | A filter in your model provider, such as Model Armor, blocked the request or its reply. | See [Running a cloud safety filter alongside Moss](/en/self-hosting/operations#running-a-cloud-safety-filter-alongside-moss). |
+
+Before 0.16.23, a timed-out request also got the "high traffic" reply.
+
+If a proxy in front of `sdk-backend` closes the request before the turn budget
+ends, the user gets an error instead of either reply. Give every proxy on the
+path a read timeout longer than `LLM_TOTAL_TIMEOUT_SECONDS`.
+
+## Common questions
+
+**Why are answers slow, and what can we change?**
+Most of the wait is the model reasoning. Set `LLM_THINKING=low` on both
+backends, then measure with the [tracing steps](#where-the-time-goes) before
+changing anything else.
+
+**Answers got faster, or different, after upgrading to 0.17.0. Why?**
+With `LLM_THINKING` unset, 0.17.0 uses the lowest level the Gemini model
+supports, where 0.16.x left the level to Google. Set `LLM_THINKING` to pick the
+level yourself.
+
+**Which models can Moss use?**
+Gemini through the Gemini API or Vertex AI, OpenAI's API, and, from 0.17.0,
+Azure OpenAI. See [Supported providers](#supported-providers) for the tuned
+model families.
+
+**Can we keep model traffic in the EU?**
+On Vertex AI, set `GOOGLE_CLOUD_LOCATION=eu` on all three workloads and follow
+the checklist in [Keeping model traffic in a region](#keeping-model-traffic-in-a-region).
+Embeddings and image annotation have their own settings, and both need
+checking.
+
+**Can Moss use our own Azure OpenAI deployment?**
+Yes, from 0.17.0, with a key or with Azure workload identity. See
+[Using your own Azure OpenAI deployment](#using-your-own-azure-openai-deployment).
+
+**We saw "high traffic" when almost no one was using Moss. Why?**
+The reply means the model provider kept turning the requests away (429 or 5xx),
+or Moss couldn't connect to it, not that your users were busy. Check the
+provider's quota and status, and that the backends can reach its host (see
+[Network](/en/self-hosting/network#model-and-embedding-providers)).
+
+**Can Moss fail over to a second provider?**
+No. The install uses the one provider `LLM_CLIENT_TYPE` names. The only
+fallback is from an application's chosen model profile to the default model.

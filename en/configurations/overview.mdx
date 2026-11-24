@@ -1,76 +1,98 @@
 ---
 title: "Configuration Overview"
-description: "Understanding Moss configuration options and priority system"
+description: "Where each Moss setting is read from, in your code or in the dashboard, and which one wins when both are set"
 ---
 
-## Introduction
+Moss reads its settings from two places: your code, and the Moss dashboard. Which one applies depends on the setting and on how Moss is installed.
 
-Moss SDK can be configured in multiple ways to fit your application's needs. This flexibility allows you to set sensible defaults while giving developers fine-grained control per user or session.
+- **npm package** (`AgentProvider`): most widget behavior comes from the `config` you pass. The dashboard supplies what arrives with each chat session: theme and branding, suggested content, vision, a few session options, and everything the server decides.
+- **CDN script**: the script reads the application's dashboard settings as it loads, then applies `window.mossSettings` on top. A key in `window.mossSettings` wins, except `applicationId`, which goes in the script URL. A `userId` in the script URL and a `data-api-base` attribute on the script tag also win over `window.mossSettings`.
 
-### Configuration Methods
+Theme and branding are the exception on both: a value saved in the dashboard wins over the same key in your code.
 
-| Method | Use Case | Priority |
-|--------|----------|----------|
-| **Dashboard Settings** | Application-wide defaults, security policies | Lowest |
-| **SDK Configuration** | Per-deployment customization, environment-specific settings | Highest |
+## Where each setting is read from
 
-## Configuration Priority
+| Setting | Dashboard location | npm package | CDN script |
+|---------|--------------------|-------------|------------|
+| **Theme and branding**: colors, title size, panel shadow, header, input bar, footer links | **Configure > Appearance** | Your `appearance`, then the dashboard on top. **The dashboard wins** for each key it has a value for. | The same. |
+| **Other appearance**: fonts, spacing, highlight color, guide and feedback options | None | Your `appearance` | `window.mossSettings.appearance` |
+| **Suggested questions and articles** (zero state) | **Content > Suggested Content** | Your `appearance.zeroState` if you set one, used whole. Otherwise the dashboard's. | The dashboard's, unless `window.mossSettings.appearance` sets `zeroState`. |
+| **Fallback states** | **Content > Suggested Content** | Your `appearance.fallbackStates` only. **The dashboard's are not applied.** | The dashboard's, unless `window.mossSettings.appearance` is set, which replaces them. |
+| **Widget language** | **Configure > General > Language** | Your `language`. Unset, Moss detects it from the user's earlier choice, your page's `<html lang>` or the browser. **The dashboard's is not applied** to the widget. | The dashboard's; `window.mossSettings.language` wins. |
+| **Session timeouts and notice** | **Configure > Behavior > Session Behavior** | Your `sessionConfig`. **The dashboard's are not applied.** | The dashboard's; a `window.mossSettings.sessionConfig` object replaces them whole. |
+| **When a user returns after inactivity** | **Configure > Behavior > Session Behavior** | Your `sessionConfig.onReturnAfterInactivity` if set, otherwise the dashboard's, otherwise `'ask'`. | The dashboard's; `window.mossSettings.sessionConfig.onReturnAfterInactivity` wins. Left out of a `sessionConfig` object, it still follows the dashboard. |
+| **Recent chats** (from 0.17.0) | **Configure > Behavior > Session Behavior** | The dashboard turns it on. Your `appearance.chrome.startScreen.recentChats` can hide the list or cap it. | The same. |
+| **Vision** (screenshots to the model) | **Configure > Behavior > Core Features > Enable Vision** | The dashboard's, delivered with the session; off by default for a new application. Your `useVision` wins when set, in either direction. | The same; `window.mossSettings.useVision` wins. |
+| **Session replay recording** | **Configure > Behavior > Core Features > Enable Session Replay** | Needs both: your `enableSessionRecording: true` and the dashboard switch on. | The dashboard switch. `window.mossSettings.enableSessionRecording` wins in the browser. |
+| **Screen history for AI** | **Configure > Behavior > Core Features > Enable Screen History for AI** | Your `enableScreenHistoryRecording`. **The dashboard's is not applied.** | The dashboard's; `window.mossSettings` wins. |
+| **How much of the page is sent** (`pageContext`) | **Configure > Behavior > Core Features > On-screen guidance** | Your `pageContext`, default `'full'`. Turning **On-screen guidance** off doesn't reduce what the npm package sends. | `'full'` while **On-screen guidance** is on, `'metadata'` (URL and title, plus the action timeline when screen history is on) while it is off; `window.mossSettings.pageContext` wins. |
+| **Log level, DOM target selector** | **Configure > Installation > Advanced Settings** | Your `logLevel`, `observeTargetSelector`. **The dashboard's are not applied.** | The dashboard's; `window.mossSettings` wins. |
+| **DOM stability** | **Configure > Installation > Advanced Settings > DOM Stability** | Your `stability`. | `window.mossSettings.stability`. |
+| **Debug mode** | None | Your `debugMode`. | `window.mossSettings.debugMode`. |
+| **Hosts that replies may link to** (from 0.17.0) | **Configure > Security > Allowed Domains**, plus your knowledge base's hosts | Both lists combined: the application's and your `replyLinks.allowedHosts`. | The same. |
+| **Callbacks**: `getJwt`, `onEvent`, `onError`, `onSupportTicket`, `getBridgeCode` | None | Your config | `window.mossSettings` |
 
-When the same setting is configured in multiple places, Moss uses this priority order (highest to lowest):
+Notes on the table:
 
-1. **SDK configuration** - `AgentProvider` config options
-2. **Dashboard settings** - Application-level defaults
+- **The language you set in the dashboard** also sets the language Moss answers in, on every install type. With the npm package it doesn't change the widget's own buttons and labels; set `language` in your code for that.
+- **Session replay:** with the npm package, `enableSessionRecording` defaults to `false`, as it did in 0.16.x. What changed in 0.17.0 is the application setting: the server refuses recordings while **Enable Session Replay** is off, whatever the page asks, and an application that never saved that switch now counts as off. In 0.16.x it counted as on, so the CDN script recorded by default; now it doesn't until an admin turns the switch on. See [Page data and privacy controls](/en/sdk/page-data#session-recording).
+- **Vision overrides both ways.** `useVision: true` sends screenshots even when **Enable Vision** is off, and `useVision: false` stops them when it is on. A vision screenshot is a frame of the user's screen share, which the user must allow, and redaction doesn't apply to it. See [Vision screenshots](/en/sdk/page-data#vision-screenshots).
+- **Screenshot** under **Advanced Settings**, and `screenshotMode` in code, have no effect on the screenshots taken for chat in 0.17.0.
+- **DOM Stability in the dashboard:** the SDK in 0.17.0 doesn't read the **Smart Wait (Debounce)** and **Fixed Delay** values. Tune the wait with `stability` in your code; see [Advanced](/en/sdk/advanced#stability-tuning).
+- **`window.mossSettings` merges shallowly.** An object you set there replaces the dashboard's object for that key as a whole. For `sessionConfig`, a timeout, max age or notice field you leave out goes back to its default, so if you set one, set all three; `onReturnAfterInactivity` still follows the dashboard. For `appearance`, the dashboard's fallback states no longer apply, but theme, branding and suggested content still come from the dashboard with each session.
+- **Debug mode is never taken from the dashboard**, on any install type.
+- **When dashboard values arrive.** With the npm package, dashboard values arrive with the chat session, when the chat first opens on a page or when a page loads with a session to resume. A change reaches a user at their next page load or new chat. The CDN script reads the dashboard as it loads.
 
-<Info>
-    This priority system allows you to set sensible defaults in the Dashboard
-    while giving developers the ability to override specific settings in code.
-</Info>
+The details for each area are on these pages:
 
-### Example: Priority in Action
+- Appearance, zero state and fallback states: [Appearance](/en/sdk/appearance#where-values-come-from)
+- Session limits: [Sessions](/en/sdk/api/session#where-each-setting-is-read-from)
+- Vision, recording, screen history and `pageContext`: [Page data and privacy controls](/en/sdk/page-data)
+
+## Example: a setting in both places
+
+An application has **Language** set to English in the dashboard, and the page passes `language: 'ko'`:
 
 ```tsx
-// Dashboard setting: language = 'en'
-// SDK configuration overrides it:
 <AgentProvider config={{
   apiUrl: 'https://moss-api.viamoss.ai',
   applicationId: 'YOUR_APP_ID',
   userId: currentUser.id,
   getJwt: () => fetchMossToken(),
-  language: 'ko',  // This takes precedence over Dashboard
+  language: 'ko',
 }}>
   <AssistantButton />
 </AgentProvider>
 ```
 
-## Quick Reference
+The widget's buttons and labels are in Korean, from your code. Moss's answers are in English, from the dashboard.
 
-### Dashboard-Only Settings
+An admin saves a header title, "Support", under **Configure > Appearance > Branding**, and the page passes `appearance: { chrome: { title: 'Help', header: {} } }` (a title shows only when `chrome.header` is set, in your `appearance` or by a header option saved in the dashboard). The header reads "Support": for theme and branding, the dashboard wins. A title saved alone in the dashboard doesn't show on a page that sets no `chrome.header`, unless the admin also turned on **Show status dot** or chose a **New chat icon**.
 
-These settings can only be configured through the Dashboard:
+## Settings only the dashboard holds
 
-- AI Assistant Instructions
-- API Keys
-- Domain Access Control
-- Vector Store Configuration
-- Planning
+These apply to every install type and have no SDK option:
 
-### SDK-Configurable Settings
+- **AI Assistant Instructions** and **Model**, under **Configure > Behavior**
+- **On-screen guidance** (on by default), which decides whether Moss highlights elements, and **Enable Planning** (off by default), which Moss also needs to offer guides. Both are under **Configure > Behavior**. With the CDN script, **On-screen guidance** also sets `pageContext`. See [Guides and navigation](/en/sdk/guides-and-navigation#how-a-guide-runs).
+- **Allowed Domains** and JWT claim checks, under **Configure > Security**
+- The knowledge base, procedures and integrations
+- Data retention, under **Configure > Data & privacy**
 
-These settings can be set in Dashboard and overridden via SDK:
+See [Dashboard settings](/en/configurations/dashboard-settings) for each field.
 
-| Setting | Dashboard | SDK Config |
-|---------|-----------|------------|
-| Language | Yes | Yes |
-| Enable Vision | Yes | Yes |
-| Session Recording | Yes | Yes |
-| Screen History | Yes | Yes |
-| Session Timeouts | Yes | Yes |
-| Screenshot Mode | Yes | Yes |
-| Log Level | Yes | Yes |
-| Debug Mode | Yes | Yes |
-| DOM Stability | Yes | Yes |
+## Common questions
 
-## Next Steps
+**I changed a setting in the dashboard and nothing changed in my React app.**
+With the npm package, the widget's language, session timeouts, log level, screen history and fallback states come from your code. Set them in the config you pass `AgentProvider`. See the table above.
+
+**I set a color in my code and the widget shows a different one.**
+A value saved under **Configure > Appearance** wins over your code for theme and branding keys. Clear the field in the dashboard to let your code decide.
+
+**I edited suggested questions in the dashboard and the widget still shows the old ones.**
+Your code sets `appearance.zeroState`, which replaces the dashboard's content whole. Remove it to use the dashboard's.
+
+## Next steps
 
 <CardGroup cols={3}>
     <Card
@@ -78,20 +100,20 @@ These settings can be set in Dashboard and overridden via SDK:
         icon="browser"
         href="/en/configurations/dashboard-settings"
     >
-        Configure application defaults through the web UI
+        Every field in the dashboard
     </Card>
     <Card
         title="SDK Options"
         icon="code"
         href="/en/configurations/sdk-options"
     >
-        Customize behavior in your application code
+        Every option you can pass in code
     </Card>
     <Card
         title="Examples"
         icon="lightbulb"
         href="/en/configurations/examples"
     >
-        See complete configuration examples
+        Complete configurations for common cases
     </Card>
 </CardGroup>

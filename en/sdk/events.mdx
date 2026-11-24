@@ -1,0 +1,229 @@
+---
+title: "Events and Errors"
+description: "Send Moss usage to your analytics with onEvent, control question text with eventQueryText, and hear about every problem the user sees with onError"
+icon: "chart-line"
+---
+
+Two optional callbacks report what happens in Moss to your own code:
+
+- **`onEvent`** receives usage events, such as a question asked, an answer delivered or a guide finished, for your analytics tool.
+- **`onError`** receives every problem the chat shows the user, with who can fix it and a reference for support.
+
+Leaving them unset changes nothing.
+
+## Send events to your analytics
+
+Pass `onEvent` in the `AgentProvider` config. Each call receives one event, `{ name, properties }`. Names follow Segment's "Object Action" style, and properties are camelCase, so most analytics tools take them as they are.
+
+```tsx
+import { AgentProvider, AssistantButton, type MossEvent } from '@viamoss/moss-sdk';
+import { analytics } from './analytics'; // your Segment, Amplitude or similar client
+
+function trackMossEvent(event: MossEvent) {
+  analytics.track(event.name, event.properties);
+}
+
+<AgentProvider config={{
+  apiUrl: 'https://moss-api.viamoss.ai',
+  applicationId: 'YOUR_APP_ID',
+  userId: currentUser.id,
+  getJwt: () => fetchMossToken(),
+  onEvent: trackMossEvent,
+}}>
+  <AssistantButton />
+</AgentProvider>
+```
+
+For a tool that doesn't accept spaces in event names, such as Google Analytics 4, convert the name first, for example to `moss_question_asked`.
+
+`MossEvent` is a union narrowed by `name`, so TypeScript knows each event's properties:
+
+```tsx
+onEvent: (event) => {
+  if (event.name === 'Moss Answer Delivered') {
+    metrics.timing('moss.answer_latency', event.properties.latencyMs);
+  }
+},
+```
+
+**With the CDN script**, set the same function in `window.mossSettings` before the script loads:
+
+```html
+<script>
+  window.mossSettings = {
+    onEvent: function (event) { analytics.track(event.name, event.properties); },
+  };
+</script>
+```
+
+### How events are delivered
+
+- Each event is delivered from a microtask, after Moss's own work for it. Your handler never runs inside Moss's code.
+- If your handler throws, or returns a promise that rejects, Moss logs a warning and carries on. The chat is not affected.
+- Moss reads your handler and `eventQueryText` when it delivers each event, so a new function you pass takes effect without remounting `AgentProvider`.
+- With Moss open in several tabs, guide events come from the tab the guide runs in.
+
+## Common properties
+
+Every event carries these properties:
+
+| Property | Type | Meaning |
+|----------|------|---------|
+| `sessionId` | `string \| null` | The Moss chat session. `null` before one exists. |
+| `userId` | `string` | The `userId` you passed |
+| `timestamp` | `string` | When it happened, in ISO 8601 |
+| `pageKey` | `string`, optional | The `pageKey` you passed, when set |
+
+## Event catalog
+
+`MOSS_EVENT_NAMES`, exported by the SDK, lists every name.
+
+| Event | Fires when | Properties |
+|-------|-----------|------------|
+| `Moss Chat Opened` | The chat opens. A chat already open when the page loads, restored after a reload, doesn't count. | none |
+| `Moss Chat Closed` | The chat closes. | none |
+| `Moss Question Asked` | The user sends a question: typed, a suggested question, or text your code sends with `sendMessage()`, all with `source: 'user'`. A question your code asks with `askMoss()` counts once, as its request goes out, with `source: 'host'`. Start guide and Next don't count. | `messageId: string`, `mode: 'chat' \| 'guide'`, `source: 'user' \| 'host'`, `queryText?: string` |
+| `Moss Answer Delivered` | The answer to a question arrives. | `messageId?: string`, `latencyMs: number`, `hasHighlight: boolean`, `hasCitation: boolean` |
+| `Moss No Answer` | `empty_response`: the response to a question carried nothing; fires instead of Answer Delivered. `target_not_found`: an answer pointed at a page element that isn't on the page, once per message. | `messageId?: string`, `reason: 'empty_response' \| 'target_not_found'` |
+| `Moss Error` | Something failed that the user sees. | `errorType`, see below; for `request_failed`, also `code?`, `side?`, `status?`, `reference?` |
+| `Moss Plan Started` | A guide starts. An offered guide counts once the user accepts it. A guide restored after a reload isn't announced again. | `planId: string`, `stepCount: number` |
+| `Moss Plan Step Completed` | A guide step is completed, once per step. Skipped steps don't count. | `planId: string`, `stepId: string`, `stepIndex: number` (zero-based) |
+| `Moss Plan Finished` | A guide ends, once per guide. | `planId: string`, `outcome: 'completed' \| 'abandoned'` |
+| `Moss Feedback Given` | The user rates an answer with thumbs up or down. | `messageId: string`, `rating: 'up' \| 'down'`, `reason?: FeedbackReason` |
+| `Moss Ticket Opened` | Moss shows a support-ticket draft card, once per draft per page. A card restored with the session doesn't count. | `handoffId: string` |
+| `Moss Ticket Submitted` | The user submits the ticket card and it settles. | `handoffId: string`, `outcome: 'filed' \| 'failed' \| 'unconfirmed'` |
+| `Moss Recent Chat Opened` | From 0.17.0. The user opens an earlier chat from the start screen's recent chats. | `pastSessionId: string` |
+
+Details for some events:
+
+- **`Moss Question Asked`**: `mode` is `'guide'` while a guide is running. `queryText` is present only if you opt in; see [Question text](#question-text).
+- **`Moss Answer Delivered`**: `latencyMs` runs from the question being sent to the answer arriving. `hasHighlight` means the answer points at an element on the page; `hasCitation` means it cites help articles. `messageId` is the answer's message, the one `Moss Feedback Given` rates. It is absent when the answer adds no message, such as a highlight alone, or when its text waits for the user to take a step.
+- **`Moss Plan Finished`**: `completed` when Moss reports the guide complete or the user finishes it. `abandoned` when the user exits, the conversation ends (a new chat, including one `askMoss()` starts or one Moss starts after inactivity), Moss replaces the guide with another, or a support ticket the user files from the guide goes out.
+- **`Moss Feedback Given`**: from 0.17.0, with `chrome.feedback.askWhatWentWrong`, a thumbs-down the user explains is sent again for the same message with its `reason`: `'steps_mismatch'`, `'hard_to_follow'`, `'not_solved'`, `'wrong_answer'`, `'not_answered'` or `'other'`. With it on, a thumbs-down on a finished guide's "Goal Complete!" card that the user explains also fires this event, with `rating: 'down'` and the `reason`, for the guide's last answer. The user's comment is never sent to your page, and neither is the session rating.
+- **`Moss Ticket Submitted`**: `filed` means your `onSupportTicket` confirmed the ticket. `failed` means your callback reported a failure, or the submit was refused or not sent. `unconfirmed` means nothing confirmed the outcome, for example because your callback timed out or threw, so the ticket may exist. See [Support ticket handoff](/en/sdk/support-ticket-handoff).
+
+### `Moss Error` types
+
+| `errorType` | Meaning |
+|-------------|---------|
+| `connection_failed` | The chat couldn't connect, after retrying. |
+| `connection_timeout` | The chat couldn't connect, and the last attempt timed out. |
+| `connection_blocked` | A Content Security Policy blocked the connection. Allow your Moss API URL in `connect-src`. |
+| `request_failed` | A question, Start guide, Next or a guide step got no response, or Moss replied with an error. From 0.17.0, it carries the problem's `code`, `side`, `status` and `reference`, as described under [`onError`](#onerror). |
+
+## Question text
+
+What a user types can contain personal or customer data, so `Moss Question Asked` leaves the text out unless you opt in with `eventQueryText`:
+
+| `eventQueryText` | `queryText` on `Moss Question Asked` |
+|------------------|--------------------------------------|
+| `'omit'` (default) | Absent |
+| `'include'` | The text as the user typed it |
+| `(text: string) => string` | What your function returns. Absent if it throws or returns something other than a string; a throw is logged. |
+
+```tsx
+eventQueryText: (text) => text.replace(/[\w.+-]+@[\w-]+\.[\w.]+/g, '[email]'),
+```
+
+No other event property carries free text from the user or the model, URLs or page content.
+
+## onError
+
+`onError` is called for every problem the chat tells the user about: a turn that failed, an answer written without one of its tools, a request that never reached the server. It is new in 0.17.0.
+
+```tsx
+<AgentProvider config={{
+  // ...
+  onError: (error) => {
+    errorTracker.captureMessage(`Moss: ${error.code}`, {
+      level: error.fixBy === 'admin' ? 'error' : 'warning',
+      extra: { ...error },
+    });
+  },
+}}>
+```
+
+`onError` is delivered like `onEvent`: from a microtask, with a handler that throws or rejects logged and ignored.
+
+### The error object (`MossError`)
+
+| Field | Type | Meaning | What to do with it |
+|-------|------|---------|--------------------|
+| `code` | `string` | A stable identifier, such as `connection_lost` or `integration_unavailable`. See the list below. | Group and count problems by it. New codes can ship in any release, so handle unknown codes. |
+| `side` | `'moss' \| 'integration' \| 'settings' \| 'procedure' \| 'input' \| 'client'` | Where it failed | Route it: `procedure` problems and most `settings` problems need a change in the Moss dashboard, but `sign_in_failed` is your page's token and `storage_not_configured` is your deployment's file storage. `integration` problems are in a connected service. |
+| `fixBy` | `'user' \| 'admin' \| 'moss'` | Who can act | `user`: the user can retry or change what they sent. `admin`: an admin of your Moss application has to change something. `moss`: a problem on Moss's side, reported automatically. |
+| `retryable` | `boolean` | Whether sending again can help | When `true`, the chat offers **Retry**. It is `false` when the request may already have run, so sending it again could repeat its work. |
+| `message` | `string` | The text the user was shown, in the chat's language | Show or log it. Don't parse it. |
+| `status` | `number`, optional | The HTTP status of the response | Absent when no response arrived. |
+| `reference` | `string`, optional | What to quote to Moss support | Log it with the error. It is absent when the server never saw the request. |
+
+In the chat, the user sees the same problem under the message: what went wrong, "Your admin can fix this in Moss." or "This is a problem on Moss's side and has been reported." when they can't fix it themselves, and the reference. The chat offers **Retry** when sending again can help, and **Continue** when a procedure stopped before it was done.
+
+`onError` isn't called when the chat can't connect at all. Listen for `Moss Error` with a `connection_*` type for that.
+
+### Codes
+
+| `code` | `side` | `fixBy` | What the user is told |
+|--------|--------|---------|-----------------------|
+| `model_overloaded` | moss | moss | The assistant is busy right now. Try again. |
+| `model_timeout` | moss | moss | That took too long to answer. Try again. |
+| `model_blocked` | moss | user | A safety filter blocked this request. |
+| `no_answer` | moss | moss | The assistant gave no usable answer. Try again. |
+| `step_limit` | moss | user | The assistant ran out of steps. Ask again in smaller parts. |
+| `internal_error` | moss | moss | Something went wrong on Moss's side. |
+| `tools_unavailable` | moss | moss | Some of the assistant's tools could not be loaded for this answer. |
+| `tool_failed` | moss | moss | One of the assistant's tools failed, so this answer was written without it. |
+| `integration_unavailable` | integration | user | *Service* did not respond. |
+| `integration_rejected` | integration | user | *Service* refused the request. |
+| `integration_rate_limit` | integration | user | *Service* is receiving too many requests. Try again shortly. |
+| `step_failed` | integration | user | A step did not complete. |
+| `integration_auth` | settings | admin | *Service* refused Moss's credentials. |
+| `connection_disabled` | settings | admin | *Service* is turned off in Moss. |
+| `connection_missing` | settings | admin | *Service* is not connected in Moss. |
+| `sign_in_failed` | settings | admin | This page could not sign in to the assistant. |
+| `storage_not_configured` | settings | admin | File storage is not set up for this app. |
+| `not_permitted` | procedure | admin | You are not allowed to run this. |
+| `procedure_unavailable` | procedure | admin | This procedure is no longer available. |
+| `procedure_unfinished` | procedure | user | This isn't finished yet. |
+| `proposal_changed` | procedure | user | This card no longer matches. Ask for a new one. |
+| `card_expired` | procedure | user | This card expired. Ask for a new one. |
+| `file_missing` | input | user | The attached file was not found. Attach it again. |
+| `file_refused` | input | user | The attached file could not be accepted. |
+| `rate_limited` | input | user | Too many requests. Try again shortly. |
+| `invalid_request` | input | moss | The assistant could not read this request. |
+| `connection_lost` | client | user | The connection was lost before an answer came back. |
+| `page_unreadable` | client | moss | The assistant could not read this page. |
+| `target_not_found` | client | user | The assistant could not find that control on this page. |
+| `navigation_failed` | client | moss | The assistant could not open that page. |
+
+*Service* is the name of the connected service, such as your support desk or an API connection.
+
+`sign_in_failed` usually means your page's token was refused: check `getJwt` and your token's claims. See [Authentication](/en/sdk/authentication).
+
+## Stability of names
+
+Event names and properties are a public contract. Renames and removals are announced in the release notes ahead of the release that makes them. New events and new optional properties can ship in any release, so a tracking plan should accept events and properties it doesn't know yet.
+
+## Common questions
+
+**How do I send Moss usage to Segment, Amplitude or Google Analytics?**
+Pass `onEvent` and forward each event to your tool's track call. See [Send events to your analytics](#send-events-to-your-analytics).
+
+**Can I see what users asked?**
+Only if you opt in: set `eventQueryText` to `'include'`, or to a function that redacts the text first.
+
+**Does an error in my handler break the chat?**
+No. Moss catches it, logs a warning and carries on.
+
+**Why do I get no `Moss Question Asked` for Start guide or Next?**
+They aren't questions. Guide progress is reported by the `Moss Plan` events.
+
+**How do I find out when users hit problems?**
+Pass `onError`. Each call says what failed, who can fix it and the reference to quote to support. For a chat that can't connect at all, listen for `Moss Error` with a `connection_*` type.
+
+## Related
+
+- [Appearance](/en/sdk/appearance): `chrome.feedback` sets what a rating asks for
+- [Guides and navigation](/en/sdk/guides-and-navigation): `askMoss()` and guide events
+- [Support ticket handoff](/en/sdk/support-ticket-handoff)
+- [Types](/en/sdk/api/types)

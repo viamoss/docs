@@ -1,24 +1,15 @@
 ---
 title: "SDK Options"
-description: "Configure Moss behavior through AgentProvider config"
+description: "Which AgentProvider options to use for common tasks, grouped by what you want to do"
 ---
 
-## Overview
+This page groups the SDK's options by what you want to do, and says what each one is for and when to use it. The complete reference, with every option's type and default, is [Configuration](/en/sdk/configuration).
 
-SDK configuration options allow you to customize Moss behavior directly in your application code. These settings **override Dashboard defaults** when specified, giving developers fine-grained control per deployment, environment, or user segment.
+You pass options in the `config` prop of `AgentProvider`. With the CDN script, set the same keys in `window.mossSettings`, except `applicationId`, which goes in the script URL. A `userId` in the script URL and a `data-api-base` attribute on the script tag also win over `window.mossSettings`.
 
-<Info>
-    **Priority reminder:** SDK configuration options take precedence over
-    Dashboard settings. When you configure an option in code, it will override
-    the value set in the Dashboard. This allows developers to customize behavior
-    per-deployment while using Dashboard settings as defaults.
-</Info>
+Some settings can also come from the Moss dashboard, and for theme and branding the dashboard wins. [Configuration overview](/en/configurations/overview) shows, for each setting, which side applies.
 
----
-
-## Required Options
-
-These options must be provided in the `AgentProvider` config:
+## Connect Moss to your app and your user
 
 ```tsx
 import { AgentProvider, AssistantButton } from '@viamoss/moss-sdk';
@@ -33,233 +24,62 @@ import { AgentProvider, AssistantButton } from '@viamoss/moss-sdk';
 </AgentProvider>
 ```
 
-| Option | Type | Description |
-|--------|------|-------------|
-| `apiUrl` | `string` | Moss API endpoint URL |
-| `applicationId` | `string` | Your unique application ID from the Dashboard |
-| `userId` | `string` | Unique identifier for the current user |
-| `getJwt` | `() => Promise<string>` | Function that returns a JWT token |
+- **`apiUrl`**, **`applicationId`** and **`userId`** are required. `applicationId` is shown under **Configure > General** as **Application ID**. From 0.17.0, a trailing `/` on `apiUrl` is ignored.
+- **`getJwt`** returns a signed token for the signed-in user. Use it rather than **`jwt`**, a token you already hold, so the session survives the token expiring. See [Authentication](/en/sdk/authentication).
+- **`userMetadata`** carries the user's role, plan and similar attributes, sent when a session starts. Use it so Moss can word answers for the user, and set `role: 'admin'` to show admins their own suggested content. Pass roles and categories, not personal data.
+- **`getBridgeCode`** (from 0.17.0) is needed only when your application's MCP server signs users in through your site. See [Integrations](/en/dashboard/integrations).
 
 <Warning>
-    The `userId` should be a stable identifier for your user. Avoid using PII
-    (email, name) directly - use a hashed or anonymized identifier instead.
+    Use an opaque, stable `userId`, not an email address or a name. Moss stores it with every chat session.
 </Warning>
 
----
-
-## Common Options
-
-These options are frequently used to customize SDK behavior:
-
-### Language
-
-Set the UI language for the SDK interface.
+The SDK reads `apiUrl`, `jwt`, `getJwt`, `getBridgeCode` and `applicationId` once, when `AgentProvider` mounts, and `redactionSelectors` and `redactAllInputs` for the page text likewise. To change them, for example when a different user signs in, remount the provider by giving `AgentProvider` a `key` that changes with the user:
 
 ```tsx
-<AgentProvider config={{
-  apiUrl: 'https://moss-api.viamoss.ai',
-  applicationId: 'YOUR_APP_ID',
-  userId: currentUser.id,
-  getJwt: () => fetchMossToken(),
-  language: 'en',  // 'en', 'ko', or undefined for auto-detect
-}}>
+<AgentProvider key={currentUser.id} config={mossConfig}>
   <AssistantButton />
 </AgentProvider>
 ```
 
-**Default:** `undefined` (auto-detects browser language)
+## Change how the widget looks
 
-<Tip>
-    Leave undefined to automatically use the user's browser language preference.
-</Tip>
+- **`appearance`** sets colors, fonts, the chat window's layout and position, the header, footer, guide controls, start screen and fallback messages. See [Appearance](/en/sdk/appearance).
+- **`pageKey`** names the current page, such as `'billing-settings'`. Use it to show different suggested questions on different pages; events carry it too. See [Per page and per role](/en/sdk/appearance#per-page-and-per-role).
+- **`language`** fixes the widget's language to `'en'` or `'ko'` and hides the language menu. Leave it unset to let Moss detect the language. See [Language](/en/sdk/configuration#language).
 
-### Vision
+## Control sessions and guides
 
-Enable or disable screenshot analysis capabilities.
+- **`sessionConfig`** sets how long a chat lasts and what a user sees when they come back after a timeout. See [Sessions](/en/sdk/api/session).
+- **`closingChatEndsGuide`** ends a running guide when the user closes the chat. Use it when your page shows no guide controls of its own. See [What ends a guide](/en/sdk/guides-and-navigation#what-ends-a-guide).
+- **`stability`** sets how long Moss waits for the page to settle before it reads it. Turn on `stability.afterReload` when a guide step's click can load a new page. See [Reloads, redirects and new tabs](/en/sdk/guides-and-navigation#reloads-redirects-and-new-tabs) and [Stability tuning](/en/sdk/advanced#stability-tuning).
+- **`streamActivity`** (from 0.17.0) shows the steps Moss's backend takes for a turn as it takes them, with `appearance.chrome.loader: 'steps'`. Proxies between the page and Moss must pass Server-Sent Events.
+- **`enableProactiveGuides`**: set it to `false` to turn off announcements and trigger rules set up for the application.
 
-```tsx
-<AgentProvider config={{
-  apiUrl: 'https://moss-api.viamoss.ai',
-  applicationId: 'YOUR_APP_ID',
-  userId: currentUser.id,
-  getJwt: () => fetchMossToken(),
-  useVision: true,  // Enable visual context
-}}>
-  <AssistantButton />
-</AgentProvider>
-```
+## Limit what Moss reads and records
 
-**Default:** `true` (from Dashboard)
+[Page data and privacy controls](/en/sdk/page-data) explains each of these.
 
-### Session Recording
+- **`pageContext`** sets how much of the page each turn sends: the page's structure and text (`'full'`), only the URL and title (`'metadata'`), or neither (`'none'`). Use `'metadata'` on pages whose content must not leave the browser, and leave `enableScreenHistoryRecording` off: the action timeline is sent at every level. Moss can't point at elements at `'metadata'`.
+- **`redactAllInputs`** and **`redactionSelectors`** hide form values and the elements you name from the page text. Mark elements in your markup with `data-moss-redact` as well.
+- **`useVision`** sends a frame of the tab the user shares with each turn, once the user allows the browser's screen-capture prompt and while `pageContext` is `'full'`. Redaction doesn't apply to it. Set it to override the dashboard's **Enable Vision** in either direction; `false` keeps screenshots off.
+- **`enableSessionRecording`** records the session for **Session Replay** in the dashboard. The dashboard's **Enable Session Replay** must be on too: from 0.17.0 the server refuses recordings while it is off.
+- **`enableScreenHistoryRecording`** sends a timeline of the user's recent actions with each turn.
+- **`observeTargetSelector`** limits the part of the page Moss reads to one element.
+- **`collectionEnabled`** and **`collectionControl`** (from 0.17.0) let your code keep Moss from mounting, for example until the user consents.
+- **`pageSanitizationScript`** is a function Moss runs on your live page each time it starts watching the page: when it mounts, and again when `observeTargetSelector` or the function itself changes. Anything it changes, users see too, so it is not a privacy control. Define the function outside your component, or an inline function runs again on every render.
+- **`screenshotMode`** has no effect on chat screenshots in 0.17.0.
 
-Control whether user sessions are recorded for replay.
+## Connect Moss to your own systems
 
-```tsx
-<AgentProvider config={{
-  apiUrl: 'https://moss-api.viamoss.ai',
-  applicationId: 'YOUR_APP_ID',
-  userId: currentUser.id,
-  getJwt: () => fetchMossToken(),
-  enableSessionRecording: false,  // Disable for privacy-sensitive users
-}}>
-  <AssistantButton />
-</AgentProvider>
-```
+- **`onSupportTicket`** files a support ticket through your backend and reports the outcome. See [Support ticket handoff](/en/sdk/support-ticket-handoff).
+- **`onEvent`** receives usage events for your analytics, and **`eventQueryText`** decides whether they carry the question's text. See [Events and errors](/en/sdk/events).
+- **`onError`** (from 0.17.0) receives every problem the chat shows the user, with who can fix it. See [onError](/en/sdk/events#onerror).
+- **`replyLinks.allowedHosts`** (from 0.17.0) adds hosts that replies may link to and load images from. Use it when answers link to a site that isn't in the application's allowed domains or knowledge base. See [replyLinks](/en/sdk/configuration#replylinks).
 
-**Default:** `true` (from Dashboard)
+## Diagnose problems
 
-### Screen History
-
-Include user action history in AI context.
-
-```tsx
-<AgentProvider config={{
-  apiUrl: 'https://moss-api.viamoss.ai',
-  applicationId: 'YOUR_APP_ID',
-  userId: currentUser.id,
-  getJwt: () => fetchMossToken(),
-  enableScreenHistoryRecording: true,
-}}>
-  <AssistantButton />
-</AgentProvider>
-```
-
-**Default:** `true` (from Dashboard)
-
----
-
-## Appearance
-
-Customize the visual theme of the Moss assistant UI.
-
-### Using Presets
-
-```tsx
-<AgentProvider config={{
-  apiUrl: 'https://moss-api.viamoss.ai',
-  applicationId: 'YOUR_APP_ID',
-  userId: currentUser.id,
-  getJwt: () => fetchMossToken(),
-  appearance: 'blue',  // Use a preset theme
-}}>
-  <AssistantButton />
-</AgentProvider>
-```
-
-**Available presets:**
-
-| Preset | Description |
-|--------|-------------|
-| `'blue'` | Default blue theme with glassmorphism effects |
-| `'purple'` | Purple theme with solid backgrounds |
-
-### Custom Appearance
-
-Override specific properties by passing a partial object:
-
-```tsx
-<AgentProvider config={{
-  apiUrl: 'https://moss-api.viamoss.ai',
-  applicationId: 'YOUR_APP_ID',
-  userId: currentUser.id,
-  getJwt: () => fetchMossToken(),
-  appearance: {
-    colors: {
-      primary: '#3b82f6',
-      primaryLight: '#60a5fa',
-    },
-    modal: {
-      defaultPosition: { right: 20, bottom: 20 },
-      defaultSize: { width: 400, height: 600 },
-    },
-    effects: {
-      glassmorphism: true,
-    },
-  },
-}}>
-  <AssistantButton />
-</AgentProvider>
-```
-
-### Customizable Properties
-
-| Category | Properties |
-|----------|------------|
-| `colors` | `primary`, `primaryLight`, `primaryLighter`, `userMessage`, `assistantMessage`, `headerBackground`, `inputAreaBackground`, `modalBackground`, `text.*`, `border`, `success`, `error` |
-| `typography` | `fontFamily`, `fontSize.*`, `lineHeight.*` |
-| `spacing` | `3xs`, `2xs`, `xs`, `sm`, `md`, etc. |
-| `radius` | `sm`, `md`, `lg`, `xl` |
-| `shadows` | `sm`, `md`, `lg` |
-| `effects` | `glassmorphism`, `glassBlur`, `glassOpacity` |
-| `inputBar` | `roundedTop`, `topShadow` |
-| `progressBar` | `height` |
-| `modal` | `defaultPosition`, `defaultSize` |
-
-<Tip>
-    Partial objects are deep-merged with the base theme. You only need to specify the properties you want to override.
-</Tip>
-
----
-
-## Session Options
-
-Configure session management behavior:
-
-```tsx
-<AgentProvider config={{
-  apiUrl: 'https://moss-api.viamoss.ai',
-  applicationId: 'YOUR_APP_ID',
-  userId: currentUser.id,
-  getJwt: () => fetchMossToken(),
-  sessionConfig: {
-    inactivityTimeout: 60,
-    maxSessionAge: 4,
-    showNotification: true,
-  },
-}}>
-  <AssistantButton />
-</AgentProvider>
-```
-
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `inactivityTimeout` | `number` | `30` | Minutes of inactivity before session expires |
-| `maxSessionAge` | `number` | `2` | Maximum session duration in hours |
-| `showNotification` | `boolean` | `true` | Show notification on new session |
-
----
-
-## Developer Options
-
-Advanced settings for debugging and customization:
-
-### Screenshot Mode
-
-```tsx
-<AgentProvider config={{
-  apiUrl: 'https://moss-api.viamoss.ai',
-  applicationId: 'YOUR_APP_ID',
-  userId: currentUser.id,
-  getJwt: () => fetchMossToken(),
-  screenshotMode: 'viewport',  // 'fullpage' or 'viewport'
-}}>
-  <AssistantButton />
-</AgentProvider>
-```
-
-**Default:** `'fullpage'`
-
-| Value | Description |
-|-------|-------------|
-| `fullpage` | Captures the entire scrollable page |
-| `viewport` | Captures only the visible portion |
-
-<Tip>
-    Use `viewport` for apps with very long pages to reduce processing time.
-</Tip>
-
-### Log Level
+- **`logLevel`** sets how much the SDK logs to the console. It takes the `LogLevel` enum the SDK exports, not a string. With the CDN script, pass the enum's number: `1` (debug) to `5` (silent).
+- **`debugMode`** shows debug controls inside the chat. Never turn it on in production: every user sees them. It is never taken from the dashboard.
 
 ```tsx
 import { AgentProvider, AssistantButton, LogLevel } from '@viamoss/moss-sdk';
@@ -269,177 +89,38 @@ import { AgentProvider, AssistantButton, LogLevel } from '@viamoss/moss-sdk';
   applicationId: 'YOUR_APP_ID',
   userId: currentUser.id,
   getJwt: () => fetchMossToken(),
-  logLevel: LogLevel.DEBUG,  // DEBUG, INFO, WARN, ERROR, SILENT
+  logLevel: LogLevel.WARN,
 }}>
   <AssistantButton />
 </AgentProvider>
 ```
 
-**Default:** `LogLevel.INFO`
+## Changes in 0.17.0
 
-`logLevel` takes the `LogLevel` enum exported by the SDK, not a string. Each level includes everything more severe than itself (`DEBUG` shows everything, `SILENT` disables logging).
+- **Removed:** `displayMode`, `headless` and `forcedActivationFlow`. TypeScript rejects them; remove them from your config.
+- **Changed:** session recording needs **Enable Session Replay** on in the dashboard, and an application that never saved that switch now counts as off (in 0.16.x it counted as on). The npm default of `enableSessionRecording` is still `false`.
+- **Changed:** a trailing `/` on `apiUrl` is ignored.
+- **New:** `onError`, `replyLinks`, `streamActivity`, `getBridgeCode`, `collectionEnabled` and `collectionControl`. New appearance keys are listed in [What's new in 0.17.0](/en/sdk/appearance#whats-new-in-0170).
 
-### Debug Mode
+## Settings only the dashboard holds
 
-```tsx
-<AgentProvider config={{
-  apiUrl: 'https://moss-api.viamoss.ai',
-  applicationId: 'YOUR_APP_ID',
-  userId: currentUser.id,
-  getJwt: () => fetchMossToken(),
-  debugMode: true,
-}}>
-  <AssistantButton />
-</AgentProvider>
-```
+AI instructions, the model, on-screen guidance, allowed domains, the knowledge base, procedures, integrations and data retention have no SDK option. See [Settings only the dashboard holds](/en/configurations/overview#settings-only-the-dashboard-holds).
 
-**Default:** `false`
-
-Enables verbose logging and debug features for troubleshooting.
-
-### DOM Target Selector
-
-```tsx
-<AgentProvider config={{
-  apiUrl: 'https://moss-api.viamoss.ai',
-  applicationId: 'YOUR_APP_ID',
-  userId: currentUser.id,
-  getJwt: () => fetchMossToken(),
-  observeTargetSelector: '#main-content',
-}}>
-  <AssistantButton />
-</AgentProvider>
-```
-
-**Default:** `'body'`
-
-CSS selector for the DOM element to observe. Change this to limit observation to a specific part of your page.
-
-### DOM Stability
-
-Configure how the SDK waits for the page to stabilize:
-
-```tsx
-<AgentProvider config={{
-  apiUrl: 'https://moss-api.viamoss.ai',
-  applicationId: 'YOUR_APP_ID',
-  userId: currentUser.id,
-  getJwt: () => fetchMossToken(),
-  stability: {
-    maxTotalWaitMs: 15000,
-    layers: {
-      networkIdle: true,
-      domMutations: true,
-      loadingIndicators: false,
-      frameReadiness: true,
-      resourceQuiet: true,
-      layoutShift: false,
-      browserIdle: true,
-      finalFrame: true,
-    },
-    domMutations: {
-      quietPeriodMs: 1000,
-    },
-  },
-}}>
-  <AssistantButton />
-</AgentProvider>
-```
-
-<Tip>
-    See the [SDK Advanced Configuration](/en/sdk/advanced#stability-tuning)
-    guide for detailed layer-by-layer documentation.
-</Tip>
-
----
-
-## Complete TypeScript Interface
-
-Here's the full TypeScript interface for SDK configuration:
-
-```typescript
-interface MossConfig {
-  // Required
-  apiUrl: string;
-  applicationId: string;
-  userId: string;
-  getJwt: () => Promise<string>;
-
-  // Application Features
-  useVision?: boolean;
-  language?: 'en' | 'ko';
-  appearance?: AppearanceInput;  // 'blue' | 'purple' | custom object
-
-  // Recording & History
-  enableSessionRecording?: boolean;
-  enableScreenHistoryRecording?: boolean;
-
-  // Session Management
-  sessionConfig?: {
-    inactivityTimeout?: number;
-    maxSessionAge?: number;
-    showNotification?: boolean;
-  };
-
-  // Technical Settings
-  logLevel?: LogLevel;  // enum: DEBUG, INFO, WARN, ERROR, SILENT
-  debugMode?: boolean;
-  screenshotMode?: 'fullpage' | 'viewport';
-  observeTargetSelector?: string;
-
-  // DOM Stability
-  stability?: {
-    maxTotalWaitMs?: number;
-    layers?: {
-      networkIdle?: boolean;
-      domMutations?: boolean;
-      loadingIndicators?: boolean;
-      frameReadiness?: boolean;
-      resourceQuiet?: boolean;
-      layoutShift?: boolean;
-      browserIdle?: boolean;
-      finalFrame?: boolean;
-    };
-    domMutations?: {
-      quietPeriodMs?: number;
-    };
-  };
-}
-```
-
----
-
-## Settings Not Available in SDK
-
-The following settings can only be configured through the Dashboard:
-
-- **AI Assistant Instructions** - Custom instructions for the AI
-- **API Keys** - Authentication credentials
-- **Domain Access Control** - Allowed domains list
-- **Vector Store Configuration** - RAG system settings
-
-<Warning>
-    These settings are Dashboard-only for security reasons. They affect
-    application-wide behavior and authentication.
-</Warning>
-
----
-
-## Next Steps
+## Next steps
 
 <CardGroup cols={2}>
+    <Card
+        title="Configuration reference"
+        icon="gear"
+        href="/en/sdk/configuration"
+    >
+        Every option, with its type and default
+    </Card>
     <Card
         title="Examples"
         icon="lightbulb"
         href="/en/configurations/examples"
     >
-        See complete configuration examples for different use cases
-    </Card>
-    <Card
-        title="Dashboard Settings"
-        icon="browser"
-        href="/en/configurations/dashboard-settings"
-    >
-        Configure application defaults in the Dashboard
+        Complete configurations for common cases
     </Card>
 </CardGroup>

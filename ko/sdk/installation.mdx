@@ -1,20 +1,18 @@
 ---
 title: "설치"
-description: "NPM 또는 CDN 스크립트 태그를 통한 Moss SDK 설치"
+description: "npm이나 CDN 스크립트 태그로 Moss SDK 설치하기"
 icon: "download"
 ---
 
 # 설치
 
-애플리케이션에 맞는 통합 방법을 선택하세요.
+React 앱에서는 npm 패키지를, 그 밖의 페이지에서는 CDN 스크립트 태그를 쓰세요.
 
 <Info>
-    [Moss 대시보드](https://dashboard.viamoss.ai)에서 **애플리케이션 ID**가 필요합니다. JWT 서명 키도 필요합니다 — [인증](/ko/sdk/authentication)을 참조하세요.
+    [Moss 대시보드](https://dashboard.viamoss.ai)의 **구성 > 일반**에 있는 **애플리케이션 ID**와 JWT 서명 키가 필요합니다. [인증](/ko/sdk/authentication)을 참고하세요.
 </Info>
 
-## NPM 패키지 (React)
-
-React 17+ 애플리케이션용입니다.
+## npm 패키지 (React)
 
 ### 설치
 
@@ -22,9 +20,17 @@ React 17+ 애플리케이션용입니다.
 npm install @viamoss/moss-sdk
 ```
 
+이 패키지는 비공개입니다. 설치에 쓰는 npm 계정이나 토큰에 패키지 접근 권한이 있어야 합니다. npm이 설치를 거부하면 Moss에 문의하세요.
+
+### 요구 사항
+
+- **React 18**과 그에 맞는 `react-dom`. 패키지의 피어 의존성 범위는 React 17도 허용하지만, SDK는 React 18로 빌드하고 테스트하며, 여러 기능이 React 18에만 있는 훅(`useSyncExternalStore`, `useId`)을 호출합니다. 단계 로더(`appearance.chrome.loader: 'steps'`)와, 0.17.0부터는 `collectionControl`, 그리고 `streamActivity`와 이전 대화에서 보이는 단계 목록이 여기에 해당합니다. React 19는 선언된 범위 밖입니다.
+- 빌드에는 **Node 18 이상**이 필요합니다. 패키지에는 ES 모듈과 CommonJS 빌드, TypeScript 선언이 들어 있습니다.
+- **브라우저.** SDK는 서버에서 import할 수 없습니다. [서버 사이드 렌더링](#서버-사이드-렌더링)을 참고하세요.
+
 ### 기본 설정
 
-앱에 `AgentProvider`와 `AssistantButton`을 추가하세요. 프로바이더가 전체 애플리케이션을 감쌀 **필요가 없습니다** — Moss 컴포넌트만 감싸면 됩니다.
+앱에 `AgentProvider`와 `AssistantButton`을 추가하세요. 프로바이더는 앱 전체가 아니라 Moss 컴포넌트만 감싸면 됩니다.
 
 ```tsx App.tsx
 import { AgentProvider, AssistantButton } from '@viamoss/moss-sdk';
@@ -47,99 +53,179 @@ function App() {
 ```
 
 <Tip>
-    `AgentProvider`는 Moss UI 컴포넌트(`AssistantButton`)만 감싸면 됩니다. React 트리에서의 위치와 관계없이 전체 페이지 DOM을 관찰합니다.
+    `AgentProvider`는 React 트리의 어디에 있든 페이지 전체(`document.body`, 또는 `observeTargetSelector`가 가리키는 요소)를 읽습니다. 프로바이더 안에 있어야 하는 것은 `useAgent()`를 호출하는 컴포넌트뿐입니다.
 </Tip>
 
-### 피어 디펜던시
+### 서버 사이드 렌더링
 
-SDK는 React 17 또는 18을 피어 디펜던시로 요구합니다:
+SDK는 import되는 즉시 브라우저 전역 객체에 접근하므로, 서버에서 import하면 `document is not defined` 같은 `ReferenceError`가 발생합니다. 서버에서 렌더링하는 프레임워크에서는 브라우저에서만 불러오세요.
 
-```json
-{
-  "peerDependencies": {
-    "react": "^17.0.0 || ^18.0.0",
-    "react-dom": "^17.0.0 || ^18.0.0"
-  }
+**Next.js (App Router):** 프로바이더를 별도 컴포넌트에 두고, 그 컴포넌트를 Client Component에서 `dynamic(…, { ssr: false })`로 불러오세요. `'use client'`만으로는 부족합니다. Next.js는 Client Component도 서버에서 렌더링하기 때문입니다.
+
+```tsx app/moss.tsx
+'use client';
+
+import { AgentProvider, AssistantButton } from '@viamoss/moss-sdk';
+
+export default function Moss({ userId }: { userId: string }) {
+  return (
+    <AgentProvider config={{
+      apiUrl: 'https://moss-api.viamoss.ai',
+      applicationId: 'YOUR_APP_ID',
+      userId,
+      getJwt: () => fetch('/api/moss-token').then(r => r.json()).then(d => d.token),
+    }}>
+      <AssistantButton />
+    </AgentProvider>
+  );
 }
+```
+
+```tsx app/moss-loader.tsx
+'use client';
+
+import dynamic from 'next/dynamic';
+
+// ssr: false는 Client Component 안에서만 쓸 수 있습니다.
+const MossLoader = dynamic(() => import('./moss'), { ssr: false });
+
+export default MossLoader;
+```
+
+```tsx app/layout.tsx
+import MossLoader from './moss-loader';
+import { auth } from '@/lib/auth';
+
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const session = await auth();
+
+  return (
+    <html lang="en">
+      <body>
+        {children}
+        <MossLoader userId={session.user.id} />
+      </body>
+    </html>
+  );
+}
+```
+
+**Next.js (Pages Router):** 같은 컴포넌트를 `_app.tsx`에서 `dynamic(() => import('../components/moss'), { ssr: false })`로 불러오세요.
+
+**그 밖의 프레임워크:** 프레임워크가 제공하는 클라이언트 전용 경계를 쓰거나, 브라우저에서만 실행되는 코드 안에서 동적 `import()`로 SDK를 불러오세요.
+
+### 사용자 전환
+
+SDK는 `apiUrl`, `applicationId`, `jwt`, `getJwt`를 `AgentProvider`가 마운트될 때 한 번만 읽습니다. 페이지를 다시 불러오지 않고 다른 사용자가 로그인하면, `key` 등을 이용해 프로바이더를 다시 마운트하세요.
+
+```tsx
+<AgentProvider key={currentUser.id} config={{ /* ... */ userId: currentUser.id }}>
+  <AssistantButton />
+</AgentProvider>
 ```
 
 ---
 
 ## CDN 스크립트 태그
 
-프레임워크에 관계없이 모든 웹 애플리케이션에서 사용할 수 있습니다.
+프레임워크와 상관없이 모든 웹 페이지에서 쓸 수 있습니다.
 
 ### 기본 설정
 
-HTML에 스크립트 태그를 추가하세요. SDK가 자동으로 초기화되고 어시스턴트 버튼을 렌더링합니다.
+스크립트 태그를 추가하세요. 스크립트가 스스로 시작해서 어시스턴트 버튼을 렌더링합니다.
 
 ```html
+<script>
+  window.mossSettings = {
+    getJwt: () => fetch('/api/moss-token').then(r => r.json()).then(d => d.token),
+  };
+</script>
 <script
   src="https://cdn.viamoss.ai/moss-sdk@latest.min.js?applicationId=YOUR_APP_ID&userId=USER_ID"
   data-api-base="https://moss-api.viamoss.ai"
 ></script>
 ```
 
-### JavaScript를 통한 설정
+- **`applicationId`** 값은 스크립트 URL에서만 가져옵니다.
+- **사용자 ID**는 스크립트 URL의 `userId`, `window.mossSettings.userId`, 스크립트가 예전에 `localStorage`에 저장한 ID(`moss_user_id`), 새로 만든 익명 ID 순으로 정해집니다.
+- **백엔드 URL**은 `data-api-base` 속성에서, 없으면 `window.mossSettings.apiUrl`에서 가져옵니다. 둘 중 하나는 꼭 설정하세요. 백엔드 URL이 없으면 위젯이 채팅을 시작할 수 없습니다.
+- **스크립트를 직접 호스팅한다면** 파일 이름에 `moss-sdk`를 남겨 두세요. 스크립트는 이 문자열로 자기 `<script>` 태그를 찾아 URL을 읽습니다.
 
-더 세밀한 제어를 위해 스크립트 로드 전에 `window.mossSettings`를 통해 설정하세요:
+### JavaScript로 설정하기
+
+스크립트를 불러오기 전에 `window.mossSettings`를 설정하세요. npm의 `config`와 같은 옵션을 받으며, 함수도 넣을 수 있습니다.
 
 ```html
 <script>
   window.mossSettings = {
     apiUrl: 'https://moss-api.viamoss.ai',
     userId: 'user-123',
-    jwt: 'YOUR_JWT_TOKEN',
-    language: 'ko',
+    getJwt: () => fetch('/api/moss-token').then(r => r.json()).then(d => d.token),
+    userMetadata: { plan: 'premium' },
+    language: 'en',
   };
 </script>
 <script src="https://cdn.viamoss.ai/moss-sdk@latest.min.js?applicationId=YOUR_APP_ID"></script>
 ```
 
+스크립트는 먼저 대시보드에서 애플리케이션 설정을 불러오고, 그 위에 `window.mossSettings`를 키 단위로 덮어씁니다. `appearance`나 `sessionConfig`처럼 객체를 설정하면 그 키에 해당하는 대시보드 객체 전체를 대체합니다. 대시보드 설정을 불러오지 못하면 내장 기본값을 씁니다. [설정](/ko/sdk/configuration#설정을-읽어-오는-곳)을 참고하세요.
+
 ### 글로벌 API
 
-초기화 후 글로벌 `window.MossSDK` 객체를 사용할 수 있습니다:
+스크립트를 불러오고 나면 `window.MossSDK`를 쓸 수 있습니다.
 
 ```javascript
-// 새 설정으로 재초기화
-await window.MossSDK.boot({ userId: 'new-user' });
+// 바뀐 설정으로 다시 시작합니다. 설정을 window.mossSettings에 합치고,
+// 실행 중인 위젯을 종료한 뒤 새로 시작합니다. promise를 반환합니다.
+window.MossSDK.boot({ language: 'ko' });
 
-// 사용자 ID 업데이트 (재초기화 트리거)
-window.MossSDK.identify('user-456', { plan: 'premium' });
+// 사용자를 바꿉니다. ID를 저장하고 위젯을 다시 시작합니다.
+window.MossSDK.identify('user-456');
 
-// 런타임 설정 업데이트
-window.MossSDK.updateConfig({ language: 'en' });
+// 설정을 바꾸고 위젯을 다시 시작합니다.
+window.MossSDK.updateConfig({ language: 'ko' });
 
-// 완전히 해제
+// 위젯을 제거합니다. boot()를 호출할 때까지 꺼진 상태로 남습니다.
 window.MossSDK.shutdown();
 ```
+
+- **`identify(userId, traits?)`:** 스크립트 URL에 `userId`가 있으면 그 ID가 우선하므로 `identify()`는 효과가 없습니다. `identify()`를 쓴다면 URL에서 `userId`를 빼세요. `traits` 인수는 Moss에 전달되지 않습니다. 사용자를 설명하려면 `boot()`나 `window.mossSettings`로 `userMetadata`를 넘기세요.
+- **`boot()`, `identify()`, `updateConfig()`는 위젯을 다시 시작하고** 대시보드 설정을 다시 불러옵니다.
+- **`shutdown()`** 함수는 위젯의 마운트를 해제하고, 컨테이너를 제거하고, 스크립트가 스스로 다시 시작하지 않게 합니다. 스크립트 태그를 제거하기 전에 호출하세요.
+- 0.17.0부터 `window.MossSDK.CollectionControl`을 쓸 수 있습니다. [페이지 데이터](/ko/sdk/page-data#collectioncontrol)를 참고하세요.
+
+CDN 스크립트는 항상 `AssistantButton`을 렌더링합니다. 훅, `FloatingActionBar`, `askMoss()`, `shouldStartMoss()`, `installModalDialogEscape()`는 npm 패키지에만 있습니다.
 
 ---
 
 ## 커스텀 트리거
 
-`data-moss-trigger` 속성을 사용하면 훅 없이 어떤 요소에서든 어시스턴트를 열 수 있습니다.
+`data-moss-trigger` 속성을 붙이면 어떤 요소에서든 어시스턴트를 열 수 있습니다. 훅은 필요 없습니다.
 
 ```html
-<button data-moss-trigger>도움이 필요하세요?</button>
+<button data-moss-trigger>Need help?</button>
 ```
 
-버튼, 링크, 네비게이션 항목, 커스텀 컴포넌트 등 모든 요소에서 작동합니다. SDK는 이 속성이 있는 요소의 클릭을 감지하여 채팅 모달을 토글합니다.
+이 속성이 붙은 요소 안의 어디를 클릭하든 채팅이 열리고, 이미 열려 있으면 닫힙니다. npm 패키지와 CDN 스크립트 모두에서 동작합니다.
+
+- **클릭의 기본 동작은 막힙니다.** 그래서 `data-moss-trigger`가 붙은 `<a href>`는 채팅을 열 뿐 페이지를 이동하지 않습니다.
+- **최소화된 채팅**(0.17.0부터, `appearance.chrome.guide.minimize`를 쓸 때)은 트리거를 누르면 닫히지 않고 다시 펼쳐집니다.
+- **읽지 않음 배지(0.17.0부터).** 애플리케이션이 Moss 패널에 지원 대화를 보여 주는 경우, 사용자에게 읽지 않은 답장이 있는 동안 SDK는 각 트리거 안에 작은 개수 배지 `<span data-moss-unread-badge>`를 넣고 트리거의 `data-moss-unread`를 그 개수로 설정합니다. 배지가 모서리에 놓이도록, position이 `static`인 트리거에는 `position: relative`를 설정합니다.
 
 ### 예시
 
 ```html
-<!-- 네비게이션 도움말 버튼 -->
+<!-- 내비게이션의 도움말 버튼 -->
 <nav>
-  <a href="/dashboard">대시보드</a>
-  <button data-moss-trigger>도움말</button>
+  <a href="/dashboard">Dashboard</a>
+  <button data-moss-trigger>Help</button>
 </nav>
 
 <!-- 상황별 도움말 링크 -->
 <div class="form-field">
-  <label>API 키</label>
+  <label>API Key</label>
   <input type="text" name="apiKey" />
-  <span data-moss-trigger class="help-link">API 키는 어디서 찾나요?</span>
+  <span data-moss-trigger class="help-link">How do I find my API key?</span>
 </div>
 ```
 
@@ -149,39 +235,41 @@ window.MossSDK.shutdown();
 function HelpButton() {
   return (
     <button data-moss-trigger className="custom-help-btn">
-      도움 받기
+      Get Assistance
     </button>
   );
 }
 ```
 
-<Tip>
-    이 속성은 `useAgent()` 없이도 React 컴포넌트 내에서 작동합니다. 상태 관리 없이 간단한 트리거가 필요할 때 유용합니다.
-</Tip>
+트리거는 `AgentProvider` 안에 있지 않아도 됩니다. 프로바이더가 문서 전체의 클릭을 감지합니다.
 
 ### AssistantButton 없이 사용하기
 
-기본 제공 버튼 대신 커스텀 트리거만 사용할 수 있습니다:
+`AssistantButton` 없이 프로바이더를 렌더링하고 자체 트리거를 쓰세요.
 
 ```tsx
 <AgentProvider config={config}>
-  {/* 커스텀 트리거만 사용 - AssistantButton 없음 */}
+  {/* 커스텀 트리거만 사용, AssistantButton 없음 */}
   <nav>
-    <button data-moss-trigger>도움말</button>
+    <button data-moss-trigger>Help</button>
   </nav>
   <YourApp />
 </AgentProvider>
 ```
 
+<Note>
+    `collectionEnabled: false`이거나 `collectionControl`이 꺼져 있으면 프로바이더는 자식 요소를 하나도 렌더링하지 않습니다. 둘 중 하나를 쓴다면 앱은 프로바이더 밖에 두세요.
+</Note>
+
 ### TypeScript 상수
 
-SDK는 프로그래밍 방식 사용을 위해 속성 이름을 내보냅니다:
+SDK는 속성 이름을 상수로 내보냅니다.
 
 ```tsx
 import { MOSS_TRIGGER_ATTR } from '@viamoss/moss-sdk';
 
-// MOSS_TRIGGER_ATTR = 'data-moss-trigger'
-<button {...{ [MOSS_TRIGGER_ATTR]: true }}>도움말</button>
+// MOSS_TRIGGER_ATTR === 'data-moss-trigger'
+<button {...{ [MOSS_TRIGGER_ATTR]: true }}>Help</button>
 ```
 
 ---
@@ -190,49 +278,22 @@ import { MOSS_TRIGGER_ATTR } from '@viamoss/moss-sdk';
 
 <Tabs>
   <Tab title="Next.js (App Router)">
-    ```tsx app/layout.tsx
-    import { AgentProvider, AssistantButton } from '@viamoss/moss-sdk';
-    import { auth } from '@/lib/auth';
+    npm 패키지는 [서버 사이드 렌더링](#서버-사이드-렌더링)을 참고하세요. 스크립트 태그를 쓴다면 다음과 같습니다.
 
-    export default async function RootLayout({ children }) {
-      const session = await auth();
-
-      return (
-        <html>
-          <body>
-            {children}
-            <MossAssistant userId={session.user.id} />
-          </body>
-        </html>
-      );
-    }
-
-    // Moss용 클라이언트 컴포넌트
-    'use client';
-    function MossAssistant({ userId }: { userId: string }) {
-      return (
-        <AgentProvider config={{
-          apiUrl: 'https://moss-api.viamoss.ai',
-          applicationId: 'YOUR_APP_ID',
-          userId,
-          getJwt: () => fetch('/api/moss-token').then(r => r.json()).then(d => d.token),
-        }}>
-          <AssistantButton />
-        </AgentProvider>
-      );
-    }
-    ```
-  </Tab>
-
-  <Tab title="Next.js (스크립트 태그)">
     ```tsx app/layout.tsx
     import Script from 'next/script';
 
-    export default function RootLayout({ children }) {
+    export default function RootLayout({ children }: { children: React.ReactNode }) {
       return (
-        <html>
+        <html lang="en">
           <body>
             {children}
+            {/* SDK가 시작할 때 찾을 수 있도록 설정을 먼저 둡니다 */}
+            <Script id="moss-settings" strategy="beforeInteractive">
+              {`window.mossSettings = {
+                getJwt: () => fetch('/api/moss-token').then(r => r.json()).then(d => d.token),
+              };`}
+            </Script>
             <Script
               src="https://cdn.viamoss.ai/moss-sdk@latest.min.js?applicationId=YOUR_APP_ID&userId=USER_ID"
               data-api-base="https://moss-api.viamoss.ai"
@@ -256,7 +317,7 @@ import { MOSS_TRIGGER_ATTR } from '@viamoss/moss-sdk';
       window.mossSettings = {
         apiUrl: 'https://moss-api.viamoss.ai',
         userId: 'USER_ID',
-        jwt: 'YOUR_JWT_TOKEN',
+        getJwt: () => fetch('/api/moss-token').then(r => r.json()).then(d => d.token),
       };
 
       script = document.createElement('script');
@@ -266,6 +327,8 @@ import { MOSS_TRIGGER_ATTR } from '@viamoss/moss-sdk';
     });
 
     onUnmounted(() => {
+      // 위젯부터 해제하세요. 스크립트 태그만 지우면 위젯이 페이지에 남습니다.
+      window.MossSDK?.shutdown();
       if (script && document.head.contains(script)) {
         document.head.removeChild(script);
       }
@@ -289,7 +352,7 @@ import { MOSS_TRIGGER_ATTR } from '@viamoss/moss-sdk';
         (window as any).mossSettings = {
           apiUrl: 'https://moss-api.viamoss.ai',
           userId: 'USER_ID',
-          jwt: 'YOUR_JWT_TOKEN',
+          getJwt: () => fetch('/api/moss-token').then(r => r.json()).then(d => d.token),
         };
 
         this.script = document.createElement('script');
@@ -299,6 +362,8 @@ import { MOSS_TRIGGER_ATTR } from '@viamoss/moss-sdk';
       }
 
       ngOnDestroy() {
+        // 위젯부터 해제하세요. 스크립트 태그만 지우면 위젯이 페이지에 남습니다.
+        (window as any).MossSDK?.shutdown();
         if (this.script && document.head.contains(this.script)) {
           document.head.removeChild(this.script);
         }
@@ -312,9 +377,9 @@ import { MOSS_TRIGGER_ATTR } from '@viamoss/moss-sdk';
 
 <CardGroup cols={2}>
     <Card title="인증" icon="lock" href="/ko/sdk/authentication">
-        JWT 토큰 인증 설정
+        JWT 토큰 인증 설정하기
     </Card>
     <Card title="설정" icon="gear" href="/ko/sdk/configuration">
-        SDK 동작 및 옵션 설정
+        모든 SDK 옵션
     </Card>
 </CardGroup>
